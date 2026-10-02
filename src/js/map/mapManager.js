@@ -113,6 +113,25 @@ class MapManager {
     if (this.map) {
       setTimeout(() => this.map.invalidateSize(), 150);
     }
+  // 儲存當前視角至記憶庫
+  recordCurrentView(scope) {
+    if (!this.map || !window.AppStore) return;
+    const center = this.map.getCenter();
+    const zoom = this.map.getZoom();
+    window.AppStore.saveMapView(scope, [center.lat, center.lng], zoom);
+  }
+
+  // 從記憶庫還原視角 (Memory Restore)
+  restoreSavedView(scope) {
+    if (!this.map || !window.AppStore) return false;
+    const saved = window.AppStore.getSavedMapView(scope);
+    if (saved && saved.center && saved.zoom) {
+      this.map.flyTo(saved.center, saved.zoom, { duration: 1.1 });
+      return true;
+    }
+    return false;
+  }
+
   }
 }
 

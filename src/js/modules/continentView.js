@@ -15,9 +15,14 @@ window.ContinentView = {
     checkDirect.checked = state.filters.directOnly;
     checkBudget.checked = state.filters.budgetAffordable;
 
+    // 搜尋與篩選 (加入 250ms 防抖 Debounce，大幅降低 DOM 頻繁重繪)
+    let searchDebounce = null;
     searchInput.oninput = (e) => {
-      state.filters.search = e.target.value.trim().toLowerCase();
-      this.applyFilters(state);
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => {
+        state.filters.search = e.target.value.trim().toLowerCase();
+        this.applyFilters(state);
+      }, 250);
     };
 
     checkDirect.onchange = (e) => {

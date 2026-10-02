@@ -44,12 +44,23 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // 主導航邏輯
+  // 主導航邏輯 (整合 AppStore 狀態與 MapManager 視角記憶機制)
   function navigateTo(viewName, params = {}) {
+    // 進入新視圖前，儲存舊視圖的視角 (視角記憶)
+    if (state.currentView === "world") {
+      mapManager.recordCurrentView("world");
+    } else if (state.currentView === "continent" && state.selectedContinentId) {
+      mapManager.recordCurrentView(state.selectedContinentId);
+    }
+
     state.currentView = viewName;
     if (params.continentId !== undefined) state.selectedContinentId = params.continentId;
     if (params.countryId !== undefined) state.selectedCountryId = params.countryId;
     if (params.cityId !== undefined) state.selectedCityId = params.cityId;
+
+    if (window.AppStore) {
+      window.AppStore.navigateTo(viewName, params);
+    }
 
     viewWorld.classList.toggle("active", viewName === "world");
     viewContinent.classList.toggle("active", viewName === "continent");
@@ -58,6 +69,10 @@ document.addEventListener("DOMContentLoaded", () => {
     updateBreadcrumb();
 
     if (viewName === "world") {
+      // 若有保存過的視角，優先還原
+      if (!mapManager.restoreSavedView("world")) {
+        mapManager.flyToWorld();
+      }
       mapManager.invalidateSize();
     } else if (viewName === "continent") {
       window.ContinentView.render(state);
