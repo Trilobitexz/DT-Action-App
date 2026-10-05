@@ -1,14 +1,53 @@
-// 地圖管理器 (Leaflet 實體管理、Pinch-to-zoom、動態飛行動畫與標記)
+// 地圖管理器 (支援多圖資備援、CartoDB 高清圖磚、大洲與熱門城市雙層地標)
 class MapManager {
   constructor(containerId, options = {}) {
     this.containerId = containerId;
     this.defaultCenter = options.center || [25.0, 10.0];
     this.defaultZoom = options.zoom || 2.4;
     this.map = null;
+    this.currentTileLayer = null;
+    this.activeLayerKey = "voyager";
     this.continentMarkersLayer = null;
-    this.countryMarkersLayer = null;
+    this.cityMarkersLayer = null;
     this.onContinentSelect = options.onContinentSelect || (() => {});
     this.onCountrySelect = options.onCountrySelect || (() => {});
+    this.onCitySelect = options.onCitySelect || (() => {});
+
+    // 高品質免金鑰瓦片圖資供應商清單（含無痛容錯備援機制）
+    this.tileProviders = {
+      // 1. CartoDB Voyager：專為現代旅遊與視覺導航設計的精美彩色地圖
+      voyager: {
+        name: "CartoDB Voyager (探索)",
+        url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+        subdomains: "abcd",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19
+      },
+      // 2. CartoDB Positron：簡約柔和淺色風格，突顯標籤與資訊
+      light: {
+        name: "CartoDB Positron (簡約)",
+        url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        subdomains: "abcd",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19
+      },
+      // 3. ESRI ArcGIS World Imagery：世界高解析度真實衛星航照
+      satellite: {
+        name: "ESRI World Imagery (衛星)",
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        subdomains: "",
+        attribution: 'Tiles &copy; Esri &mdash; DigitalGlobe, GeoEye, Earthstar Geographics',
+        maxZoom: 18
+      },
+      // 4. ESRI ArcGIS Street Map (街道備援)
+      esriStreet: {
+        name: "ESRI World Street (街道備援)",
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+        subdomains: "",
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 18
+      }
+    };
   }
 
   init() {
@@ -18,45 +57,72 @@ class MapManager {
       return;
     }
 
-    // 初始化 Leaflet 地圖，啟用雙手手勢與滾輪縮放
+    // 初始化 Leaflet 地圖，支援雙手捏合縮放 (Pinch-to-zoom)、滾輪縮放與流暢慣性平移
     this.map = L.map(this.containerId, {
       center: this.defaultCenter,
       zoom: this.defaultZoom,
       minZoom: 2,
       maxZoom: 18,
-      zoomControl: false, // 採用自訂 UI 控制器
-      touchZoom: true,    // 支援行動端 Pinch-to-zoom
+      zoomControl: false,
+      touchZoom: true,
       scrollWheelZoom: true,
       worldCopyJump: true
     });
 
-    // 採用 OpenStreetMap 官方全球最主流、高穩定的圖磚來源（備用支援 CartoDB）
-    const osmLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19
-    });
-
-    osmLayer.on("tileerror", function(error, tile) {
-      console.warn("OSM 圖磚載入異常，自動切換至備用圖磚：", error);
-    });
-
-    osmLayer.addTo(this.map);
+    // 載入預設圖層 (CartoDB Voyager)
+    this.setTileLayer("voyager");
 
     this.continentMarkersLayer = L.layerGroup().addTo(this.map);
-    this.countryMarkersLayer = L.layerGroup().addTo(this.map);
+    this.cityMarkersLayer = L.layerGroup().addTo(this.map);
 
     this.renderContinentMarkers();
 
-    // 延遲二次校正尺寸，避免首次渲染時容器寬高未定
+    this.map.on("zoomend", () => {
+      this.updateMarkersVisibility();
+    });
+
     setTimeout(() => {
       this.map.invalidateSize();
     }, 200);
+  }
+
+  // 切換底圖圖磚 (支援 voyager / light / satellite)
+  setTileLayer(layerKey) {
+    if (!this.map) return;
+    const config = this.tileProviders[layerKey] || this.tileProviders.voyager;
+
+    if (this.currentTileLayer) {
+      this.map.removeLayer(this.currentTileLayer);
+    }
+
+    this.activeLayerKey = layerKey;
+
+    const layerOptions = {
+      attribution: config.attribution,
+      maxZoom: config.maxZoom,
+      detectRetina: true
+    };
+    if (config.subdomains) {
+      layerOptions.subdomains = config.subdomains;
+    }
+
+    this.currentTileLayer = L.tileLayer(config.url, layerOptions);
+
+    this.currentTileLayer.on("tileerror", () => {
+      if (this.activeLayerKey !== "esriStreet") {
+        console.warn(`圖層 ${this.activeLayerKey} 載入失敗，自動切換至備援圖層 ESRI Street`);
+        this.setTileLayer("esriStreet");
+      }
+    });
+
+    this.currentTileLayer.addTo(this.map);
   }
 
   // 渲染大洲層級的懸浮地標徽章
   renderContinentMarkers() {
     this.continentMarkersLayer.clearLayers();
     const continents = window.GEO_CONTINENTS;
+    if (!continents) return;
 
     Object.keys(continents).forEach(key => {
       const cont = continents[key];
@@ -73,12 +139,66 @@ class MapManager {
       });
 
       const marker = L.marker(cont.center, { icon: customIcon });
-      marker.on("click", () => {
+      marker.on("click", (e) => {
+        if (window.L && window.L.DomEvent) window.L.DomEvent.stopPropagation(e);
         this.flyToContinent(cont.id);
         this.onContinentSelect(cont.id);
       });
       this.continentMarkersLayer.addLayer(marker);
     });
+
+    this.renderCityMarkers();
+  }
+
+  // 渲染熱門城市地標 (支援多縮放細節 LOD)
+  renderCityMarkers() {
+    if (!this.cityMarkersLayer) return;
+    this.cityMarkersLayer.clearLayers();
+    if (!window.TRAVEL_DATA || !window.TRAVEL_DATA.countries) return;
+
+    window.TRAVEL_DATA.countries.forEach(country => {
+      country.cities.forEach(city => {
+        if (!city.lat || !city.lng) return;
+
+        const cityIcon = L.divIcon({
+          className: "custom-city-marker",
+          html: `
+            <div class="city-pin-badge" title="${city.name} (${country.name})">
+              <span class="city-pin-dot"></span>
+              <span class="city-pin-text">${country.flag} ${city.name}</span>
+            </div>
+          `,
+          iconSize: [96, 26],
+          iconAnchor: [48, 13]
+        });
+
+        const marker = L.marker([city.lat, city.lng], { icon: cityIcon });
+        marker.on("click", (e) => {
+          if (window.L && window.L.DomEvent) window.L.DomEvent.stopPropagation(e);
+          if (this.onCitySelect) {
+            this.onCitySelect(country.continentId, country.id, city.id);
+          }
+        });
+        this.cityMarkersLayer.addLayer(marker);
+      });
+    });
+
+    this.updateMarkersVisibility();
+  }
+
+  // 根據縮放等級調整標記顯隱
+  updateMarkersVisibility() {
+    if (!this.map || !this.cityMarkersLayer) return;
+    const currentZoom = this.map.getZoom();
+    if (currentZoom >= 3.3) {
+      if (!this.map.hasLayer(this.cityMarkersLayer)) {
+        this.map.addLayer(this.cityMarkersLayer);
+      }
+    } else {
+      if (this.map.hasLayer(this.cityMarkersLayer)) {
+        this.map.removeLayer(this.cityMarkersLayer);
+      }
+    }
   }
 
   // 平滑飛向特定大洲（下鑽動畫）
@@ -90,6 +210,14 @@ class MapManager {
       padding: [40, 40],
       duration: 1.4,
       easeLinearity: 0.25
+    });
+  }
+
+  // 聚焦至特定城市
+  flyToCity(lat, lng, zoom = 7) {
+    if (!this.map) return;
+    this.map.flyTo([lat, lng], zoom, {
+      duration: 1.2
     });
   }
 
@@ -113,6 +241,8 @@ class MapManager {
     if (this.map) {
       setTimeout(() => this.map.invalidateSize(), 150);
     }
+  }
+
   // 儲存當前視角至記憶庫
   recordCurrentView(scope) {
     if (!this.map || !window.AppStore) return;
@@ -130,8 +260,6 @@ class MapManager {
       return true;
     }
     return false;
-  }
-
   }
 }
 

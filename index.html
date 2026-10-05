@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>旅遊地點分析 APP - 設計思考原型</title>
-  <!-- 引入 Leaflet 地圖樣式 -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <!-- 引入 Leaflet 地圖樣式 (支援 cdnjs 備援) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDmSCnGZqqUATzxMXHCv3rE7Rg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <link rel="stylesheet" href="src/css/style.css">
 </head>
 <body>
@@ -41,6 +41,12 @@
             <p style="font-size: 0.85rem; color: var(--text-muted);">支援滑鼠滾輪/按鈕縮放與拖曳平移地圖視圖</p>
           </div>
           <div class="map-controls">
+            <!-- 圖層切換器 -->
+            <div class="map-layer-selector">
+              <button class="map-btn map-layer-btn active" id="btn-layer-voyager" title="精緻彩圖 (預設)">🗺️ 探索</button>
+              <button class="map-btn map-layer-btn" id="btn-layer-light" title="清新淺色">⚪ 簡約</button>
+              <button class="map-btn map-layer-btn" id="btn-layer-satellite" title="衛星航照">🛰️ 衛星</button>
+            </div>
             <button class="map-btn" id="btn-zoom-in" title="放大地圖">+</button>
             <button class="map-btn" id="btn-zoom-out" title="縮小地圖">-</button>
             <button class="map-btn" id="btn-zoom-reset" title="重設視圖" style="font-size:0.8rem; width: auto; padding: 0 8px;">重設</button>
@@ -135,19 +141,27 @@
         </div>
       </div>
 
-      <!-- 城市分頁切換與熱門景點清單 (V2 優化) -->
+      <!-- 城市分頁切換、即時天氣與熱門景點清單 (V2 優化) -->
       <div class="city-tabs-card">
-        <div style="margin-bottom: 1rem;">
-          <h3 style="font-size:1.2rem; font-weight:700;">🏙️ 城市切換與熱門景點清單</h3>
-          <p id="city-description-text" style="font-size:0.9rem; color:var(--text-muted); margin-top:0.25rem;">城市特色與風貌介紹</p>
+        <div style="margin-bottom: 1rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.75rem;">
+          <div>
+            <h3 style="font-size:1.2rem; font-weight:700;">🏙️ 城市切換與熱門景點清單</h3>
+            <p id="city-description-text" style="font-size:0.9rem; color:var(--text-muted); margin-top:0.25rem;">城市特色與風貌介紹</p>
+          </div>
+          <div id="city-weather-widget" class="weather-badge" style="display:none;"></div>
         </div>
         <div class="city-tab-list" id="city-tab-list"></div>
         <div class="spot-list" id="city-spots-list"></div>
       </div>
     </section>
 
-    <!-- 載入 Leaflet.js 地圖套件與設定模組 -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- 載入 Leaflet.js 地圖套件與設定模組 (採用高速穩定 cdnjs 與 unpkg 備援) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzSmGyktnZMnp3LJKVVMeY04EgkimgndHYLN0714gvvqhng==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+      if (typeof window.L === "undefined") {
+        document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\\/script>');
+      }
+    </script>
     <script src="src/js/map/geoContinents.js"></script>
     <script src="src/js/map/mapManager.js"></script>
 
@@ -158,6 +172,7 @@
     <script src="src/data/countries/others.js"></script>
     <!-- 載入資料層與即時 API 服務 (階段二) -->
     <script src="src/js/services/currencyService.js"></script>
+    <script src="src/js/services/weatherService.js"></script>
     <script src="src/js/services/flightService.js"></script>
     <script src="src/js/services/spotService.js"></script>
     <!-- 載入狀態管理 Store (階段三) -->

@@ -29,7 +29,7 @@ window.CurrencyService = {
     } catch (err) {
       console.warn("即時匯率拉取失敗，使用內建備用匯率：", err);
       return {
-        data: { JPY: 4.82, THB: 1.13, EUR: 0.029, ISK: 4.31, USD: 0.031, AUD: 0.047 },
+        data: { JPY: 4.82, THB: 1.13, KRW: 42.1, EUR: 0.029, GBP: 0.024, ISK: 4.31, USD: 0.031, AUD: 0.047, NZD: 0.051 },
         source: "fallback",
         updateTime: "離線預設值"
       };

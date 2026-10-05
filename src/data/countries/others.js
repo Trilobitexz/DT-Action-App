@@ -30,6 +30,8 @@ window.TRAVEL_DATA.countries.push(
         id: "san-francisco",
         name: "舊金山",
         englishName: "San Francisco",
+        lat: 37.7749,
+        lng: -122.4194,
         description: "兼具山坡叮噹車、金門大橋與矽谷創新活力的海灣名城。",
         spots: [
           { name: "金門大橋 (Golden Gate Bridge)", category: "世界地標", rating: 4.8, tag: "經典打卡", note: "漫步或騎自行車橫跨海灣，眺望太平洋迷霧。" },
@@ -68,10 +70,52 @@ window.TRAVEL_DATA.countries.push(
         id: "sydney",
         name: "雪梨",
         englishName: "Sydney",
+        lat: -33.8688,
+        lng: 151.2093,
         description: "美麗的港灣都會，結合衝浪海灘、歌劇院與頂級咖啡文化。",
         spots: [
           { name: "雪梨歌劇院 (Sydney Opera House)", category: "世界遺產", rating: 4.8, tag: "全球地標", note: "揚帆造型建築奇蹟，港灣步道夜景絕佳。" },
           { name: "邦代海灘 (Bondi Beach)", category: "海灘休閒", rating: 4.7, tag: "衝浪勝地", note: "世界級金色沙灘與懸崖海邊健行步道。" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "new-zealand",
+    continentId: "oceania",
+    name: "紐西蘭",
+    englishName: "New Zealand",
+    flag: "🇳🇿",
+    currency: "紐幣 (NZD)",
+    exchangeRate: "1 NZD ≈ 19.5 TWD",
+    visa: "NZeTA 電子旅行授權",
+    directFlight: true,
+    flightInfo: {
+      hasDirect: true,
+      departureFrom: "台北 (TPE)",
+      flightTime: "約 11 小時",
+      airlines: ["紐西蘭航空 (Air New Zealand)"],
+      tips: "直飛奧克蘭 (AKL)，旺季建議提早 3-6 個月訂票。"
+    },
+    priceLevel: {
+      tier: "偏高",
+      rating: "$$$",
+      dailyBudgetTwd: "NT$ 3,800 - 6,500 / 天",
+      dining: "餐廳主餐約 25-40 NZD (NT$ 490-780)",
+      transit: "露營車/租車自駕約 NT$ 2,500-4,500/天",
+      hotel: "景觀旅館或度假屋約 NT$ 4,000 - 7,000 / 晚"
+    },
+    cities: [
+      {
+        id: "queenstown",
+        name: "皇后鎮",
+        englishName: "Queenstown",
+        lat: -45.0312,
+        lng: 168.6626,
+        description: "世界冒險之都，依傍瓦卡蒂普湖與卓越山脈的戶外天堂。",
+        spots: [
+          { name: "米佛峽灣 (Milford Sound)", category: "世界遺產", rating: 4.9, tag: "自然奇景", note: "搭乘觀光郵輪穿越冰河切割峽灣與壯闊瀑布。" },
+          { name: "天際纜車 (Skyline Gondola)", category: "俯瞰全景", rating: 4.8, tag: "必玩體驗", note: "俯瞰皇后鎮全景與刺激的斜坡滑車 (Luge)。" }
         ]
       }
     ]

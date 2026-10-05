@@ -18,15 +18,36 @@ document.addEventListener("DOMContentLoaded", () => {
   const breadcrumbNav = document.getElementById("breadcrumb-nav");
   const btnResetGlobal = document.getElementById("btn-reset-global");
 
-  // 初始化 Leaflet 地圖管理器
+  // 初始化 Leaflet 地圖管理器 (支援圖層切換與城市點擊互動)
   const mapManager = new window.MapManager("leaflet-map", {
     center: [25.0, 10.0],
     zoom: 2.3,
     onContinentSelect: (continentId) => {
       navigateTo("continent", { continentId });
+    },
+    onCitySelect: (continentId, countryId, cityId) => {
+      navigateTo("country", { continentId, countryId, cityId });
     }
   });
   mapManager.init();
+
+  // 綁定圖層切換按鈕
+  const layerButtons = [
+    { id: "btn-layer-voyager", layerKey: "voyager" },
+    { id: "btn-layer-light", layerKey: "light" },
+    { id: "btn-layer-satellite", layerKey: "satellite" }
+  ];
+
+  layerButtons.forEach(cfg => {
+    const btn = document.getElementById(cfg.id);
+    if (btn) {
+      btn.addEventListener("click", () => {
+        mapManager.setTileLayer(cfg.layerKey);
+        document.querySelectorAll(".map-layer-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+      });
+    }
+  });
 
   // 綁定地圖工具列縮放按鈕
   document.getElementById("btn-zoom-in")?.addEventListener("click", () => mapManager.zoomIn());
@@ -95,6 +116,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (state.selectedCountryId) {
       const country = window.TRAVEL_DATA.countries.find(c => c.id === state.selectedCountryId);
       html += ` <span>/</span> <span class="breadcrumb-item ${state.currentView === 'country' ? 'active' : ''}" data-target="country">${country ? country.name : '國家'}</span>`;
+
+      if (state.selectedCityId) {
+        const city = country?.cities.find(ci => ci.id === state.selectedCityId);
+        if (city) {
+          html += ` <span>/</span> <span class="breadcrumb-item active" style="cursor:default;">🏙️ ${city.name}</span>`;
+        }
+      }
     }
 
     breadcrumbNav.innerHTML = html;
@@ -127,6 +155,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // 全域城市切換掛載
   window.switchCity = (cityId) => {
     state.selectedCityId = cityId;
+    if (window.AppStore) {
+      window.AppStore.navigateTo("country", { cityId });
+    }
+    updateBreadcrumb();
     window.CountryView.render(state);
   };
 
