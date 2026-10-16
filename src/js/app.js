@@ -25,18 +25,94 @@ document.addEventListener("DOMContentLoaded", async () => {
   const breadcrumbNav = document.getElementById("breadcrumb-nav");
   const btnResetGlobal = document.getElementById("btn-reset-global");
 
+  function getGlobalCity(cityId) {
+    return window.TRAVEL_DATA.globalCities.find(city => city.id === cityId);
+  }
+
   // 初始化 Leaflet 地圖管理器 (支援圖層切換與城市點擊互動)
   const mapManager = new window.MapManager("leaflet-map", {
     center: [25.0, 10.0],
     zoom: 2.3,
     onContinentSelect: (continentId) => {
-      navigateTo("continent", { continentId });
+      navigateTo("continent", { continentId, skipMapRecord: true });
     },
     onCitySelect: (continentId, countryId, cityId) => {
       navigateTo("country", { continentId, countryId, cityId });
     }
   });
   mapManager.init();
+  window.PlannerView?.init();
+  document.getElementById("btn-scroll-comparison")?.addEventListener("click", () => {
+    document.getElementById("comparison-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  const backdrop = document.getElementById("drawer-backdrop");
+  const drawers = document.querySelectorAll(".side-drawer");
+  let drawerScale = Number(localStorage.getItem("journey-atlas-drawer-scale") || "1");
+  const updateDrawerScale = () => {
+    drawerScale = Math.min(1.1, Math.max(0.8, drawerScale));
+    localStorage.setItem("journey-atlas-drawer-scale", String(drawerScale));
+    drawers.forEach(drawer => {
+      drawer.style.setProperty("--drawer-scale", String(drawerScale));
+      drawer.querySelectorAll("[data-drawer-scale-value]").forEach(value => {
+        value.textContent = `${Math.round(drawerScale * 100)}%`;
+      });
+    });
+  };
+  updateDrawerScale();
+  document.querySelectorAll("[data-drawer-scale]").forEach(button => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.drawerScale;
+      if (action === "down") drawerScale -= 0.05;
+      if (action === "up") drawerScale += 0.05;
+      if (action === "reset") drawerScale = 1;
+      updateDrawerScale();
+    });
+  });
+  const closeDrawers = () => {
+    drawers.forEach(drawer => {
+      drawer.classList.remove("open");
+      drawer.setAttribute("aria-hidden", "true");
+    });
+    document.querySelectorAll("[aria-controls]").forEach(button => button.setAttribute("aria-expanded", "false"));
+    if (backdrop) backdrop.hidden = true;
+    document.body.classList.remove("drawer-open");
+  };
+  window.closeTravelDrawers = closeDrawers;
+  const openDrawer = drawerId => {
+    closeDrawers();
+    const drawer = document.getElementById(drawerId);
+    const trigger = document.querySelector(`[aria-controls="${drawerId}"]`);
+    if (!drawer) return;
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+    trigger?.setAttribute("aria-expanded", "true");
+    if (backdrop) backdrop.hidden = false;
+    document.body.classList.add("drawer-open");
+    drawer.querySelector(".drawer-close")?.focus();
+  };
+  document.querySelectorAll("[aria-controls]").forEach(button => {
+    button.addEventListener("click", () => openDrawer(button.getAttribute("aria-controls")));
+  });
+  document.querySelectorAll("[data-close-drawer]").forEach(button => button.addEventListener("click", closeDrawers));
+  backdrop?.addEventListener("click", closeDrawers);
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") closeDrawers();
+  });
+  document.querySelectorAll("[data-ranking-tab]").forEach(tab => {
+    tab.addEventListener("click", () => {
+      const key = tab.dataset.rankingTab;
+      document.querySelectorAll("[data-ranking-tab]").forEach(item => {
+        const active = item === tab;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-selected", String(active));
+      });
+      document.querySelectorAll(".ranking-tab-panel").forEach(panel => {
+        panel.hidden = panel.id !== `ranking-panel-${key}`;
+        panel.classList.toggle("active", !panel.hidden);
+      });
+    });
+  });
 
   // 綁定圖層切換按鈕
   const layerButtons = [
@@ -70,22 +146,38 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.querySelectorAll(".continent-chip-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       const continentId = btn.dataset.continentId;
+      mapManager.recordCurrentView("world");
       mapManager.flyToContinent(continentId);
-      setTimeout(() => {
-        navigateTo("continent", { continentId });
-      }, 700);
+      navigateTo("continent", { continentId, skipMapRecord: true });
     });
   });
 
   // 主導航邏輯 (整合 AppStore 狀態與 MapManager 視角記憶機制)
   function navigateTo(viewName, params = {}) {
+    closeDrawers();
+    const skipMapRecord = params.skipMapRecord === true;
     // 進入新視圖前，儲存舊視圖的視角 (視角記憶)
-    if (state.currentView === "world") {
+    if (!skipMapRecord && state.currentView === "world") {
       mapManager.recordCurrentView("world");
-    } else if (state.currentView === "continent" && state.selectedContinentId) {
+    } else if (!skipMapRecord && state.currentView === "continent" && state.selectedContinentId) {
       mapManager.recordCurrentView(state.selectedContinentId);
     }
 
+    if (viewName === "global-city") {
+      state.globalCityId = params.cityId;
+      state.selectedCountryId = null;
+      state.selectedContinentId = null;
+      viewName = "country";
+      params = { ...params, cityId: params.cityId };
+    } else if (viewName === "continent") {
+      state.selectedCountryId = null;
+      state.selectedCityId = null;
+    } else if (viewName === "country" && params.countryId !== undefined) {
+      state.globalCityId = null;
+      state.selectedCityId = params.cityId || null;
+    } else if (viewName !== "country") {
+      state.globalCityId = null;
+    }
     state.currentView = viewName;
     if (params.continentId !== undefined) state.selectedContinentId = params.continentId;
     if (params.countryId !== undefined) state.selectedCountryId = params.countryId;
@@ -95,6 +187,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       state.selectedContinentId = null;
       state.selectedCountryId = null;
       state.selectedCityId = null;
+      state.globalCityId = null;
     }
 
     if (window.AppStore) {
@@ -109,11 +202,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     viewCountry.setAttribute("aria-hidden", String(viewName !== "country"));
 
     updateBreadcrumb();
+    const globalCity = state.globalCityId ? getGlobalCity(state.globalCityId) : null;
     document.title = viewName === "world"
       ? "旅途指南 Journey Atlas｜目的地探索與旅行規劃"
       : viewName === "continent"
         ? `${window.TRAVEL_DATA.continents.find(item => item.id === state.selectedContinentId)?.name || "探索目的地"}｜旅途指南 Journey Atlas`
-        : `${window.TRAVEL_DATA.countries.find(item => item.id === state.selectedCountryId)?.name || "目的地詳情"}｜旅途指南 Journey Atlas`;
+        : `${globalCity?.name || window.TRAVEL_DATA.countries.find(item => item.id === state.selectedCountryId)?.name || "目的地詳情"}｜旅途指南 Journey Atlas`;
 
     if (viewName === "world") {
       // 若有保存過的視角，優先還原
@@ -121,20 +215,25 @@ document.addEventListener("DOMContentLoaded", async () => {
         mapManager.flyToWorld();
       }
       mapManager.invalidateSize();
+      window.GlobalCitiesView?.render();
     } else if (viewName === "continent") {
       if (state.selectedContinentId) window.ContinentView.render(state);
-      mapManager.invalidateSize();
     } else if (viewName === "country") {
       window.CountryView.render(state);
       const country = window.TRAVEL_DATA.countries.find(item => item.id === state.selectedCountryId);
-      const city = country?.cities.find(item => item.id === state.selectedCityId);
+      const city = globalCity || country?.cities.find(item => item.id === state.selectedCityId);
       if (city) mapManager.flyToCity(city.lat, city.lng, 5);
-      mapManager.invalidateSize();
     }
 
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // 先立即回到新畫面頂端，避免 CSS smooth scroll 與淡入動畫同時執行造成跳動。
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
     const activeView = viewName === "world" ? viewWorld : viewName === "continent" ? viewContinent : viewCountry;
     activeView.focus({ preventScroll: true });
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+    });
   }
 
   // 麵包屑導航
@@ -157,6 +256,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       }
     }
+    if (!state.selectedCountryId && state.globalCityId) {
+      const city = getGlobalCity(state.globalCityId);
+      if (city) html += ` <span>/</span> <span class="breadcrumb-item active" style="cursor:default;">🏙️ ${city.name}</span>`;
+    }
 
     breadcrumbNav.innerHTML = html;
 
@@ -164,7 +267,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       item.addEventListener("click", () => {
         const target = item.dataset.target;
         if (target === "world") {
-          mapManager.flyToWorld();
           navigateTo("world");
         } else if (target === "continent") {
           state.selectedCountryId = null;
@@ -180,12 +282,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.selectedContinentId = null;
     state.selectedCountryId = null;
     state.filters = { search: "", directOnly: false, budgetAffordable: false };
-    mapManager.flyToWorld();
     navigateTo("world");
   });
 
   // 全域城市切換掛載
   window.switchCity = (cityId) => {
+    const globalCity = getGlobalCity(cityId);
+    if (globalCity) {
+      state.globalCityId = cityId;
+      state.selectedCountryId = null;
+      state.selectedContinentId = null;
+    }
     state.selectedCityId = cityId;
     if (window.AppStore) {
       window.AppStore.navigateTo("country", { cityId });
@@ -193,11 +300,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateBreadcrumb();
     window.CountryView.render(state);
     const country = window.TRAVEL_DATA.countries.find(item => item.id === state.selectedCountryId);
-    const city = country?.cities.find(item => item.id === cityId);
+    const city = globalCity || country?.cities.find(item => item.id === cityId);
     if (city) mapManager.flyToCity(city.lat, city.lng, 5);
   };
 
   window.appNavigate = navigateTo;
   window.appState = state;
+  window.GlobalCitiesView?.render();
   window.mapManager = mapManager;
 });

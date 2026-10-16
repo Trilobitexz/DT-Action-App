@@ -23,6 +23,7 @@ class MapManager {
       voyager: {
         name: "探索地圖",
         sources: [
+          { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", subdomains: "abc", attribution: osmAttribution },
           { url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", subdomains: "abc", attribution: hotAttribution },
           { url: "https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png", subdomains: "abc", attribution: osmFranceAttribution },
           { url: "https://tile.openstreetmap.de/{z}/{x}/{y}.png", attribution: osmAttribution },
@@ -34,6 +35,7 @@ class MapManager {
       light: {
         name: "簡約地圖",
         sources: [
+          { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", subdomains: "abc", attribution: osmAttribution },
           { url: "https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png", subdomains: "abc", attribution: osmFranceAttribution },
           { url: "https://tile.openstreetmap.de/{z}/{x}/{y}.png", attribution: osmAttribution },
           { url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", subdomains: "abc", attribution: hotAttribution },
@@ -85,7 +87,7 @@ class MapManager {
       zoomControl: false,
       touchZoom: true,
       scrollWheelZoom: true,
-      worldCopyJump: true
+      worldCopyJump: false
     });
     if (status) status.textContent = "";
 
@@ -289,35 +291,31 @@ class MapManager {
     const cont = window.GEO_CONTINENTS[continentId];
     if (!cont || !this.map) return;
 
-    this.map.flyToBounds(cont.bounds, {
-      padding: [40, 40],
-      duration: 1.4,
-      easeLinearity: 0.25
-    });
+    this.map.fitBounds(cont.bounds, { padding: [40, 40], animate: false });
   }
 
   // 聚焦至特定城市
   flyToCity(lat, lng, zoom = 7) {
-    if (!this.map) return;
-    this.map.flyTo([lat, lng], zoom, {
-      duration: 1.2
-    });
+    if (!this.map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    this.map.setView([lat, lng], zoom, { animate: false });
   }
 
   // 重設至世界全景
   flyToWorld() {
     if (!this.map) return;
-    this.map.flyTo(this.defaultCenter, this.defaultZoom, {
-      duration: 1.2
-    });
+    this.map.setView(this.defaultCenter, this.defaultZoom, { animate: false });
   }
 
   zoomIn() {
-    if (this.map) this.map.zoomIn();
+    if (this.map) {
+      this.map.setZoom(this.map.getZoom() + 1, { animate: false });
+    }
   }
 
   zoomOut() {
-    if (this.map) this.map.zoomOut();
+    if (this.map) {
+      this.map.setZoom(this.map.getZoom() - 1, { animate: false });
+    }
   }
 
   invalidateSize() {
@@ -333,8 +331,10 @@ class MapManager {
   // 儲存當前視角至記憶庫
   recordCurrentView(scope) {
     if (!this.map || !window.AppStore) return;
+    if (this.map._animatingZoom || this.map._flyToFrame) return;
     const center = this.map.getCenter();
     const zoom = this.map.getZoom();
+    if (!center || !Number.isFinite(center.lat) || !Number.isFinite(center.lng) || !Number.isFinite(zoom)) return;
     window.AppStore.saveMapView(scope, [center.lat, center.lng], zoom);
   }
 
@@ -342,8 +342,9 @@ class MapManager {
   restoreSavedView(scope) {
     if (!this.map || !window.AppStore) return false;
     const saved = window.AppStore.getSavedMapView(scope);
-    if (saved && saved.center && saved.zoom) {
-      this.map.flyTo(saved.center, saved.zoom, { duration: 1.1 });
+    if (saved && Array.isArray(saved.center) && saved.center.length === 2
+      && saved.center.every(Number.isFinite) && Number.isFinite(saved.zoom)) {
+      this.map.setView(saved.center, saved.zoom, { animate: false });
       return true;
     }
     return false;

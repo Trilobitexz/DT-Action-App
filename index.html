@@ -47,9 +47,34 @@
           <h2 id="world-heading">世界很大，<span>先去你想去的地方。</span></h2>
           <p>探索心儀目的地，從航班、預算到在地靈感，讓每一步規劃都更有把握。</p>
           <div class="intro-trust-row"><span>✈ 台灣出發直飛資訊</span><span>◉ 城市天氣參考</span><span>↗ 旅行預算指南</span></div>
+          <div class="intro-data-strip" aria-label="旅遊資料摘要">
+            <div><strong>100+</strong><span>城市資料</span></div>
+            <div><strong>4</strong><span>洲別入口</span></div>
+            <div><strong>LIVE</strong><span>天氣連線</span></div>
+          </div>
         </div>
-        <div class="intro-coordinate" aria-hidden="true"><span>EXPLORE</span><strong>01 <i>/</i> 03</strong><span>EVERYWHERE, YOUR WAY</span></div>
+        <div class="intro-coordinate" aria-label="目前瀏覽狀態"><span>ATLAS STATUS</span><strong>01 <i>/</i> 03</strong><span>WORLD DATA ONLINE</span><b><i></i> SYSTEM READY</b></div>
       </section>
+      <div class="world-quick-actions" aria-label="快速工具">
+        <button type="button" class="side-drawer-trigger" id="btn-open-city-rankings" aria-controls="city-rankings-drawer" aria-expanded="false">
+          <span>🏆</span><span><strong>城市排行榜</strong><small>人口與熱門旅遊 Top 100</small></span><b>→</b>
+        </button>
+        <button type="button" class="side-drawer-trigger secondary" id="btn-scroll-comparison">
+          <span>⚖️</span><span><strong>我的比較清單</strong><small id="comparison-quick-status">回到頁面查看已選城市</small></span><b>↓</b>
+        </button>
+      </div>
+      <section class="recommendation-panel" aria-labelledby="recommendation-heading">
+        <div class="recommendation-heading"><div><span class="section-kicker">SMART TRIP MATCH</span><h2 id="recommendation-heading">不知道去哪裡？讓旅途指南先幫你縮小選擇。</h2><p>用 30 秒說出你的旅行偏好，得到 3 個適合你的城市候選。</p></div></div>
+        <form id="recommendation-form" class="recommendation-form">
+          <label>旅行風格<select name="style"><option value="culture">歷史文化</option><option value="food">美食探索</option><option value="nature">自然風景</option><option value="shopping">購物都會</option><option value="relax">海島放鬆</option></select></label>
+          <label>預算取向<select name="budget"><option value="low">小資親民</option><option value="medium">舒適平衡</option><option value="high">享受升級</option></select></label>
+          <label>旅行天數<select name="days"><option value="3">3 天</option><option value="5" selected>5 天</option><option value="7">7 天</option></select></label>
+          <label>接受轉機<select name="direct"><option value="yes">希望直飛</option><option value="no">可以轉機</option></select></label>
+          <button type="submit" class="primary-action">開始推薦 →</button>
+        </form>
+        <div id="recommendation-results" class="recommendation-results" aria-live="polite"></div>
+      </section>
+      <section id="comparison-panel" class="comparison-panel comparison-inline" aria-label="城市比較"></section>
       <div class="map-hero-card">
         <div class="map-toolbar">
           <div class="map-toolbar-copy">
@@ -83,6 +108,18 @@
           <button class="continent-chip-btn" data-continent-id="oceania">🦘 大洋洲</button>
         </nav>
       </div>
+      <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+      <aside class="side-drawer rankings-drawer" id="city-rankings-drawer" aria-labelledby="rankings-drawer-title" aria-hidden="true">
+        <div class="drawer-content">
+          <div class="drawer-header"><div><span class="section-kicker">CITY INTELLIGENCE</span><h2 id="rankings-drawer-title">城市排行榜</h2><p>把榜單收進側欄，需要時再打開。</p></div><button type="button" class="drawer-close" data-close-drawer aria-label="關閉城市排行榜">×</button></div>
+          <div class="drawer-scale-control" aria-label="調整側欄顯示比例"><span>顯示比例</span><button type="button" data-drawer-scale="down" aria-label="縮小側欄內容">−</button><strong data-drawer-scale-value>100%</strong><button type="button" data-drawer-scale="up" aria-label="放大側欄內容">＋</button><button type="button" data-drawer-scale="reset" aria-label="重設側欄比例">重設</button></div>
+          <div class="drawer-meta"><strong id="global-city-count"></strong><span>資料可搜尋、分批載入</span></div>
+          <div class="global-city-search-wrap"><span aria-hidden="true">🔎</span><input id="global-city-search" type="search" placeholder="搜尋城市、國家或洲別" aria-label="搜尋全球城市"></div>
+          <div class="ranking-tabs" role="tablist" aria-label="城市排行榜類型"><button type="button" class="active" data-ranking-tab="population" role="tab" aria-selected="true">人口規模</button><button type="button" data-ranking-tab="travel" role="tab" aria-selected="false">熱門旅遊</button></div>
+          <div class="ranking-tab-panel active" id="ranking-panel-population"><h3>🌐 世界大城市 Top 100</h3><div id="global-population-list" class="global-city-list"></div></div>
+          <div class="ranking-tab-panel" id="ranking-panel-travel" hidden><h3>✈️ 熱門旅遊城市 Top 100</h3><div id="global-travel-list" class="global-city-list"></div></div>
+        </div>
+      </aside>
     </main>
 
     <!-- 畫面 2：大洲層級視圖 (Continent View) -->
@@ -140,7 +177,7 @@
             <p id="detail-currency-visa" style="font-size:0.9rem; color:var(--text-muted);">幣別資訊與簽證要求</p>
           </div>
         </div>
-        <button class="btn-reset" onclick="window.appNavigate('continent', { continentId: window.appState.selectedContinentId })">
+        <button class="btn-reset" id="btn-detail-back" onclick="window.appNavigate('continent', { continentId: window.appState.selectedContinentId })">
           ← 返回大洲選單
         </button>
       </div>
@@ -173,6 +210,16 @@
           </div>
           <div id="city-weather-widget" class="weather-badge" style="display:none;"></div>
         </div>
+        <div id="city-detail-facts" class="city-detail-facts" aria-label="城市深度資料"></div>
+        <div class="city-insight-panel">
+          <div class="city-insight-header">
+            <div><span class="section-kicker">TRAVEL INSIGHT</span><h4>用一眼看懂這座城市</h4></div>
+            <span class="source-badge">資料狀態：預估與即時混合</span>
+          </div>
+          <div id="city-insight-chart" class="city-insight-chart" role="img" aria-label="城市旅遊面向圖表"></div>
+          <div class="city-source-list"><strong>資料來源與使用說明</strong><span>• 城市目錄：本專案整理之公開城市名單與座標</span><span>• 目錄更新：2026-10-17（專案資料版本）</span><span>• 天氣：<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo API</a>（即時預報）</span><span>• 景點摘要與圖片：<a href="https://zh.wikipedia.org/" target="_blank" rel="noopener noreferrer">中文 Wikipedia</a>（查詢時更新）</span><small>旅遊排名、氣候與預估分數僅供規劃參考，實際狀況請以官方來源及出發前最新資訊為準。</small></div>
+        </div>
+        <div id="city-planner-tools" class="city-planner-tools"></div>
         <div class="city-tab-list" id="city-tab-list"></div>
         <div class="spot-list" id="city-spots-list"></div>
       </div>
@@ -228,9 +275,9 @@
     <!-- 載入視圖模組 -->
     <script src="src/js/modules/continentView.js"></script>
     <script src="src/js/modules/countryView.js"></script>
+    <script src="src/js/modules/globalCitiesView.js"></script>
+    <script src="src/js/modules/plannerView.js"></script>
     <script src="src/js/app.js"></script>
   </div>
 </body>
 </html>
-
-

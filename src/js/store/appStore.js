@@ -53,6 +53,14 @@
     // 切換視圖與路徑
     navigateTo: (viewName, params = {}) => {
       state.currentView = viewName;
+      if (viewName === "world") {
+        state.selectedContinentId = null;
+        state.selectedCountryId = null;
+        state.selectedCityId = null;
+      } else if (viewName === "continent") {
+        state.selectedCountryId = null;
+        state.selectedCityId = null;
+      }
       if (params.continentId !== undefined) state.selectedContinentId = params.continentId;
       if (params.countryId !== undefined) state.selectedCountryId = params.countryId;
       if (params.cityId !== undefined) state.selectedCityId = params.cityId;
