@@ -14,6 +14,9 @@ window.ContinentView = {
     searchInput.value = state.filters.search;
     checkDirect.checked = state.filters.directOnly;
     checkBudget.checked = state.filters.budgetAffordable;
+    const continentCount = window.TRAVEL_DATA.countries.filter(c => c.continentId === state.selectedContinentId).length;
+    const destinationCount = document.getElementById("destination-count");
+    if (destinationCount) destinationCount.textContent = `${continentCount} 個目的地`;
 
     // 搜尋與篩選 (加入 250ms 防抖 Debounce，大幅降低 DOM 頻繁重繪)
     let searchDebounce = null;
@@ -41,6 +44,17 @@ window.ContinentView = {
   applyFilters: function(state) {
     const listContainer = document.getElementById("countries-cards-grid");
     const emptyState = document.getElementById("continent-empty-state");
+    const summaryEl = document.getElementById("results-summary");
+    const clearFiltersButton = document.getElementById("btn-clear-filters");
+
+    if (clearFiltersButton && !clearFiltersButton.dataset.bound) {
+      clearFiltersButton.dataset.bound = "true";
+      clearFiltersButton.addEventListener("click", () => {
+        state.filters = { search: "", directOnly: false, budgetAffordable: false };
+        this.render(state);
+        document.getElementById("country-search-input")?.focus();
+      });
+    }
 
     const countries = window.TRAVEL_DATA.countries.filter(c => c.continentId === state.selectedContinentId);
     const filtered = countries.filter(c => {
@@ -51,11 +65,13 @@ window.ContinentView = {
         if (!matchName && !matchCity) return false;
       }
       if (state.filters.directOnly && !c.directFlight) return false;
-      if (state.filters.budgetAffordable && (c.priceLevel.tier === "偏高" || c.priceLevel.tier === "極高")) {
+      if (state.filters.budgetAffordable && (c.priceLevel.tier.includes("高") || c.priceLevel.tier.toLowerCase().includes("high"))) {
         return false;
       }
       return true;
     });
+
+    if (summaryEl) summaryEl.textContent = `顯示 ${filtered.length} / ${countries.length} 個目的地`;
 
     if (filtered.length === 0) {
       listContainer.innerHTML = "";
@@ -65,7 +81,7 @@ window.ContinentView = {
 
     emptyState.style.display = "none";
     listContainer.innerHTML = filtered.map(c => `
-      <div class="country-card" onclick="window.appNavigate('country', { countryId: '${c.id}' })">
+      <article class="country-card" role="button" tabindex="0" aria-label="探索 ${c.name}，${c.englishName}；${c.cities.length} 個熱門城市" onclick="window.appNavigate('country', { countryId: '${c.id}' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.appNavigate('country', { countryId: '${c.id}' });}">
         <div>
           <div class="country-header">
             <div class="country-title">
@@ -91,8 +107,8 @@ window.ContinentView = {
             </div>
           </div>
         </div>
-        <button class="btn-card-action">進入國家與熱門景點分析 ➔</button>
-      </div>
+        <span class="btn-card-action">探索目的地 <span aria-hidden="true">↗</span></span>
+      </article>
     `).join("");
   }
 };

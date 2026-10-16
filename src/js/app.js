@@ -1,5 +1,12 @@
 // 旅遊地點分析 APP - 全域控制器
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    if (window.leafletReady) await window.leafletReady;
+  } catch (error) {
+    // Leaflet 載入失敗時，地圖會顯示錯誤狀態，但其他頁面功能仍可使用。
+    console.error("互動地圖無法初始化：", error);
+  }
+
   const state = {
     currentView: "world", // 'world' | 'continent' | 'country'
     selectedContinentId: null,
@@ -41,10 +48,15 @@ document.addEventListener("DOMContentLoaded", () => {
   layerButtons.forEach(cfg => {
     const btn = document.getElementById(cfg.id);
     if (btn) {
+      btn.setAttribute("aria-pressed", String(cfg.layerKey === "voyager"));
       btn.addEventListener("click", () => {
         mapManager.setTileLayer(cfg.layerKey);
-        document.querySelectorAll(".map-layer-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".map-layer-btn").forEach(b => {
+          b.classList.remove("active");
+          b.setAttribute("aria-pressed", "false");
+        });
         btn.classList.add("active");
+        btn.setAttribute("aria-pressed", "true");
       });
     }
   });
@@ -79,6 +91,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (params.countryId !== undefined) state.selectedCountryId = params.countryId;
     if (params.cityId !== undefined) state.selectedCityId = params.cityId;
 
+    if (viewName === "world") {
+      state.selectedContinentId = null;
+      state.selectedCountryId = null;
+      state.selectedCityId = null;
+    }
+
     if (window.AppStore) {
       window.AppStore.navigateTo(viewName, params);
     }
@@ -86,8 +104,16 @@ document.addEventListener("DOMContentLoaded", () => {
     viewWorld.classList.toggle("active", viewName === "world");
     viewContinent.classList.toggle("active", viewName === "continent");
     viewCountry.classList.toggle("active", viewName === "country");
+    viewWorld.setAttribute("aria-hidden", String(viewName !== "world"));
+    viewContinent.setAttribute("aria-hidden", String(viewName !== "continent"));
+    viewCountry.setAttribute("aria-hidden", String(viewName !== "country"));
 
     updateBreadcrumb();
+    document.title = viewName === "world"
+      ? "旅途指南 Journey Atlas｜目的地探索與旅行規劃"
+      : viewName === "continent"
+        ? `${window.TRAVEL_DATA.continents.find(item => item.id === state.selectedContinentId)?.name || "探索目的地"}｜旅途指南 Journey Atlas`
+        : `${window.TRAVEL_DATA.countries.find(item => item.id === state.selectedCountryId)?.name || "目的地詳情"}｜旅途指南 Journey Atlas`;
 
     if (viewName === "world") {
       // 若有保存過的視角，優先還原
@@ -96,12 +122,19 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       mapManager.invalidateSize();
     } else if (viewName === "continent") {
-      window.ContinentView.render(state);
+      if (state.selectedContinentId) window.ContinentView.render(state);
+      mapManager.invalidateSize();
     } else if (viewName === "country") {
       window.CountryView.render(state);
+      const country = window.TRAVEL_DATA.countries.find(item => item.id === state.selectedCountryId);
+      const city = country?.cities.find(item => item.id === state.selectedCityId);
+      if (city) mapManager.flyToCity(city.lat, city.lng, 5);
+      mapManager.invalidateSize();
     }
 
     window.scrollTo({ top: 0, behavior: "smooth" });
+    const activeView = viewName === "world" ? viewWorld : viewName === "continent" ? viewContinent : viewCountry;
+    activeView.focus({ preventScroll: true });
   }
 
   // 麵包屑導航
@@ -131,13 +164,12 @@ document.addEventListener("DOMContentLoaded", () => {
       item.addEventListener("click", () => {
         const target = item.dataset.target;
         if (target === "world") {
-          state.selectedContinentId = null;
-          state.selectedCountryId = null;
           mapManager.flyToWorld();
           navigateTo("world");
         } else if (target === "continent") {
           state.selectedCountryId = null;
-          navigateTo("continent");
+          state.selectedCityId = null;
+          navigateTo("continent", { continentId: state.selectedContinentId });
         }
       });
     });
@@ -160,6 +192,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     updateBreadcrumb();
     window.CountryView.render(state);
+    const country = window.TRAVEL_DATA.countries.find(item => item.id === state.selectedCountryId);
+    const city = country?.cities.find(item => item.id === cityId);
+    if (city) mapManager.flyToCity(city.lat, city.lng, 5);
   };
 
   window.appNavigate = navigateTo;

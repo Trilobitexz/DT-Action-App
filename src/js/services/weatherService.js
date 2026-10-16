@@ -2,10 +2,11 @@
 window.WeatherService = {
   cache: {},
   cacheDurationMs: 30 * 60 * 1000, // 快取 30 分鐘
+  requestTimeoutMs: 10000,
 
-  // 取得城市即時天氣與氣溫
+  // 取得 Open-Meteo 當前天氣（預報模型的 current 值，非觀測站保證即時實測）
   getCityWeather: async function(lat, lng) {
-    if (!lat || !lng) return null;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
     const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)}`;
     
     if (this.cache[cacheKey] && (Date.now() - this.cache[cacheKey].timestamp < this.cacheDurationMs)) {
@@ -13,10 +14,25 @@ window.WeatherService = {
     }
 
     try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("天氣 API 連線異常");
+      const params = new URLSearchParams({
+        latitude: String(lat),
+        longitude: String(lng),
+        current: "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+        timezone: "auto"
+      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+      let res;
+      try {
+        res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      if (!res.ok) throw new Error(`天氣 API 回應異常 (${res.status})`);
       const json = await res.json();
+      if (json.error || !json.current) throw new Error(json.reason || "天氣 API 缺少目前資料");
+      const requiredValues = [json.current.temperature_2m, json.current.relative_humidity_2m, json.current.weather_code, json.current.wind_speed_10m];
+      if (!requiredValues.every(Number.isFinite)) throw new Error("天氣 API 回傳的目前資料不完整");
       
       const current = json.current;
       const weatherInfo = this.interpretWeatherCode(current.weather_code);
@@ -27,7 +43,9 @@ window.WeatherService = {
         windSpeed: current.wind_speed_10m,
         description: weatherInfo.text,
         icon: weatherInfo.icon,
-        time: current.time
+        time: current.time,
+        timezone: json.timezone || "",
+        source: "Open-Meteo"
       };
 
       this.cache[cacheKey] = {

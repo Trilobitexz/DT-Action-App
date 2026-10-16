@@ -34,5 +34,7 @@ window.TRAVEL_DATA = {
       viewBox: "700 310 270 230"
     }
   ],
-  countries: []
+  countries: [],
+  // 全球熱門旅遊城市獨立資料集；不隸屬於單一國家卡片。
+  globalCities: []
 };

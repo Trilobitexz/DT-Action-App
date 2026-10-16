@@ -14,19 +14,22 @@ window.CountryView = {
     
     // 即時匯率動態拉取
     const visaEl = document.getElementById("detail-currency-visa");
-    visaEl.innerHTML = `幣別：${country.currency} ｜ 簽證：${country.visa} <span id="live-rate-tag" style="color:var(--primary); font-size:0.8rem; margin-left:6px;">(匯率計算中...)</span>`;
+    visaEl.innerHTML = `幣別：${country.currency} ｜ 簽證：${country.visa} <span id="live-rate-tag" style="color:var(--primary); font-size:0.8rem; margin-left:6px;">(匯率載入中...)</span>`;
 
     if (window.CurrencyService) {
+      const rateCountryId = country.id;
       window.CurrencyService.getExchangeRates().then(rateRes => {
+        if (state.selectedCountryId !== rateCountryId) return;
         const currencyCode = country.currency.match(/\(([A-Z]{3})\)/)?.[1];
         if (currencyCode && rateRes.data) {
           const formatted = window.CurrencyService.formatRate(currencyCode, rateRes.data);
           const rateTag = document.getElementById("live-rate-tag");
           if (rateTag && formatted) {
-            rateTag.innerHTML = ` · ⚡ 即時匯率：<strong>${formatted}</strong>`;
+            const sourceText = rateRes.source === "live" ? "最新" : rateRes.source === "cache" ? "快取" : "備援";
+            rateTag.textContent = ` · ${sourceText}匯率：${formatted}（${rateRes.updateTime || "來源時間未提供"}）`;
           }
         }
-      });
+      }).catch(error => console.warn("顯示匯率失敗：", error));
     }
 
     // 飛機直飛資訊卡
@@ -118,34 +121,52 @@ window.CountryView = {
       </div>
     `).join("");
 
-    // 拉取城市即時氣象
-    this.renderCityWeather(currentCity);
+    // 非同步結果只有在使用者仍停留於同一城市時才更新頁面。
+    const renderedCountryId = country.id;
+    const renderedCityId = currentCity.id;
+    this.renderCityWeather(currentCity, renderedCountryId, renderedCityId);
 
     if (window.SpotService) {
       currentCity.spots.forEach((spot, idx) => {
         window.SpotService.fetchSpotDetail(spot.name).then(wiki => {
-          if (wiki) {
-            if (wiki.thumbnail) {
-              const thumbEl = document.getElementById(`spot-thumb-${idx}`);
-              if (thumbEl) {
-                thumbEl.innerHTML = `<img src="${wiki.thumbnail}" alt="${wiki.title}" style="width:100%; height:100%; object-fit:cover;" />`;
-                thumbEl.style.display = "block";
+          if (!wiki || state.selectedCountryId !== renderedCountryId || state.selectedCityId !== renderedCityId) return;
+          const thumbEl = document.getElementById(`spot-thumb-${idx}`);
+          if (wiki.thumbnail && thumbEl) {
+            const image = document.createElement("img");
+            image.src = wiki.thumbnail;
+            image.alt = wiki.title || spot.name;
+            image.loading = "lazy";
+            image.referrerPolicy = "no-referrer";
+            image.style.cssText = "width:100%; height:100%; object-fit:cover;";
+            thumbEl.replaceChildren(image);
+            thumbEl.style.display = "block";
+          }
+          if (wiki.extract) {
+            const noteEl = document.getElementById(`spot-note-${idx}`);
+            if (noteEl) {
+              const detail = document.createElement("span");
+              detail.style.cssText = "display:block; margin-top:4px; font-size:0.8rem; color:#64748b; line-height:1.4;";
+              const extract = document.createElement("em");
+              extract.textContent = wiki.extract;
+              detail.append("📖 ", extract, " ");
+              if (wiki.pageUrl) {
+                const link = document.createElement("a");
+                link.href = wiki.pageUrl;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+                link.textContent = "維基百科";
+                detail.appendChild(link);
               }
-            }
-            if (wiki.extract) {
-              const noteEl = document.getElementById(`spot-note-${idx}`);
-              if (noteEl) {
-                noteEl.innerHTML = `${spot.note} <span style="display:block; margin-top:4px; font-size:0.8rem; color:#64748b; line-height:1.4;">📖 <em>${wiki.extract}</em> ${wiki.pageUrl ? `<a href="${wiki.pageUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--primary); text-decoration:underline;">維基百科</a>` : ''}</span>`;
-              }
+              noteEl.appendChild(detail);
             }
           }
-        });
+        }).catch(error => console.warn("景點百科載入失敗：", error));
       });
     }
   },
 
   // 渲染城市即時天氣組件
-  renderCityWeather: function(city) {
+  renderCityWeather: function(city, countryId, cityId) {
     const weatherWidget = document.getElementById("city-weather-widget");
     if (!weatherWidget) return;
 
@@ -158,19 +179,24 @@ window.CountryView = {
     weatherWidget.innerHTML = `🌤️ 載入即時天氣...`;
 
     window.WeatherService.getCityWeather(city.lat, city.lng).then(weather => {
+      if (state.selectedCountryId !== countryId || state.selectedCityId !== cityId) return;
       if (weather) {
         weatherWidget.innerHTML = `
           <span style="font-size:1.1rem; line-height:1;">${weather.icon}</span>
           <div>
-            <strong>${city.name} 即時氣候：</strong>
+            <strong>${city.name} 天氣：</strong>
             <span>${weather.temperature}°C · ${weather.description}</span>
-            <span style="font-size:0.75rem; color:#64748b; margin-left:4px;">(濕度 ${weather.humidity}% / 風速 ${weather.windSpeed} km/h)</span>
+            <span style="display:block;font-size:0.75rem;color:#64748b;">濕度 ${weather.humidity}% / 風速 ${weather.windSpeed} km/h · ${weather.timezone} ${weather.time} · 來源：${weather.source}</span>
           </div>
         `;
       } else {
-        weatherWidget.style.display = "none";
+        weatherWidget.textContent = "目前無法取得天氣資料";
       }
+    }).catch(error => {
+      if (state.selectedCountryId === countryId && state.selectedCityId === cityId) {
+        weatherWidget.textContent = "目前無法取得天氣資料";
+      }
+      console.warn("顯示天氣失敗：", error);
     });
-  }
   }
 };

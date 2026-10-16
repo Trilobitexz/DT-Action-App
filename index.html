@@ -3,26 +3,33 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>旅遊地點分析 APP - 設計思考原型</title>
-  <!-- 引入 Leaflet 地圖樣式 (支援 cdnjs 備援) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDmSCnGZqqUATzxMXHCv3rE7Rg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <meta name="theme-color" content="#0b1f33">
+  <meta name="description" content="用互動地圖探索世界目的地，快速比較台灣直飛航班、旅行預算、城市天氣與精選景點。">
+  <title>旅途指南 Journey Atlas｜目的地探索與旅行規劃</title>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://api.open-meteo.com" crossorigin>
+  <link rel="preconnect" href="https://open.er-api.com" crossorigin>
+  <!-- Leaflet 樣式主來源與 CDN 備援；兩者使用相同版本，避免地圖容器缺少必要樣式。 -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" onerror="this.onerror=null;var fallback=document.createElement('link');fallback.rel='stylesheet';fallback.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css';document.head.appendChild(fallback);" />
   <link rel="stylesheet" href="src/css/style.css">
 </head>
 <body>
   <div class="app-container">
     <!-- 頂部導航列 -->
+    <a class="skip-link" href="#view-world">跳至主要內容</a>
     <header class="app-header">
       <div class="header-inner">
-        <div class="logo-group" onclick="window.appNavigate('world')">
-          <div class="logo-badge">✈️</div>
-          <div>
-            <h1>旅遊地點分析 APP</h1>
-            <div class="sub">直飛航班 · 物價指數 · 熱門景點分析</div>
-          </div>
-        </div>
+        <a class="logo-group" href="#view-world" aria-label="旅途指南首頁" onclick="window.appNavigate('world'); return false;">
+          <span class="logo-badge" aria-hidden="true">✈</span>
+          <span class="logo-copy">
+            <h1>旅途指南 <span>JOURNEY ATLAS</span></h1>
+            <span class="sub">把下一趟旅行，規劃得更從容。</span>
+          </span>
+        </a>
 
         <!-- 麵包屑導航 (容錯與平順返回) -->
-        <nav class="breadcrumb-nav" id="breadcrumb-nav">
+        <nav class="breadcrumb-nav" id="breadcrumb-nav" aria-label="所在位置">
           <span class="breadcrumb-item active">🌍 世界地圖</span>
         </nav>
 
@@ -33,19 +40,29 @@
     </header>
 
     <!-- 畫面 1：世界地圖 (World Map View) -->
-    <main id="view-world" class="view-panel active">
+    <main id="view-world" class="view-panel active" tabindex="-1">
+      <section class="world-intro" aria-labelledby="world-heading">
+        <div class="world-intro-copy">
+          <span class="eyebrow"><span class="status-dot" aria-hidden="true"></span> YOUR NEXT CHAPTER STARTS HERE</span>
+          <h2 id="world-heading">世界很大，<span>先去你想去的地方。</span></h2>
+          <p>探索心儀目的地，從航班、預算到在地靈感，讓每一步規劃都更有把握。</p>
+          <div class="intro-trust-row"><span>✈ 台灣出發直飛資訊</span><span>◉ 城市天氣參考</span><span>↗ 旅行預算指南</span></div>
+        </div>
+        <div class="intro-coordinate" aria-hidden="true"><span>EXPLORE</span><strong>01 <i>/</i> 03</strong><span>EVERYWHERE, YOUR WAY</span></div>
+      </section>
       <div class="map-hero-card">
         <div class="map-toolbar">
-          <div>
-            <h2 style="font-size: 1.25rem; font-weight:700;">探索目的地：點選大洲或使用下方快捷選項</h2>
-            <p style="font-size: 0.85rem; color: var(--text-muted);">支援滑鼠滾輪/按鈕縮放與拖曳平移地圖視圖</p>
+          <div class="map-toolbar-copy">
+            <span class="section-kicker">THE WORLD IS YOURS</span>
+            <h2>從地圖開始，找到下一站</h2>
+            <p>選擇地圖上的洲別，或使用快捷目的地；拖曳及縮放可自由探索。</p>
           </div>
           <div class="map-controls">
             <!-- 圖層切換器 -->
             <div class="map-layer-selector">
-              <button class="map-btn map-layer-btn active" id="btn-layer-voyager" title="精緻彩圖 (預設)">🗺️ 探索</button>
-              <button class="map-btn map-layer-btn" id="btn-layer-light" title="清新淺色">⚪ 簡約</button>
-              <button class="map-btn map-layer-btn" id="btn-layer-satellite" title="衛星航照">🛰️ 衛星</button>
+              <button type="button" class="map-btn map-layer-btn active" id="btn-layer-voyager" title="精緻彩圖 (預設)" aria-label="探索彩色地圖圖層" aria-pressed="true">🗺️ 探索</button>
+              <button type="button" class="map-btn map-layer-btn" id="btn-layer-light" title="清新淺色" aria-label="簡約淺色地圖圖層" aria-pressed="false">⚪ 簡約</button>
+              <button type="button" class="map-btn map-layer-btn" id="btn-layer-satellite" title="衛星航照" aria-label="衛星航照地圖圖層" aria-pressed="false">🛰️ 衛星</button>
             </div>
             <button class="map-btn" id="btn-zoom-in" title="放大地圖">+</button>
             <button class="map-btn" id="btn-zoom-out" title="縮小地圖">-</button>
@@ -54,32 +71,37 @@
         </div>
 
         <!-- Leaflet 互動世界地圖容器 -->
-        <div id="leaflet-map"></div>
+        <div id="leaflet-map" role="application" aria-label="互動式世界地圖"></div>
+        <p id="map-load-status" class="map-load-status" role="status" aria-live="polite"></p>
 
         <!-- 快捷標籤列 -->
-        <div class="map-continent-chips">
-          <span style="font-size:0.875rem; font-weight:600; color:var(--text-muted); align-self:center;">快速選擇：</span>
-          <button class="continent-chip-btn" data-continent-id="asia">🌏 亞洲 (Asia)</button>
-          <button class="continent-chip-btn" data-continent-id="europe">🏰 歐洲 (Europe)</button>
-          <button class="continent-chip-btn" data-continent-id="north-america">🗽 北美洲 (North America)</button>
-          <button class="continent-chip-btn" data-continent-id="oceania">🦘 大洋洲 (Oceania)</button>
-        </div>
+        <nav class="map-continent-chips" aria-label="快速選擇洲別">
+          <span class="quick-pick-label">快速前往</span>
+          <button class="continent-chip-btn" data-continent-id="asia">🌏 亞洲</button>
+          <button class="continent-chip-btn" data-continent-id="europe">🏰 歐洲</button>
+          <button class="continent-chip-btn" data-continent-id="north-america">🗽 北美洲</button>
+          <button class="continent-chip-btn" data-continent-id="oceania">🦘 大洋洲</button>
+        </nav>
       </div>
     </main>
 
     <!-- 畫面 2：大洲層級視圖 (Continent View) -->
     <section id="view-continent" class="view-panel">
       <!-- 篩選列與文字方框 (落實 V2 元件) -->
+      <div class="continent-page-heading">
+        <div><span class="section-kicker">FIND YOUR DESTINATION</span><h2>世界靈感，從一個地方開始。</h2><p>以你在意的航班與預算條件，找到合適的下一站。</p></div>
+        <span class="continent-heading-mark" aria-hidden="true">✳</span>
+      </div>
       <div class="filter-bar-card">
-        <div>
-          <h2 id="continent-title" style="font-size: 1.4rem; font-weight:700; margin-bottom: 0.25rem;">亞洲</h2>
-          <p id="continent-desc" style="font-size:0.9rem; color:var(--text-muted);">文化多元、美食豐富、台灣旅客最喜愛的直飛旅遊勝地。</p>
+        <div class="filter-heading-copy">
+          <div class="continent-title-line"><h2 id="continent-title">亞洲</h2><span class="destination-count" id="destination-count" aria-live="polite"></span></div>
+          <p id="continent-desc">文化多元、美食豐富、台灣旅客最喜愛的直飛旅遊勝地。</p>
         </div>
         
         <div class="filter-inputs-row">
           <div class="search-input-wrap">
             <span class="search-icon">🔍</span>
-            <input type="text" id="country-search-input" class="search-input" placeholder="搜尋國家或城市名稱（如：日本、曼谷）...">
+            <input type="search" id="country-search-input" class="search-input" placeholder="搜尋國家或城市，例如：日本、東京..." aria-label="搜尋國家或城市" autocomplete="off">
           </div>
           <div class="filter-checkboxes">
             <label class="checkbox-label">
@@ -95,14 +117,15 @@
       </div>
 
       <!-- 國家卡片列表 -->
+      <p class="results-summary" id="results-summary" aria-live="polite"></p>
       <div class="cards-grid" id="countries-cards-grid"></div>
 
       <!-- 無結果狀態 (Empty State) -->
-      <div id="continent-empty-state" style="display:none; text-align:center; padding: 3rem 1rem; background:white; border-radius:12px; border:1px dashed var(--border-color);">
-        <p style="font-size:1.1rem; color:var(--text-muted); margin-bottom:0.75rem;">查無符合條件的旅遊國家</p>
-        <button class="btn-reset" onclick="document.getElementById('country-search-input').value=''; document.getElementById('filter-direct-flight').checked=false; document.getElementById('filter-budget').checked=false; window.appState.filters={search:'', directOnly:false, budgetAffordable:false}; window.appNavigate('continent');">
-          重設篩選條件
-        </button>
+      <div id="continent-empty-state" class="empty-state" hidden>
+        <span class="empty-state-icon" aria-hidden="true">⌕</span>
+        <h3>沒有符合條件的目的地</h3>
+        <p>試試不同的關鍵字，或移除部分篩選條件。</p>
+        <button class="btn-reset" id="btn-clear-filters" type="button">清除所有篩選</button>
       </div>
     </section>
 
@@ -117,7 +140,7 @@
             <p id="detail-currency-visa" style="font-size:0.9rem; color:var(--text-muted);">幣別資訊與簽證要求</p>
           </div>
         </div>
-        <button class="btn-reset" onclick="window.appNavigate('continent')">
+        <button class="btn-reset" onclick="window.appNavigate('continent', { continentId: window.appState.selectedContinentId })">
           ← 返回大洲選單
         </button>
       </div>
@@ -155,12 +178,34 @@
       </div>
     </section>
 
-    <!-- 載入 Leaflet.js 地圖套件與設定模組 (採用高速穩定 cdnjs 與 unpkg 備援) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzSmGyktnZMnp3LJKVVMeY04EgkimgndHYLN0714gvvqhng==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <footer class="app-footer">
+      <div class="footer-inner"><a href="#view-world" class="footer-brand" onclick="window.appNavigate('world'); return false;">✈ 旅途指南 <span>JOURNEY ATLAS</span></a><p>旅行資訊為行前規劃參考；實際票價、匯率、簽證與天氣請以官方及服務提供者最新資料為準。</p><a class="footer-top-link" href="#view-world" onclick="window.appNavigate('world'); return false;">回到探索首頁 ↑</a></div>
+    </footer>
+
+    <!-- Leaflet CDN 載入失敗時，依序嘗試備援來源；初始化移至 DOMContentLoaded，確保備援載入完成。 -->
     <script>
-      if (typeof window.L === "undefined") {
-        document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\\/script>');
-      }
+      window.leafletReady = new Promise((resolve, reject) => {
+        const sources = [
+          "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+          "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+        ];
+        const loadNext = () => {
+          const src = sources.shift();
+          if (!src) {
+            const status = document.getElementById("map-load-status");
+            if (status) status.textContent = "地圖程式載入失敗，請確認網路連線或稍後重試。";
+            reject(new Error("所有 Leaflet CDN 均載入失敗。"));
+            return;
+          }
+          const script = document.createElement("script");
+          script.src = src;
+          script.onload = () => window.L ? resolve(window.L) : loadNext();
+          script.onerror = loadNext;
+          document.head.appendChild(script);
+        };
+        loadNext();
+      });
+      window.leafletReady.catch(error => console.error(error));
     </script>
     <script src="src/js/map/geoContinents.js"></script>
     <script src="src/js/map/mapManager.js"></script>
@@ -170,6 +215,7 @@
     <script src="src/data/countries/asia.js"></script>
     <script src="src/data/countries/europe.js"></script>
     <script src="src/data/countries/others.js"></script>
+    <script src="src/data/globalCities.js"></script>
     <!-- 載入資料層與即時 API 服務 (階段二) -->
     <script src="src/js/services/currencyService.js"></script>
     <script src="src/js/services/weatherService.js"></script>
