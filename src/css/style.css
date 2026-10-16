@@ -306,6 +306,63 @@ button { color: inherit; }
   border: none;
 }
 
+.custom-global-city-marker {
+  background: none;
+  border: none;
+}
+
+.global-city-pin-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  padding: 3px 7px;
+  border: 1px solid #2563eb;
+  border-radius: 13px;
+  background: rgba(239, 246, 255, 0.96);
+  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.2);
+  color: #1e3a8a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.global-city-pin-badge:hover {
+  background: #2563eb;
+  color: white;
+  transform: scale(1.08);
+}
+
+.global-city-pin-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.global-city-pin-text {
+  display: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.leaflet-container.global-city-labels-visible .global-city-pin-badge {
+  width: max-content;
+  max-width: 118px;
+  height: auto;
+  padding: 3px 7px;
+}
+
+.leaflet-container.global-city-labels-visible .global-city-pin-text {
+  display: inline;
+}
+
 .city-pin-badge {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(4px);

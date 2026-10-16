@@ -38,6 +38,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     },
     onCitySelect: (continentId, countryId, cityId) => {
       navigateTo("country", { continentId, countryId, cityId });
+    },
+    onGlobalCitySelect: (cityId) => {
+      navigateTo("global-city", { cityId });
     }
   });
   mapManager.init();

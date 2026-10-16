@@ -171,7 +171,7 @@ window.CountryView = {
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.4rem;">
             <div class="spot-score">★ ${spot.rating}</div>
-            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name + ' ' + currentCity.name)}" target="_blank" rel="noopener noreferrer" style="font-size:0.75rem; color:var(--primary); text-decoration:none; display:inline-flex; align-items:center; gap:2px; background:#eff6ff; padding:2px 6px; border-radius:4px; font-weight:500;">
+            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name + ' ' + currentCity.name)}" target="_self" style="font-size:0.75rem; color:var(--primary); text-decoration:none; display:inline-flex; align-items:center; gap:2px; background:#eff6ff; padding:2px 6px; border-radius:4px; font-weight:500;">
               📍 地圖導航
             </a>
           </div>
@@ -190,7 +190,7 @@ window.CountryView = {
 
     if (window.SpotService) {
       currentCity.spots.forEach((spot, idx) => {
-        window.SpotService.fetchSpotDetail(spot.name).then(wiki => {
+        window.SpotService.fetchSpotDetail(spot.name, currentCity.name, currentCity).then(wiki => {
           if (!wiki || !isCurrentCity()) return;
           const thumbEl = document.getElementById(`spot-thumb-${idx}`);
           if (wiki.thumbnail && thumbEl) {
@@ -203,21 +203,48 @@ window.CountryView = {
             thumbEl.replaceChildren(image);
             thumbEl.style.display = "block";
           }
-          if (wiki.extract) {
+          if (wiki.extract || wiki.location?.address || wiki.sources?.length) {
             const noteEl = document.getElementById(`spot-note-${idx}`);
             if (noteEl) {
               const detail = document.createElement("span");
               detail.style.cssText = "display:block; margin-top:4px; font-size:0.8rem; color:#64748b; line-height:1.4;";
-              const extract = document.createElement("em");
-              extract.textContent = wiki.extract;
-              detail.append("📖 ", extract, " ");
+              if (wiki.extract) {
+                const extract = document.createElement("em");
+                extract.textContent = wiki.extract;
+                detail.append("📖 ", extract, " ");
+              }
               if (wiki.pageUrl) {
                 const link = document.createElement("a");
                 link.href = wiki.pageUrl;
                 link.target = "_blank";
                 link.rel = "noopener noreferrer";
-                link.textContent = "維基百科";
+                link.textContent = wiki.sourceLabel || "資料來源";
                 detail.appendChild(link);
+              }
+              if (wiki.location?.address) {
+                const location = document.createElement("span");
+                location.style.cssText = "display:block; margin-top:3px;";
+                location.textContent = `📍 ${wiki.location.address}`;
+                detail.appendChild(location);
+              }
+              if (wiki.sources?.length > 1) {
+                const sources = document.createElement("small");
+                sources.style.cssText = "display:block; margin-top:3px;";
+                sources.append("資料維度：");
+                wiki.sources.forEach((source, sourceIndex) => {
+                  if (sourceIndex > 0) sources.append(" · ");
+                  if (source.url) {
+                    const sourceLink = document.createElement("a");
+                    sourceLink.href = source.url;
+                    sourceLink.target = "_blank";
+                    sourceLink.rel = "noopener noreferrer";
+                    sourceLink.textContent = source.label;
+                    sources.appendChild(sourceLink);
+                  } else {
+                    sources.append(source.label);
+                  }
+                });
+                detail.appendChild(sources);
               }
               noteEl.appendChild(detail);
             }

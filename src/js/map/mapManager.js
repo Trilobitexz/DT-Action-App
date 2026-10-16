@@ -10,38 +10,30 @@ class MapManager {
     this.failedTileProviders = new Set();
     this.continentMarkersLayer = null;
     this.cityMarkersLayer = null;
+    this.globalCityMarkersLayer = null;
     this.onContinentSelect = options.onContinentSelect || (() => {});
     this.onCountrySelect = options.onCountrySelect || (() => {});
     this.onCitySelect = options.onCitySelect || (() => {});
+    this.onGlobalCitySelect = options.onGlobalCitySelect || (() => {});
 
-    // 探索／簡約改用不同於 Carto 的免金鑰圖磚網路，並保留多個獨立備援來源。
-    const osmAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-    const hotAttribution = `${osmAttribution} &mdash; Tiles style by <a href="https://www.hotosm.org/">HOT</a>`;
-    const osmFranceAttribution = `${osmAttribution} &mdash; <a href="https://openstreetmap.fr/">OpenStreetMap France</a>`;
+    // 使用 Esri 公開圖磚，避免 OSM 403 與 CARTO API key 限制。
+    const esriAttribution = 'Tiles &copy; <a href="https://www.esri.com/">Esri</a>';
     this.tileProviders = {
-      // 探索風格：HOT 彩色地圖；備援 OSM France、OSM Germany。
+      // 探索風格：Esri 街道圖。
       voyager: {
         name: "探索地圖",
         sources: [
-          { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", subdomains: "abc", attribution: osmAttribution },
-          { url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", subdomains: "abc", attribution: hotAttribution },
-          { url: "https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png", subdomains: "abc", attribution: osmFranceAttribution },
-          { url: "https://tile.openstreetmap.de/{z}/{x}/{y}.png", attribution: osmAttribution },
-          { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", attribution: 'Tiles &copy; Esri' }
+          { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", attribution: esriAttribution }
         ],
         maxZoom: 19
       },
-      // 簡約風格：OSM France 清爽底圖；備援 OSM Germany、HOT。
+      // 簡約風格：Esri 地形圖，與探索街道圖保持明顯差異。
       light: {
         name: "簡約地圖",
         sources: [
-          { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", subdomains: "abc", attribution: osmAttribution },
-          { url: "https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png", subdomains: "abc", attribution: osmFranceAttribution },
-          { url: "https://tile.openstreetmap.de/{z}/{x}/{y}.png", attribution: osmAttribution },
-          { url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", subdomains: "abc", attribution: hotAttribution },
-          { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", attribution: 'Tiles &copy; Esri' }
+          { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}", attribution: esriAttribution }
         ],
-        maxZoom: 19
+        maxZoom: 18
       },
       // 3. ESRI ArcGIS World Imagery：世界高解析度真實衛星航照
       satellite: {
@@ -96,6 +88,7 @@ class MapManager {
 
     this.continentMarkersLayer = window.L.layerGroup().addTo(this.map);
     this.cityMarkersLayer = window.L.layerGroup().addTo(this.map);
+    this.globalCityMarkersLayer = window.L.layerGroup().addTo(this.map);
 
     this.renderContinentMarkers();
 
@@ -237,9 +230,41 @@ class MapManager {
 
   // 渲染熱門城市地標 (支援多縮放細節 LOD)
   renderCityMarkers() {
-    if (!this.cityMarkersLayer) return;
+    if (!this.cityMarkersLayer || !this.globalCityMarkersLayer) return;
     this.cityMarkersLayer.clearLayers();
-    if (!window.TRAVEL_DATA || !window.TRAVEL_DATA.countries) return;
+    this.globalCityMarkersLayer.clearLayers();
+
+    const globalCities = window.TRAVEL_DATA?.globalCities || [];
+    globalCities.forEach(city => {
+      if (!Number.isFinite(city.lat) || !Number.isFinite(city.lng)) return;
+
+      const cityIcon = window.L.divIcon({
+        className: "custom-global-city-marker",
+        html: `
+          <div class="global-city-pin-badge" title="${city.name} (${city.countryName})">
+            <span class="global-city-pin-dot"></span>
+            <span class="global-city-pin-text">${city.flag} ${city.name}</span>
+          </div>
+        `,
+        iconSize: [118, 28],
+        iconAnchor: [59, 14]
+      });
+      const marker = window.L.marker([city.lat, city.lng], {
+        icon: cityIcon,
+        title: `${city.name} (${city.countryName})`,
+        riseOnHover: true
+      });
+      marker.on("click", event => {
+        if (window.L?.DomEvent) window.L.DomEvent.stopPropagation(event);
+        this.onGlobalCitySelect(city.id);
+      });
+      this.globalCityMarkersLayer.addLayer(marker);
+    });
+
+    if (!window.TRAVEL_DATA?.countries) {
+      this.updateMarkersVisibility();
+      return;
+    }
 
     window.TRAVEL_DATA.countries.forEach(country => {
       country.cities.forEach(city => {
@@ -273,9 +298,21 @@ class MapManager {
 
   // 根據縮放等級調整標記顯隱
   updateMarkersVisibility() {
-    if (!this.map || !this.cityMarkersLayer) return;
+    if (!this.map || !this.cityMarkersLayer || !this.globalCityMarkersLayer) return;
     const currentZoom = this.map.getZoom();
-    if (currentZoom >= 3.3) {
+    const mapContainer = this.map.getContainer();
+    mapContainer.classList.toggle("global-city-labels-visible", currentZoom >= 4.2);
+    if (currentZoom >= 2.2) {
+      if (!this.map.hasLayer(this.globalCityMarkersLayer)) {
+        this.map.addLayer(this.globalCityMarkersLayer);
+      }
+    } else {
+      if (this.map.hasLayer(this.globalCityMarkersLayer)) {
+        this.map.removeLayer(this.globalCityMarkersLayer);
+      }
+    }
+
+    if (currentZoom >= 4.2) {
       if (!this.map.hasLayer(this.cityMarkersLayer)) {
         this.map.addLayer(this.cityMarkersLayer);
       }
