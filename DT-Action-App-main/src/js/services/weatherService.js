@@ -1,0 +1,101 @@
+// 城市即時氣候服務模組 (串接 Open-Meteo 免金鑰全球氣象 API)
+window.WeatherService = {
+  cache: {},
+  storageKey: "journey-atlas-weather-cache",
+  cacheDurationMs: 30 * 60 * 1000, // 快取 30 分鐘
+  requestTimeoutMs: 10000,
+
+  // 取得 Open-Meteo 當前天氣（預報模型的 current 值，非觀測站保證即時實測）
+  getCityWeather: async function(lat, lng) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+    const cacheKey = `${lat.toFixed(2)},${lng.toFixed(2)}`;
+    
+    if (this.cache[cacheKey] && (Date.now() - this.cache[cacheKey].timestamp < this.cacheDurationMs)) {
+      return this.cache[cacheKey].data;
+    }
+    let storedCache = {};
+    try {
+      const parsed = JSON.parse(localStorage.getItem(this.storageKey) || "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) storedCache = parsed;
+    } catch (error) {
+      console.warn("讀取天氣快取失敗：", error);
+    }
+    const storedEntry = storedCache[cacheKey];
+    if (storedEntry?.data && Number.isFinite(storedEntry.timestamp) &&
+      Date.now() - storedEntry.timestamp < this.cacheDurationMs) {
+      this.cache[cacheKey] = storedEntry;
+      return storedEntry.data;
+    }
+
+    try {
+      const params = new URLSearchParams({
+        latitude: String(lat),
+        longitude: String(lng),
+        current: "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+        timezone: "auto"
+      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+      let res;
+      try {
+        res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      if (!res.ok) throw new Error(`天氣 API 回應異常 (${res.status})`);
+      const json = await res.json();
+      if (json.error || !json.current) throw new Error(json.reason || "天氣 API 缺少目前資料");
+      const requiredValues = [json.current.temperature_2m, json.current.relative_humidity_2m, json.current.weather_code, json.current.wind_speed_10m];
+      if (!requiredValues.every(Number.isFinite)) throw new Error("天氣 API 回傳的目前資料不完整");
+      
+      const current = json.current;
+      const weatherInfo = this.interpretWeatherCode(current.weather_code);
+
+      const result = {
+        temperature: Math.round(current.temperature_2m),
+        humidity: current.relative_humidity_2m,
+        windSpeed: current.wind_speed_10m,
+        description: weatherInfo.text,
+        icon: weatherInfo.icon,
+        time: current.time,
+        timezone: json.timezone || "",
+        source: "Open-Meteo"
+      };
+
+      this.cache[cacheKey] = {
+        data: result,
+        timestamp: Date.now()
+      };
+      try {
+        storedCache[cacheKey] = this.cache[cacheKey];
+        localStorage.setItem(this.storageKey, JSON.stringify(storedCache));
+      } catch (error) {
+        console.warn("儲存天氣快取失敗：", error);
+      }
+
+      return result;
+    } catch (e) {
+      console.warn("即時天氣拉取失敗：", e);
+      if (storedEntry?.data) {
+        const staleData = { ...storedEntry.data, source: "Open-Meteo（快取）" };
+        this.cache[cacheKey] = { data: staleData, timestamp: storedEntry.timestamp };
+        return staleData;
+      }
+      return null;
+    }
+  },
+
+  // WMO 天氣代碼對應表
+  interpretWeatherCode: function(code) {
+    if (code === 0) return { text: "晴朗", icon: "☀️" };
+    if (code === 1 || code === 2) return { text: "多雲時晴", icon: "🌤️" };
+    if (code === 3) return { text: "陰天", icon: "☁️" };
+    if (code >= 45 && code <= 48) return { text: "有霧", icon: "🌫️" };
+    if (code >= 51 && code <= 55) return { text: "毛毛雨", icon: "🌦️" };
+    if (code >= 61 && code <= 65) return { text: "降雨", icon: "🌧️" };
+    if (code >= 71 && code <= 77) return { text: "降雪", icon: "❄️" };
+    if (code >= 80 && code <= 82) return { text: "陣雨", icon: "🌧️" };
+    if (code >= 95) return { text: "雷雨", icon: "⛈️" };
+    return { text: "局部多雲", icon: "⛅" };
+  }
+};
