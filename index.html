@@ -4,14 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0b1f33">
-  <meta name="description" content="用互動地圖探索世界目的地，快速比較台灣直飛航班、旅行預算、城市天氣與精選景點。">
+  <meta name="color-scheme" content="light">
+
+  <meta name="description" content="從互動地圖開始，慢慢探索世界城市、旅行風格、航班預算與精選景點。">
+  <link rel="manifest" href="manifest.json">
   <title>旅途指南 Journey Atlas｜目的地探索與旅行規劃</title>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="preconnect" href="https://api.open-meteo.com" crossorigin>
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- Leaflet 樣式主來源與 CDN 備援；兩者使用相同版本，避免地圖容器缺少必要樣式。 -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" onerror="this.onerror=null;var fallback=document.createElement('link');fallback.rel='stylesheet';fallback.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css';document.head.appendChild(fallback);" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" onerror="this.onerror=null;var fallback=document.createElement('link');fallback.rel='stylesheet';fallback.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css';document.head.appendChild(fallback);" />
   <link rel="stylesheet" href="src/css/style.css">
 </head>
 <body>
@@ -38,78 +41,77 @@
         </button>
       </div>
     </header>
+    <div id="connectivity-status" class="connectivity-status" role="status" aria-live="polite" hidden></div>
 
     <!-- 畫面 1：世界地圖 (World Map View) -->
     <main id="view-world" class="view-panel active" tabindex="-1">
       <section class="world-intro" aria-labelledby="world-heading">
         <div class="world-intro-copy">
-          <span class="eyebrow"><span class="status-dot" aria-hidden="true"></span> YOUR NEXT CHAPTER STARTS HERE</span>
-          <h2 id="world-heading">世界很大，<span>先去你想去的地方。</span></h2>
-          <p>探索心儀目的地，從航班、預算到在地靈感，讓每一步規劃都更有把握。</p>
-          <div class="intro-trust-row"><span>✈ 台灣出發直飛資訊</span><span>◉ 城市天氣參考</span><span>↗ 旅行預算指南</span></div>
-          <div class="intro-data-strip" aria-label="旅遊資料摘要">
-            <div><strong>100+</strong><span>城市資料</span></div>
-            <div><strong>4</strong><span>洲別入口</span></div>
-            <div><strong>LIVE</strong><span>天氣連線</span></div>
-          </div>
+          <span class="eyebrow"><span class="status-dot" aria-hidden="true"></span> 開始一段探索</span>
+          <h2 id="world-heading">先看見世界，<span>再找到你的下一站。</span></h2>
+          <p>從地圖上的一個地方開始。放大看看附近的城市，點開感興趣的目的地，再慢慢了解航班、花費與景點。</p>
+          <div class="intro-trust-row"><span>拖曳地圖，看看世界</span><span>放大地圖，發現城市</span><span>點選標記，深入探索</span></div>
         </div>
-        <div class="intro-coordinate" aria-label="目前瀏覽狀態"><span>ATLAS STATUS</span><strong>01 <i>/</i> 03</strong><span>WORLD DATA ONLINE</span><b><i></i> SYSTEM READY</b></div>
+        <div class="intro-coordinate" aria-label="探索方式"><span>YOUR JOURNEY</span><strong>01 <i>/</i> 03</strong><span>世界 → 城市 → 景點</span><b><i></i> 隨心探索</b></div>
       </section>
-      <div class="world-quick-actions" aria-label="快速工具">
-        <button type="button" class="side-drawer-trigger" id="btn-open-city-rankings" aria-controls="city-rankings-drawer" aria-expanded="false">
-          <span>🏆</span><span><strong>城市排行榜</strong><small>人口與熱門旅遊 Top 100</small></span><b>→</b>
-        </button>
-        <button type="button" class="side-drawer-trigger secondary" id="btn-scroll-comparison">
-          <span>⚖️</span><span><strong>我的比較清單</strong><small id="comparison-quick-status">回到頁面查看已選城市</small></span><b>↓</b>
-        </button>
-      </div>
-      <section class="recommendation-panel" aria-labelledby="recommendation-heading">
-        <div class="recommendation-heading"><div><span class="section-kicker">SMART TRIP MATCH</span><h2 id="recommendation-heading">不知道去哪裡？讓旅途指南先幫你縮小選擇。</h2><p>用 30 秒說出你的旅行偏好，得到 3 個適合你的城市候選。</p></div></div>
-        <form id="recommendation-form" class="recommendation-form">
-          <label>旅行風格<select name="style"><option value="culture">歷史文化</option><option value="food">美食探索</option><option value="nature">自然風景</option><option value="shopping">購物都會</option><option value="relax">海島放鬆</option></select></label>
-          <label>預算取向<select name="budget"><option value="low">小資親民</option><option value="medium">舒適平衡</option><option value="high">享受升級</option></select></label>
-          <label>旅行天數<select name="days"><option value="3">3 天</option><option value="5" selected>5 天</option><option value="7">7 天</option></select></label>
-          <label>接受轉機<select name="direct"><option value="yes">希望直飛</option><option value="no">可以轉機</option></select></label>
-          <button type="submit" class="primary-action">開始推薦 →</button>
-        </form>
-        <div id="recommendation-results" class="recommendation-results" aria-live="polite"></div>
-      </section>
-      <section id="comparison-panel" class="comparison-panel comparison-inline" aria-label="城市比較"></section>
-      <div class="map-hero-card">
+      <section class="map-hero-card map-first-card" aria-labelledby="map-heading">
         <div class="map-toolbar">
           <div class="map-toolbar-copy">
-            <span class="section-kicker">THE WORLD IS YOURS</span>
-            <h2>從地圖開始，找到下一站</h2>
-            <p>選擇地圖上的洲別，或使用快捷目的地；拖曳及縮放可自由探索。</p>
+            <span class="section-kicker">EXPLORE AT YOUR OWN PACE</span>
+            <h2 id="map-heading">從地圖開始，看看哪裡吸引你</h2>
+            <p>拖曳移動、縮放探索；地圖標記會隨視野逐步出現，點選城市即可深入了解。</p>
           </div>
           <div class="map-controls">
-            <!-- 圖層切換器 -->
             <div class="map-layer-selector">
-              <button type="button" class="map-btn map-layer-btn active" id="btn-layer-voyager" title="精緻彩圖 (預設)" aria-label="探索彩色地圖圖層" aria-pressed="true">🗺️ 探索</button>
-              <button type="button" class="map-btn map-layer-btn" id="btn-layer-light" title="清新淺色" aria-label="簡約淺色地圖圖層" aria-pressed="false">⚪ 簡約</button>
+              <button type="button" class="map-btn map-layer-btn active" id="btn-layer-voyager" title="探索地圖" aria-label="探索彩色地圖圖層" aria-pressed="true">🗺️ 探索</button>
+              <button type="button" class="map-btn map-layer-btn" id="btn-layer-light" title="簡約地圖" aria-label="簡約淺色地圖圖層" aria-pressed="false">⚪ 簡約</button>
               <button type="button" class="map-btn map-layer-btn" id="btn-layer-satellite" title="衛星航照" aria-label="衛星航照地圖圖層" aria-pressed="false">🛰️ 衛星</button>
             </div>
-            <button class="map-btn" id="btn-zoom-in" title="放大地圖">+</button>
-            <button class="map-btn" id="btn-zoom-out" title="縮小地圖">-</button>
-            <button class="map-btn" id="btn-zoom-reset" title="重設視圖" style="font-size:0.8rem; width: auto; padding: 0 8px;">重設</button>
+            <button class="map-btn" id="btn-zoom-in" title="放大地圖" aria-label="放大地圖">+</button>
+            <button class="map-btn" id="btn-zoom-out" title="縮小地圖" aria-label="縮小地圖">−</button>
+            <button class="map-btn" id="btn-zoom-reset" title="重設視圖" style="font-size:0.8rem; width:auto; padding:0 8px;">世界全景</button>
           </div>
         </div>
-
-        <!-- Leaflet 互動世界地圖容器 -->
-        <div id="leaflet-map" role="application" aria-label="互動式世界地圖"></div>
+        <div id="leaflet-map" role="region" aria-label="互動式世界地圖"></div>
         <p id="map-load-status" class="map-load-status" role="status" aria-live="polite"></p>
-
-        <!-- 快捷標籤列 -->
-        <nav class="map-continent-chips" aria-label="快速選擇洲別">
-          <span class="quick-pick-label">快速前往</span>
+        <nav class="map-continent-chips" aria-label="地圖探索捷徑">
+          <span class="quick-pick-label">也可以從大洲開始</span>
           <button class="continent-chip-btn" data-continent-id="asia">🌏 亞洲</button>
           <button class="continent-chip-btn" data-continent-id="europe">🏰 歐洲</button>
           <button class="continent-chip-btn" data-continent-id="north-america">🗽 北美洲</button>
           <button class="continent-chip-btn" data-continent-id="oceania">🦘 大洋洲</button>
         </nav>
+      </section>
+      <section class="explore-next-step" aria-label="探索方式說明">
+        <span class="explore-step-number">01</span><p><strong>先自由看看</strong><span>地圖上的洲別與城市標記，帶你找到感興趣的方向。</span></p>
+        <span class="explore-step-arrow" aria-hidden="true">→</span>
+        <span class="explore-step-number">02</span><p><strong>再慢慢深入</strong><span>從國家、城市到景點，一層一層認識目的地。</span></p>
+        <span class="explore-step-arrow" aria-hidden="true">→</span>
+        <span class="explore-step-number">03</span><p><strong>最後再做決定</strong><span>需要時再比較航班、預算與行程，不急著先做選擇。</span></p>
+      </section>
+      <div class="world-support-tools" aria-label="探索輔助工具">
+        <button type="button" class="side-drawer-trigger" id="btn-open-city-rankings" aria-controls="city-rankings-drawer" aria-expanded="false">
+          <span>🏆</span><span><strong>想找靈感？看看城市榜單</strong><small>依人口或熱門旅遊城市瀏覽全球城市</small></span><b>→</b>
+        </button>
+        <button type="button" class="side-drawer-trigger secondary" id="btn-scroll-comparison">
+          <span>⚖️</span><span><strong>已經有幾個想法？查看比較清單</strong><small id="comparison-quick-status">先探索喜歡的城市，再放進比較清單</small></span><b>↓</b>
+        </button>
       </div>
+      <section id="recent-destinations-panel" class="recent-destinations-panel" aria-labelledby="recent-destinations-heading"></section>
+      <section class="recommendation-panel" aria-labelledby="recommendation-heading">
+        <div class="recommendation-heading"><div><span class="section-kicker">NEED A LITTLE DIRECTION?</span><h2 id="recommendation-heading">想要一些方向？讓偏好成為探索起點。</h2><p>如果你已經有旅行風格或預算想法，可以用簡單條件找幾座城市，再回到地圖繼續探索。</p></div></div>
+        <form id="recommendation-form" class="recommendation-form">
+          <label>旅行風格<select name="style"><option value="culture">歷史文化</option><option value="food">美食探索</option><option value="nature">自然風景</option><option value="shopping">購物都會</option><option value="relax">海島放鬆</option></select></label>
+          <label>預算取向<select name="budget"><option value="low">小資親民</option><option value="medium">舒適平衡</option><option value="high">享受升級</option></select></label>
+          <label>旅行天數<select name="days"><option value="3">3 天</option><option value="5" selected>5 天</option><option value="7">7 天</option></select></label>
+          <label>接受轉機<select name="direct"><option value="yes">希望直飛</option><option value="no">可以轉機</option></select></label>
+          <button type="submit" class="primary-action">依偏好找靈感 →</button>
+        </form>
+        <div id="recommendation-results" class="recommendation-results" aria-live="polite"></div>
+      </section>
+      <section id="comparison-panel" class="comparison-panel comparison-inline" aria-label="城市比較"></section>
       <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
-      <aside class="side-drawer rankings-drawer" id="city-rankings-drawer" aria-labelledby="rankings-drawer-title" aria-hidden="true">
+      <aside class="side-drawer rankings-drawer" id="city-rankings-drawer" aria-labelledby="rankings-drawer-title" aria-hidden="true" inert>
         <div class="drawer-content">
           <div class="drawer-header"><div><span class="section-kicker">CITY INTELLIGENCE</span><h2 id="rankings-drawer-title">城市排行榜</h2><p>把榜單收進側欄，需要時再打開。</p></div><button type="button" class="drawer-close" data-close-drawer aria-label="關閉城市排行榜">×</button></div>
           <div class="drawer-scale-control" aria-label="調整側欄顯示比例"><span>顯示比例</span><button type="button" data-drawer-scale="down" aria-label="縮小側欄內容">−</button><strong data-drawer-scale-value>100%</strong><button type="button" data-drawer-scale="up" aria-label="放大側欄內容">＋</button><button type="button" data-drawer-scale="reset" aria-label="重設側欄比例">重設</button></div>
@@ -278,6 +280,7 @@
     <script src="src/js/modules/globalCitiesView.js"></script>
     <script src="src/js/modules/plannerView.js"></script>
     <script src="src/js/app.js"></script>
+    <script src="src/js/pwa.js"></script>
   </div>
 </body>
 </html>

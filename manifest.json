@@ -1,0 +1,12 @@
+{
+  "name": "旅途指南 Journey Atlas",
+  "short_name": "旅途指南",
+  "description": "用互動地圖探索世界目的地，規劃更從容的下一趟旅行。",
+  "lang": "zh-Hant",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7f6",
+  "theme_color": "#0b1f33"
+}
