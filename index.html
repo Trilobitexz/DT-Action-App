@@ -11,10 +11,11 @@
   <title>旅途指南 Journey Atlas｜目的地探索與旅行規劃</title>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin>
   <link rel="preconnect" href="https://api.open-meteo.com" crossorigin>
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- Leaflet 樣式主來源與 CDN 備援；兩者使用相同版本，避免地圖容器缺少必要樣式。 -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" onerror="this.onerror=null;var fallback=document.createElement('link');fallback.rel='stylesheet';fallback.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css';document.head.appendChild(fallback);" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" onerror="this.onerror=null;var fallback=document.createElement('link');fallback.rel='stylesheet';fallback.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(fallback);" />
   <link rel="stylesheet" href="src/css/style.css">
 </head>
 <body>
@@ -54,7 +55,8 @@
         </div>
         <div class="intro-coordinate" aria-label="探索方式"><span>YOUR JOURNEY</span><strong>01 <i>/</i> 03</strong><span>世界 → 城市 → 景點</span><b><i></i> 隨心探索</b></div>
       </section>
-      <section class="map-hero-card map-first-card" aria-labelledby="map-heading">
+      <div id="map-world-slot">
+      <section id="map-hero-card" class="map-hero-card map-first-card" aria-labelledby="map-heading">
         <div class="map-toolbar">
           <div class="map-toolbar-copy">
             <span class="section-kicker">EXPLORE AT YOUR OWN PACE</span>
@@ -70,9 +72,12 @@
             <button class="map-btn" id="btn-zoom-in" title="放大地圖" aria-label="放大地圖">+</button>
             <button class="map-btn" id="btn-zoom-out" title="縮小地圖" aria-label="縮小地圖">−</button>
             <button class="map-btn" id="btn-zoom-reset" title="重設視圖" style="font-size:0.8rem; width:auto; padding:0 8px;">世界全景</button>
+            <button class="map-btn map-context-action" id="btn-map-back" title="返回上一層地圖" aria-label="返回上一層地圖">← 返回上一層</button>
+            <button class="map-btn map-context-action" id="btn-map-world" title="返回世界大地圖" aria-label="返回世界大地圖">🌍 世界地圖</button>
           </div>
         </div>
         <div id="leaflet-map" role="region" aria-label="互動式世界地圖"></div>
+        <div id="map-context-info" class="map-context-info" hidden></div>
         <p id="map-load-status" class="map-load-status" role="status" aria-live="polite"></p>
         <nav class="map-continent-chips" aria-label="地圖探索捷徑">
           <span class="quick-pick-label">也可以從大洲開始</span>
@@ -82,6 +87,7 @@
           <button class="continent-chip-btn" data-continent-id="oceania">🦘 大洋洲</button>
         </nav>
       </section>
+      </div>
       <section class="explore-next-step" aria-label="探索方式說明">
         <span class="explore-step-number">01</span><p><strong>先自由看看</strong><span>地圖上的洲別與城市標記，帶你找到感興趣的方向。</span></p>
         <span class="explore-step-arrow" aria-hidden="true">→</span>
@@ -126,6 +132,7 @@
 
     <!-- 畫面 2：大洲層級視圖 (Continent View) -->
     <section id="view-continent" class="view-panel">
+      <div id="map-continent-slot" class="map-context-slot"></div>
       <!-- 篩選列與文字方框 (落實 V2 元件) -->
       <div class="continent-page-heading">
         <div><span class="section-kicker">FIND YOUR DESTINATION</span><h2>世界靈感，從一個地方開始。</h2><p>以你在意的航班與預算條件，找到合適的下一站。</p></div>
@@ -170,6 +177,7 @@
 
     <!-- 畫面 3：國家與城市層級 (Country & City View) -->
     <section id="view-country" class="view-panel">
+      <div id="map-country-slot" class="map-context-slot"></div>
       <!-- 國家摘要標頭 -->
       <div class="detail-header-card">
         <div class="detail-title-wrap">
@@ -235,8 +243,8 @@
     <script>
       window.leafletReady = new Promise((resolve, reject) => {
         const sources = [
-          "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
-          "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+          "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",
+          "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         ];
         const loadNext = () => {
           const src = sources.shift();
@@ -265,6 +273,7 @@
     <script src="src/data/countries/europe.js"></script>
     <script src="src/data/countries/others.js"></script>
     <script src="src/data/globalCities.js"></script>
+    <script src="src/data/cityEnrichment.js"></script>
     <!-- 載入資料層與即時 API 服務 (階段二) -->
     <script src="src/js/services/currencyService.js"></script>
     <script src="src/js/services/weatherService.js"></script>
