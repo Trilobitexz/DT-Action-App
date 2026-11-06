@@ -1,4 +1,4 @@
-const CACHE_NAME = "journey-atlas-shell-v4";
+const CACHE_NAME = "journey-atlas-shell-v7";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -19,6 +19,7 @@ const APP_SHELL = [
   "./src/js/services/weatherService.js",
   "./src/data/travelData.js",
   "./src/data/globalCities.js",
+  "./src/data/cityEnrichment.js",
   "./src/data/countries/asia.js",
   "./src/data/countries/europe.js",
   "./src/data/countries/others.js"
