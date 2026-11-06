@@ -1,6 +1,7 @@
 // 城市即時氣候服務模組 (串接 Open-Meteo 免金鑰全球氣象 API)
 window.WeatherService = {
   cache: {},
+  storageKey: "journey-atlas-weather-cache",
   cacheDurationMs: 30 * 60 * 1000, // 快取 30 分鐘
   requestTimeoutMs: 10000,
 
@@ -11,6 +12,19 @@ window.WeatherService = {
     
     if (this.cache[cacheKey] && (Date.now() - this.cache[cacheKey].timestamp < this.cacheDurationMs)) {
       return this.cache[cacheKey].data;
+    }
+    let storedCache = {};
+    try {
+      const parsed = JSON.parse(localStorage.getItem(this.storageKey) || "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) storedCache = parsed;
+    } catch (error) {
+      console.warn("讀取天氣快取失敗：", error);
+    }
+    const storedEntry = storedCache[cacheKey];
+    if (storedEntry?.data && Number.isFinite(storedEntry.timestamp) &&
+      Date.now() - storedEntry.timestamp < this.cacheDurationMs) {
+      this.cache[cacheKey] = storedEntry;
+      return storedEntry.data;
     }
 
     try {
@@ -52,10 +66,21 @@ window.WeatherService = {
         data: result,
         timestamp: Date.now()
       };
+      try {
+        storedCache[cacheKey] = this.cache[cacheKey];
+        localStorage.setItem(this.storageKey, JSON.stringify(storedCache));
+      } catch (error) {
+        console.warn("儲存天氣快取失敗：", error);
+      }
 
       return result;
     } catch (e) {
       console.warn("即時天氣拉取失敗：", e);
+      if (storedEntry?.data) {
+        const staleData = { ...storedEntry.data, source: "Open-Meteo（快取）" };
+        this.cache[cacheKey] = { data: staleData, timestamp: storedEntry.timestamp };
+        return staleData;
+      }
       return null;
     }
   },

@@ -43,5 +43,21 @@ window.GEO_CONTINENTS = {
       [-45.0, 110.0], // 西南角
       [-10.0, 178.0]  // 東北角
     ]
+  },
+  africa: {
+    id: "africa",
+    name: "非洲",
+    englishName: "Africa",
+    center: [1.5, 20],
+    zoom: 3.2,
+    bounds: [[-35, -18], [38, 52]]
+  },
+  "south-america": {
+    id: "south-america",
+    name: "南美洲",
+    englishName: "South America",
+    center: [-15, -60],
+    zoom: 3.2,
+    bounds: [[-57, -82], [13, -34]]
   }
 };

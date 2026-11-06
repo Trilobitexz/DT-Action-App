@@ -33,6 +33,22 @@ window.TRAVEL_DATA = {
       description: "獨特生態、純淨自然與慢活海島度假氛圍。",
       viewBox: "700 310 270 230"
     }
+,    {
+      id: "africa",
+      name: "非洲",
+      englishName: "Africa",
+      code: "AF",
+      description: "從古文明城市到海岸、山岳與野生自然，展開多元大陸探索。",
+      viewBox: "460 170 280 360"
+    },
+    {
+      id: "south-america",
+      name: "南美洲",
+      englishName: "South America",
+      code: "SA",
+      description: "安地斯山脈、亞馬遜雨林與殖民古城交織的長途冒險。",
+      viewBox: "250 280 220 360"
+    }
   ],
   countries: [],
   // 全球熱門旅遊城市獨立資料集；不隸屬於單一國家卡片。

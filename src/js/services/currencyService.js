@@ -66,5 +66,11 @@ window.CurrencyService = {
     const rateFromTwd = rates[targetCurrencyCode];
     const rateToTwd = (1 / rateFromTwd).toFixed(2);
     return `1 ${targetCurrencyCode} ≈ ${rateToTwd} TWD（1 TWD ≈ ${rateFromTwd.toFixed(2)} ${targetCurrencyCode}）`;
+  },
+
+  // 取得特定幣別對台幣的比率 (1 外幣 = 多少 TWD)
+  getRateToTwd: function(targetCurrencyCode, rates) {
+    if (!rates || !Number.isFinite(rates[targetCurrencyCode]) || rates[targetCurrencyCode] <= 0) return null;
+    return 1 / rates[targetCurrencyCode];
   }
 };

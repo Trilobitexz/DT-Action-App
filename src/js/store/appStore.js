@@ -8,6 +8,7 @@
     selectedContinentId: null,
     selectedCountryId: null,
     selectedCityId: null,
+    globalCityId: null,
     filters: {
       search: "",
       directOnly: false,
@@ -21,7 +22,7 @@
   };
 
   window.AppStore = {
-    getState: () => ({ ...state }),
+    getState: () => state,
 
     subscribe: (fn) => {
       listeners.push(fn);
@@ -57,13 +58,25 @@
         state.selectedContinentId = null;
         state.selectedCountryId = null;
         state.selectedCityId = null;
+        state.globalCityId = null;
       } else if (viewName === "continent") {
         state.selectedCountryId = null;
         state.selectedCityId = null;
+        state.globalCityId = null;
       }
       if (params.continentId !== undefined) state.selectedContinentId = params.continentId;
       if (params.countryId !== undefined) state.selectedCountryId = params.countryId;
       if (params.cityId !== undefined) state.selectedCityId = params.cityId;
+      window.AppStore.notify();
+    },
+
+    sync: (nextState) => {
+      state.currentView = nextState.currentView;
+      state.selectedContinentId = nextState.selectedContinentId;
+      state.selectedCountryId = nextState.selectedCountryId;
+      state.selectedCityId = nextState.selectedCityId;
+      state.globalCityId = nextState.globalCityId;
+      state.filters = { ...state.filters, ...nextState.filters };
       window.AppStore.notify();
     },
 
@@ -79,6 +92,7 @@
       state.selectedContinentId = null;
       state.selectedCountryId = null;
       state.selectedCityId = null;
+      state.globalCityId = null;
       state.filters = { search: "", directOnly: false, budgetAffordable: false };
       window.AppStore.notify();
     }

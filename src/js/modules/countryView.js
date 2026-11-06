@@ -119,8 +119,14 @@ window.CountryView = {
     const tabList = document.getElementById("city-tab-list");
     const spotsContainer = document.getElementById("city-spots-list");
 
+    tabList.setAttribute("role", "tablist");
+    tabList.setAttribute("aria-label", "選擇城市");
+    spotsContainer?.setAttribute("role", "tabpanel");
+    spotsContainer?.setAttribute("aria-labelledby", `city-tab-${state.selectedCityId}`);
     tabList.innerHTML = country.cities.map(city => `
-      <button class="city-tab-btn ${city.id === state.selectedCityId ? 'active' : ''}" 
+      <button class="city-tab-btn ${city.id === state.selectedCityId ? 'active' : ''}"
+              id="city-tab-${city.id}" role="tab" aria-selected="${city.id === state.selectedCityId}"
+              aria-controls="city-spots-list" tabindex="${city.id === state.selectedCityId ? 0 : -1}"
               onclick="window.switchCity('${city.id}')">
         🏙️ ${city.name} (${city.englishName})
       </button>
@@ -129,7 +135,10 @@ window.CountryView = {
     const currentCity = country.cities.find(ci => ci.id === state.selectedCityId) || country.cities[0];
     if (!currentCity) return;
 
-    document.getElementById("city-description-text").innerText = currentCity.description;
+    const cityDescription = document.getElementById("city-description-text");
+    if (cityDescription) cityDescription.innerText = currentCity.description;
+    const cityHeading = document.querySelector("#view-country .city-tabs-card h3");
+    if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：城市資訊與熱門景點`;
     const detail = document.getElementById("city-detail-facts");
     if (detail) {
       detail.innerHTML = `
@@ -157,7 +166,7 @@ window.CountryView = {
     window.PlannerView?.renderCityTools(currentCity, state);
 
     spotsContainer.innerHTML = currentCity.spots.map((spot, idx) => `
-      <div class="spot-item" id="spot-item-${idx}">
+      <div class="spot-item" id="spot-item-${idx}" data-city-id="${currentCity.id}" data-spot-index="${idx}">
         <div style="display:flex; gap:1rem; align-items:center; width:100%;">
           <div id="spot-thumb-${idx}" style="display:none; width:64px; height:64px; border-radius:8px; overflow:hidden; flex-shrink:0; background:#e2e8f0;"></div>
           <div class="spot-main" style="flex:1;">

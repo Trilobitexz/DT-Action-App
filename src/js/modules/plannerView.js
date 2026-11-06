@@ -1,6 +1,27 @@
 // 個人化推薦、城市比較、預算與行程工具
+function readStoredJson(key, fallback) {
+  try {
+    const rawValue = localStorage.getItem(key);
+    if (!rawValue) return fallback;
+    return JSON.parse(rawValue);
+  } catch (error) {
+    console.warn(`旅遊規劃資料 ${key} 格式無法讀取，已使用預設值。`, error);
+    return fallback;
+  }
+}
+
+function readStoredArray(key) {
+  const value = readStoredJson(key, []);
+  return Array.isArray(value) ? value : [];
+}
+
 window.PlannerView = {
-  compareIds: JSON.parse(localStorage.getItem("journey-atlas-compare") || "[]"),
+  compareIds: readStoredArray("journey-atlas-compare"),
+  favoriteIds: readStoredArray("journey-atlas-favorites"),
+  recentStorageKey: "journey-atlas-recent",
+  itineraryStorageKey: "journey-atlas-itineraries",
+  itineraryDays: 5,
+  travelModes: { transit: "大眾運輸", walking: "步行", driving: "開車" },
 
   init: function () {
     const form = document.getElementById("recommendation-form");
@@ -13,6 +34,76 @@ window.PlannerView = {
     }
     this.renderRecommendations();
     this.renderComparison();
+    this.renderRecentDestinations();
+  },
+
+  getRecentDestinations: function () {
+    const recent = readStoredArray(this.recentStorageKey);
+    return recent.filter(item => item && typeof item.id === "string" && ["global", "local"].includes(item.type));
+  },
+
+  recordRecentDestination: function (city, type = "global", countryId = null) {
+    if (!city?.id) return;
+    const recent = this.getRecentDestinations().filter(item => !(item.id === city.id && item.type === type));
+    recent.unshift({ id: city.id, type, countryId, viewedAt: Date.now() });
+    try {
+      localStorage.setItem(this.recentStorageKey, JSON.stringify(recent.slice(0, 5)));
+    } catch (error) {
+      console.warn("無法儲存最近瀏覽城市。", error);
+    }
+    this.renderRecentDestinations();
+  },
+
+  renderRecentDestinations: function () {
+    const panel = document.getElementById("recent-destinations-panel");
+    if (!panel) return;
+    const recent = this.getRecentDestinations().map(item => {
+      const city = item.type === "global"
+        ? (window.TRAVEL_DATA.globalCities || []).find(candidate => candidate.id === item.id)
+        : (window.TRAVEL_DATA.countries || []).flatMap(country => country.cities.map(city => ({ ...city, countryId: country.id, countryName: country.name, flag: country.flag }))).find(candidate => candidate.id === item.id && candidate.countryId === item.countryId);
+      return city ? { ...item, city } : null;
+    }).filter(Boolean);
+    if (!recent.length) {
+      panel.innerHTML = "";
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    panel.innerHTML = `
+      <div class="recent-heading"><div><span class="section-kicker">CONTINUE EXPLORING</span><h2 id="recent-destinations-heading">繼續上次探索</h2><p>快速回到最近看過的城市。</p></div><button type="button" class="text-action" id="btn-clear-recent">清除紀錄</button></div>
+      <div class="recent-destination-list">${recent.map(({ city, type, countryId }) => `
+        <button type="button" class="recent-destination-card" data-recent-id="${city.id}" data-recent-type="${type}" data-country-id="${countryId || ""}">
+          <span>${city.flag || "🌍"}</span><strong>${city.name}</strong><small>${city.countryName || ""}</small><b>繼續 →</b>
+        </button>
+      `).join("")}</div>
+    `;
+    panel.querySelector("#btn-clear-recent").addEventListener("click", () => {
+      try { localStorage.removeItem(this.recentStorageKey); } catch (error) { console.warn("無法清除最近瀏覽紀錄。", error); }
+      this.renderRecentDestinations();
+    });
+    panel.querySelectorAll("[data-recent-id]").forEach(button => button.addEventListener("click", () => {
+      if (button.dataset.recentType === "global") {
+        window.appNavigate("global-city", { cityId: button.dataset.recentId });
+      } else {
+        window.appNavigate("country", { countryId: button.dataset.countryId, cityId: button.dataset.recentId });
+      }
+    }));
+  },
+
+  toggleFavorite: function (key) {
+    const index = this.favoriteIds.indexOf(key);
+    if (index >= 0) this.favoriteIds.splice(index, 1);
+    else this.favoriteIds.push(key);
+    try {
+      localStorage.setItem("journey-atlas-favorites", JSON.stringify(this.favoriteIds));
+    } catch (error) {
+      console.warn("無法儲存收藏項目，將在本次頁面工作階段保留。", error);
+    }
+    return this.favoriteIds.includes(key);
+  },
+
+  isFavorite: function (key) {
+    return this.favoriteIds.includes(key);
   },
 
   allCities: function () {
@@ -32,8 +123,21 @@ window.PlannerView = {
     const budget = formData?.get("budget") || "medium";
     const days = Number(formData?.get("days") || 5);
     const direct = formData?.get("direct") === "yes";
+    const styleLabel = {
+      culture: "文化與歷史",
+      food: "美食與在地味",
+      nature: "自然與風景",
+      shopping: "購物與都會",
+      relax: "休閒與度假"
+    }[style] || "城市探索";
+    const budgetLabel = {
+      low: "親民",
+      medium: "均衡",
+      high: "高享受"
+    }[budget] || "均衡";
+
     const score = city => {
-      let value = city.culture ? 45 : 30;
+      let value = city.culture ? 44 : 30;
       const text = `${city.name} ${city.countryName || ""} ${city.description || ""}`.toLowerCase();
       if (style === "food" && /大阪|曼谷|東京|新加坡|香港|bangkok|osaka|tokyo|singapore/.test(text)) value += 30;
       if (style === "nature" && /峇里|雪梨|奧克蘭|開普敦|honolulu|bali|sydney/.test(text)) value += 30;
@@ -43,31 +147,63 @@ window.PlannerView = {
       if (budget === "low" && /曼谷|清邁|河內|暹粒|bangkok|chiang|hanoi|siem/.test(text)) value += 20;
       if (budget === "high" && /巴黎|倫敦|東京|雪梨|paris|london|tokyo|sydney/.test(text)) value += 15;
       if (direct && city.countryName && /日本|韓國|泰國|新加坡|越南|香港/.test(city.countryName)) value += 8;
-      return value + Math.min(days, 7);
+      if (days >= 7) value += 8;
+      if (days <= 3) value += 4;
+      return value;
     };
-    const recommendations = this.allCities().map(city => ({ city, value: score(city) }))
-      .sort((a, b) => b.value - a.value).slice(0, 3);
-    const reason = city => {
+
+    const getFitTag = (value) => {
+      if (value >= 83) return "高適配";
+      if (value >= 72) return "適配良好";
+      return "可考慮";
+    };
+
+    const recommendations = this.allCities().map(city => {
+      const value = score(city);
       const reasons = [];
       const text = `${city.name} ${city.countryName || ""} ${city.description || ""}`.toLowerCase();
-      if (style === "culture" && city.history) reasons.push("文化歷史符合");
-      if (style === "food" && /大阪|曼谷|東京|新加坡|香港|bangkok|osaka|tokyo|singapore/.test(text)) reasons.push("美食探索熱門");
-      if (style === "nature" && /峇里|雪梨|奧克蘭|開普敦|honolulu|bali|sydney/.test(text)) reasons.push("自然景觀豐富");
-      if (style === "shopping" && /東京|大阪|首爾|杜拜|巴黎|tokyo|seoul|dubai|paris/.test(text)) reasons.push("購物機能完整");
-      if (budget === "low" && /曼谷|清邁|河內|暹粒|bangkok|chiang|hanoi|siem/.test(text)) reasons.push("符合小資預算");
-      if (direct && city.countryName && /日本|韓國|泰國|新加坡|越南|香港/.test(city.countryName)) reasons.push("台灣直飛便利");
-      return reasons.slice(0, 2).join(" · ") || "適合依你的天數深入探索";
-    };
+      if (style === "culture" && city.history) reasons.push("文化行程佳");
+      if (style === "food" && /大阪|曼谷|東京|新加坡|香港|bangkok|osaka|tokyo|singapore/.test(text)) reasons.push("美食熱點");
+      if (style === "nature" && /峇里|雪梨|奧克蘭|開普敦|honolulu|bali|sydney/.test(text)) reasons.push("自然景觀強");
+      if (style === "shopping" && /東京|大阪|首爾|杜拜|巴黎|tokyo|seoul|dubai|paris/.test(text)) reasons.push("購物機能強");
+      if (style === "relax" && /峇里|普吉|檀香山|santorini|bali|phuket|honolulu/.test(text)) reasons.push("度假氛圍強");
+      if (budget === "low" && /曼谷|清邁|河內|暹粒|bangkok|chiang|hanoi|siem/.test(text)) reasons.push("小資友善");
+      if (budget === "high" && /巴黎|倫敦|東京|雪梨|paris|london|tokyo|sydney/.test(text)) reasons.push("高質旅遊");
+      if (direct && city.countryName && /日本|韓國|泰國|新加坡|越南|香港/.test(city.countryName)) reasons.push("直飛便利");
+      if (days >= 7) reasons.push("深度旅行適合");
+      return { city, value: Math.min(Math.max(value, 45), 99), fit: getFitTag(value), reasons: reasons.slice(0, 2) };
+    }).sort((a, b) => b.value - a.value).slice(0, 3);
+
+    if (!recommendations.length) {
+      result.innerHTML = `
+        <div class="recommendation-empty-state">
+          <strong>目前沒有符合條件的推薦</strong>
+          <span>請放寬預算或改變旅行風格，讓系統重新計算更適合你的旅程。</span>
+        </div>
+      `;
+      return;
+    }
+
     result.innerHTML = `
-      <div class="recommendation-result-heading"><strong>為你挑出的 ${days} 日旅行候選</strong><span>依旅行偏好與預算估算</span></div>
-      <div class="recommendation-result-list">${recommendations.map(({ city, value }) => `
+      <div class="recommendation-result-heading">
+        <strong>為你挑出的 ${days} 日旅行候選</strong>
+        <span>${direct ? "依直飛便利度與旅行風格" : "依旅遊適配度與旅程節奏"}</span>
+      </div>
+      <div class="recommendation-result-list">${recommendations.map(({ city, value, fit, reasons }) => `
         <button type="button" class="recommendation-result-card" data-city-id="${city.id || ""}">
           <span class="recommendation-score">${Math.min(value, 99)}<small>/100</small></span>
-          <span><strong>${city.flag || "🌍"} ${city.name}</strong><small>${city.englishName || ""} · ${city.countryName || ""}</small><small class="recommendation-reason">✓ ${reason(city)}</small></span>
-          <span class="global-city-arrow">查看 →</span>
+          <span>
+            <strong>${city.flag || "🌍"} ${city.name}</strong>
+            <small>${city.englishName || ""} · ${city.countryName || ""}</small>
+            <small class="recommendation-reason">${fit} · ${reasons.join(" · ") || "適合依你的天數深入探索"}</small>
+          </span>
+          <span class="recommendation-meta">
+            <em>${budgetLabel}</em>
+            <b>查看 →</b>
+          </span>
         </button>
       `).join("")}</div>
-      <small class="planner-disclaimer">推薦為規劃輔助，不代表唯一答案；航班、簽證與價格請以出發前官方資料為準。</small>
+      <small class="planner-disclaimer">推薦以「${styleLabel}」與「${budgetLabel}預算」為主軸，並附帶直飛/轉機與旅遊節奏的判斷；實際航班、簽證與價格請以官方最新資料為準。</small>
     `;
     result.querySelectorAll("[data-city-id]").forEach(button => {
       button.addEventListener("click", () => {
@@ -88,7 +224,11 @@ window.PlannerView = {
     if (exists >= 0) this.compareIds.splice(exists, 1);
     else if (this.compareIds.length < 4) this.compareIds.push(key);
     else return;
-    localStorage.setItem("journey-atlas-compare", JSON.stringify(this.compareIds));
+    try {
+      localStorage.setItem("journey-atlas-compare", JSON.stringify(this.compareIds));
+    } catch (error) {
+      console.warn("無法儲存城市比較清單，將在本次頁面工作階段保留。", error);
+    }
     this.renderComparison();
     const compareButton = document.getElementById("btn-compare-city");
     if (compareButton) {
@@ -127,12 +267,13 @@ window.PlannerView = {
   renderCityTools: function (city, state) {
     const host = document.getElementById("city-planner-tools");
     if (!host || !city) return;
+    this.itineraryDays = 5;
     const compareKey = city.id;
     const selected = this.compareIds.includes(compareKey);
     const budget = this.readBudget(city);
     const spots = city.spots || [];
     host.innerHTML = `
-      <div class="city-tool-heading"><div><span class="section-kicker">PLAN WITH CONFIDENCE</span><h4>把靈感變成可執行計畫</h4></div><button type="button" class="tool-outline-btn" id="btn-compare-city" aria-pressed="${selected}">${selected ? "✓ 已加入比較" : "＋ 加入城市比較"}</button></div>
+      <div class="city-tool-heading"><div><span class="section-kicker">PLAN WITH CONFIDENCE</span><h4>把靈感變成可執行計畫</h4></div><div class="city-tool-actions"><button type="button" class="tool-outline-btn" id="btn-favorite-city" aria-pressed="${this.isFavorite(`city:${city.id}`)}">${this.isFavorite(`city:${city.id}`) ? "★ 已收藏城市" : "☆ 收藏城市"}</button><button type="button" class="tool-outline-btn" id="btn-compare-city" aria-pressed="${selected}">${selected ? "✓ 已加入比較" : "＋ 加入城市比較"}</button></div></div>
       <div class="planner-tool-grid">
         <section class="budget-tool"><h5>💰 旅行預算估算</h5><div class="budget-inputs">
           <label>住宿 <input type="number" min="0" step="500" data-budget="hotel" value="${budget.hotel}"></label>
@@ -140,9 +281,14 @@ window.PlannerView = {
           <label>餐飲 <input type="number" min="0" step="500" data-budget="food" value="${budget.food}"></label>
           <label>景點／購物 <input type="number" min="0" step="500" data-budget="activity" value="${budget.activity}"></label>
         </div><div id="budget-chart" class="budget-chart"></div><p id="budget-total" class="tool-total"></p><small class="planner-disclaimer">金額為台幣估算，依 5 天旅程預設，可自行調整。</small></section>
-        <section class="itinerary-tool"><h5>🗓️ 快速行程產生器</h5><div class="itinerary-days" role="group" aria-label="選擇旅行天數">${[3, 5, 7].map(days => `<button type="button" data-days="${days}" class="${days === 5 ? "active" : ""}">${days} 天</button>`).join("")}</div><div id="itinerary-result" class="itinerary-result"></div></section>
+        <section class="itinerary-tool"><h5>🗓️ 快速行程產生器</h5><p class="itinerary-help">將景點依天數平均安排，並提供每日交通建議。</p><div class="itinerary-days" role="group" aria-label="選擇旅行天數">${[3, 5, 7].map(days => `<button type="button" data-days="${days}" class="${days === 5 ? "active" : ""}">${days} 天</button>`).join("")}</div><div class="itinerary-customizer"><label>景點 <select id="itinerary-spot-select" aria-label="選擇景點">${spots.map((spot, index) => `<option value="${index}">${spot.name}</option>`).join("")}</select></label><label>加入第 <select id="itinerary-day-select" aria-label="選擇加入天數">${Array.from({ length: 7 }, (_, index) => `<option value="${index}">Day ${index + 1}</option>`).join("")}</select></label><button type="button" class="tool-outline-btn" id="btn-add-itinerary-spot">加入</button></div><label class="itinerary-mode-control">交通方式<select id="itinerary-travel-mode" aria-label="選擇交通方式"><option value="transit">大眾運輸</option><option value="walking">步行</option><option value="driving">開車</option></select><small id="itinerary-mode-recommendation"></small></label><div class="itinerary-actions"><button type="button" class="tool-outline-btn" id="btn-copy-itinerary">複製行程</button><button type="button" class="tool-outline-btn" id="btn-print-itinerary">列印行程</button></div><div id="itinerary-result" class="itinerary-result"></div></section>
       </div>
     `;
+    host.querySelector("#btn-favorite-city").addEventListener("click", event => {
+      const selectedFavorite = this.toggleFavorite(`city:${city.id}`);
+      event.currentTarget.textContent = selectedFavorite ? "★ 已收藏城市" : "☆ 收藏城市";
+      event.currentTarget.setAttribute("aria-pressed", String(selectedFavorite));
+    });
     host.querySelector("#btn-compare-city").addEventListener("click", () => this.toggleCompare(city));
     host.querySelectorAll("[data-budget]").forEach(input => input.addEventListener("input", () => {
       this.saveBudget(city, input);
@@ -150,21 +296,45 @@ window.PlannerView = {
     }));
     host.querySelectorAll("[data-days]").forEach(button => button.addEventListener("click", () => {
       host.querySelectorAll("[data-days]").forEach(item => item.classList.toggle("active", item === button));
-      this.renderItinerary(city, Number(button.dataset.days));
+      this.itineraryDays = Number(button.dataset.days);
+      this.renderItinerary(city, this.itineraryDays);
     }));
+    host.querySelector("#btn-add-itinerary-spot")?.addEventListener("click", () => {
+      const spotIndex = Number(host.querySelector("#itinerary-spot-select").value);
+      const dayIndex = Number(host.querySelector("#itinerary-day-select").value);
+      if (spotIndex >= 0 && dayIndex < this.itineraryDays) this.addItinerarySpot(city, this.itineraryDays, spotIndex, dayIndex);
+    });
+    const modeSelect = host.querySelector("#itinerary-travel-mode");
+    if (modeSelect) {
+      modeSelect.value = this.getRecommendedTravelMode(city);
+      modeSelect.addEventListener("change", () => this.renderItinerary(city, this.itineraryDays));
+    }
+    host.querySelector("#btn-copy-itinerary")?.addEventListener("click", () => this.copyItinerary(city, this.itineraryDays));
+    host.querySelector("#btn-print-itinerary")?.addEventListener("click", () => this.printItinerary(city, this.itineraryDays));
     this.renderBudgetChart(host);
-    this.renderItinerary(city, 5);
+    this.renderItinerary(city, this.itineraryDays);
   },
 
   readBudget: function (city) {
-    const saved = JSON.parse(localStorage.getItem(`journey-atlas-budget-${city.id}`) || "null");
-    return saved || { hotel: 12000, transport: 3500, food: 7000, activity: 5000 };
+    const saved = readStoredJson(`journey-atlas-budget-${city.id}`, null);
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) {
+      return { hotel: 12000, transport: 3500, food: 7000, activity: 5000 };
+    }
+    const defaults = { hotel: 12000, transport: 3500, food: 7000, activity: 5000 };
+    return Object.fromEntries(Object.keys(defaults).map(key => {
+      const value = Number(saved[key]);
+      return [key, Number.isFinite(value) ? Math.max(0, value) : defaults[key]];
+    }));
   },
   saveBudget: function (city, input) {
     const host = input.closest("#city-planner-tools");
     const budget = {};
     host.querySelectorAll("[data-budget]").forEach(item => { budget[item.dataset.budget] = Math.max(0, Number(item.value) || 0); });
-    localStorage.setItem(`journey-atlas-budget-${city.id}`, JSON.stringify(budget));
+    try {
+      localStorage.setItem(`journey-atlas-budget-${city.id}`, JSON.stringify(budget));
+    } catch (error) {
+      console.warn("無法儲存旅行預算，將在本次頁面工作階段保留。", error);
+    }
   },
   renderBudgetChart: function (host) {
     const items = [...host.querySelectorAll("[data-budget]")].map(input => ({ name: input.previousSibling.textContent.trim(), value: Math.max(0, Number(input.value) || 0) }));
@@ -175,10 +345,180 @@ window.PlannerView = {
   renderItinerary: function (city, days) {
     const result = document.getElementById("itinerary-result");
     if (!result) return;
+    const mode = document.querySelector("#itinerary-travel-mode")?.value || this.getRecommendedTravelMode(city);
+    const plan = this.buildItineraryPlan(city, days, mode);
     const spots = city.spots || [];
-    result.innerHTML = Array.from({ length: days }, (_, index) => {
-      const spot = spots[index % Math.max(spots.length, 1)];
-      return `<div class="itinerary-day"><strong>Day ${index + 1}</strong><span>${index === 0 ? "抵達、熟悉市區" : index === days - 1 ? "伴手禮與彈性探索" : "城市深度探索"}</span><small>${spot ? spot.name : "依即時資料挑選附近景點"}</small></div>`;
+    const custom = this.getItinerary(city, days);
+    const customSet = new Set(custom.flat());
+    const recommendation = document.getElementById("itinerary-mode-recommendation");
+    if (recommendation) recommendation.textContent = `依城市建議：${this.travelModes[this.getRecommendedTravelMode(city)]}`;
+    result.innerHTML = plan.map((day, dayIndex) => {
+      const orderedSpots = custom[dayIndex].length
+        ? custom[dayIndex].map(index => ({ index, spot: spots[index] })).filter(item => item.spot)
+        : spots.map((spot, index) => ({ index, spot })).filter(item => !customSet.has(item.index) && item.index % days === dayIndex);
+      const load = orderedSpots.length <= 2 ? "輕鬆" : orderedSpots.length <= 4 ? "適中" : "偏滿";
+      return `<article class="itinerary-day-card" data-itinerary-day="${dayIndex}">
+        <div class="itinerary-day-heading"><strong>Day ${dayIndex + 1}</strong><span>${day.theme}</span><small>${day.note}</small></div>
+        <div class="itinerary-load ${load === "偏滿" ? "is-busy" : ""}">今日安排：${load}・${orderedSpots.length} 個景點 ${load === "偏滿" ? "— 建議移除或分配至其他天" : ""}</div>
+        <div class="itinerary-schedule">
+          ${orderedSpots.length ? orderedSpots.map(({ index, spot }, order) => {
+            const opening = spot.openingHours || "營業時間未提供";
+            const closed = spot.closedDays || "休館日未提供";
+            const duration = Number(spot.visitHours) || 2;
+            const travel = order === 0 ? "住宿／市區出發" : this.estimateTravelTime(orderedSpots[order - 1].spot, spot, mode);
+            const routeUrl = this.routeUrl(orderedSpots[order - 1]?.spot?.name || city.name, spot.name, mode, city.name);
+            return `<div class="itinerary-slot itinerary-spot-card" draggable="true" data-spot-index="${index}" data-day-index="${dayIndex}" tabindex="0" aria-label="${spot.name}，可拖曳調整順序">
+              <span class="itinerary-drag-handle" aria-hidden="true">⠿</span><div class="itinerary-stop-details"><strong>${order + 1}. ${spot.name} <span class="itinerary-drag-hint">拖曳排序</span></strong>
+              <small class="itinerary-transport">🚉 ${travel} · ${this.travelModes[mode]}${order ? ` <a href="${routeUrl}" target="_blank" rel="noopener noreferrer">查看路線</a>` : ""}</small>
+              <small>⏱ 建議停留 ${duration} 小時</small><small class="itinerary-opening">🕒 ${opening}　📅 ${closed}</small>
+              ${!spot.openingHours || !spot.closedDays ? `<small class="itinerary-data-warning">營業／休館資訊未驗證，出發前請查官方公告。</small>` : ""}</div>
+            </div>`;
+          }).join("") : `<p class="itinerary-empty-day">尚未安排景點，可從上方加入。</p>`}
+        </div>
+
+      </article>`;
     }).join("");
+
+    let dragged = null;
+    result.querySelectorAll(".itinerary-spot-card").forEach(card => {
+      card.addEventListener("dragstart", event => { dragged = card; card.classList.add("is-dragging"); event.dataTransfer.effectAllowed = "move"; });
+      card.addEventListener("dragend", () => { card.classList.remove("is-dragging"); dragged = null; result.querySelectorAll(".itinerary-spot-card").forEach(item => item.classList.remove("drop-target")); });
+      card.addEventListener("dragover", event => { event.preventDefault(); if (dragged && dragged !== card && dragged.dataset.dayIndex === card.dataset.dayIndex) card.classList.add("drop-target"); });
+      card.addEventListener("dragleave", () => card.classList.remove("drop-target"));
+      card.addEventListener("drop", event => {
+        event.preventDefault(); card.classList.remove("drop-target");
+        if (!dragged || dragged === card || dragged.dataset.dayIndex !== card.dataset.dayIndex) return;
+        const dayIndex = Number(card.dataset.dayIndex);
+        const order = this.getOrderedDaySpotIndexes(city, days, dayIndex);
+        const from = order.indexOf(Number(dragged.dataset.spotIndex));
+        const to = order.indexOf(Number(card.dataset.spotIndex));
+        if (from < 0 || to < 0) return;
+        order.splice(to, 0, order.splice(from, 1)[0]);
+        const itinerary = this.getItinerary(city, days);
+        itinerary[dayIndex] = order;
+        this.saveItinerary(city, days, itinerary);
+        this.renderItinerary(city, days);
+      });
+    });
+    result.querySelectorAll("[data-clear-day]").forEach(button => button.addEventListener("click", () => {
+      const itinerary = this.getItinerary(city, days);
+      itinerary[Number(button.dataset.clearDay)] = [];
+      this.saveItinerary(city, days, itinerary);
+      this.renderItinerary(city, days);
+    }));
+  },
+
+  getOrderedDaySpotIndexes: function (city, days, dayIndex) {
+    const saved = this.getItinerary(city, days);
+    if (saved[dayIndex]?.length) return [...saved[dayIndex]];
+    const custom = new Set(saved.flat());
+    return (city.spots || []).map((_, index) => index).filter(index => !custom.has(index) && index % days === dayIndex);
+  },
+
+  getRecommendedTravelMode: function (city) {
+    const text = `${city.name} ${city.englishName || ""} ${city.countryName || ""}`.toLowerCase();
+    if (/峇里|普吉|檀香山|洛杉磯|las vegas|los angeles|bali|phuket|honolulu|cape town/.test(text)) return "driving";
+    if (/京都|奈良|威尼斯|amsterdam|venice|florence/.test(text)) return "walking";
+    return "transit";
+  },
+
+  estimateTravelTime: function (from, to, mode) {
+    const category = `${from.category || ""} ${to.category || ""}`;
+    const base = mode === "walking" ? 25 : mode === "driving" ? 20 : 30;
+    const adjustment = /近郊|海岸|島|機場/.test(category) ? 20 : /市中心|街區|商圈/.test(category) ? -8 : 0;
+    const range = Math.max(mode === "walking" ? 10 : 15, base + adjustment);
+    return `估計 ${range}-${range + 15} 分鐘`;
+  },
+
+  routeUrl: function (origin, destination, mode, cityName) {
+    const travelmode = mode === "walking" ? "walking" : mode === "driving" ? "driving" : "transit";
+    return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${origin} ${cityName}`)}&destination=${encodeURIComponent(`${destination} ${cityName}`)}&travelmode=${travelmode}`;
+  },
+  buildItineraryPlan: function (city, days, mode = "transit") {
+    const spots = city.spots || [];
+    const saved = this.getItinerary(city, days);
+    const customizedSpotIndexes = new Set(saved.flat());
+    const themes = ["抵達與城市暖身", "核心景點與在地生活", "城市深度探索", "近郊／特色體驗", "自由安排與購物", "慢遊與查漏補缺", "返程前整理"];
+    const transit = this.getTransitGuide(city);
+    const routeTo = (destination, origin = city.name) => this.routeUrl(origin, destination, mode, city.name);
+    return Array.from({ length: days }, (_, dayIndex) => {
+      const custom = saved[dayIndex] || [];
+      const first = dayIndex === 0;
+      const last = dayIndex === days - 1;
+      const dailySpots = spots.filter((_, spotIndex) => !customizedSpotIndexes.has(spotIndex) && spotIndex % days === dayIndex);
+      const primarySpot = dailySpots[0];
+      const secondarySpot = dailySpots[1];
+      const items = [
+        primarySpot ? { title: primarySpot.name, transport: `住宿出發・${transit}`, routeUrl: routeTo(primarySpot.name) } : { title: first ? "抵達與住宿周邊" : "自由活動", transport: "住宿周邊步行" },
+        secondarySpot ? { title: secondarySpot.name, transport: `上一景點前往・${transit}`, routeUrl: routeTo(secondarySpot.name, primarySpot?.name || city.name) } : { title: last ? "伴手禮與返程準備" : "街區散策與休息", transport: "步行或短程大眾運輸" }
+      ];
+      custom.forEach((spotIndex, customIndex) => {
+        const spot = spots[spotIndex];
+        if (spot) items.splice(Math.min(1 + customIndex, items.length), 0, { title: `自訂景點｜${spot.name}`, transport: `從前一站前往，${this.travelModes[mode]}`, routeUrl: routeTo(spot.name, primarySpot?.name || city.name) });
+      });
+      return { theme: themes[Math.min(dayIndex, themes.length - 1)], note: first ? "以抵達時間為準，可將晚餐改為附近簡單用餐。" : last ? "最後一天請依航班時間縮短活動範圍。" : "景點依每日分組安排，請預留交通與休息時間。", items, custom };
+    });
+  },
+  getTransitGuide: function (city) {
+    const text = `${city.name} ${city.englishName || ""} ${city.countryName || ""}`.toLowerCase();
+    if (/東京|tokyo/.test(text)) return "優先使用地鐵／JR，尖峰時段預留 30–45 分鐘";
+    if (/大阪|osaka/.test(text)) return "優先使用地鐵／JR，景點間預留 20–40 分鐘";
+    if (/首爾|seoul/.test(text)) return "優先使用地鐵，轉乘預留 30–45 分鐘";
+    if (/巴黎|paris|倫敦|london/.test(text)) return "優先使用地鐵／火車，避開尖峰時段";
+    if (/釜山|busan/.test(text)) return "優先使用地鐵與公車，海岸區預留 40–60 分鐘";
+    return "優先使用地鐵／公車，景點間預留 30–45 分鐘";
+  },
+
+  getItinerary: function (city, days) {
+    const stored = readStoredJson(this.itineraryStorageKey, {});
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) return Array.from({ length: days }, () => []);
+    const saved = stored[city.id]?.[days];
+    return Array.from({ length: days }, (_, index) => Array.isArray(saved?.[index]) ? saved[index] : []);
+  },
+
+  saveItinerary: function (city, days, itinerary) {
+    const parsed = readStoredJson(this.itineraryStorageKey, {});
+    const stored = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    stored[city.id] = { ...(stored[city.id] || {}), [days]: itinerary };
+    try {
+      localStorage.setItem(this.itineraryStorageKey, JSON.stringify(stored));
+    } catch (error) {
+      console.warn("儲存自訂行程失敗：", error);
+    }
+  },
+
+  addItinerarySpot: function (city, days, spotIndex, dayIndex) {
+    const itinerary = this.getItinerary(city, days);
+    itinerary.forEach(day => {
+      const existingIndex = day.indexOf(spotIndex);
+      if (existingIndex >= 0) day.splice(existingIndex, 1);
+    });
+    if (!itinerary[dayIndex].includes(spotIndex)) itinerary[dayIndex].push(spotIndex);
+    this.saveItinerary(city, days, itinerary);
+    this.renderItinerary(city, days);
+  },
+
+  getItineraryText: function (city, days) {
+    const mode = typeof document !== "undefined" ? (document.querySelector("#itinerary-travel-mode")?.value || this.getRecommendedTravelMode(city)) : this.getRecommendedTravelMode(city);
+    return this.buildItineraryPlan(city, days, mode).map((day, index) =>
+      `Day ${index + 1}｜${day.theme}\n${day.note}\n${day.items.map(item => `【${item.title}】${item.transport ? `\n交通：${item.transport}` : ""}`).join("\n")}`
+    ).join("\n\n");
+  },
+
+  copyItinerary: async function (city, days) {
+    try {
+      await navigator.clipboard.writeText(`${city.name} ${days} 日行程\n\n${this.getItineraryText(city, days)}`);
+      const button = document.getElementById("btn-copy-itinerary");
+      if (button) { button.textContent = "已複製"; setTimeout(() => { button.textContent = "複製完整行程"; }, 1400); }
+    } catch (error) { console.warn("複製行程失敗：", error); }
+  },
+
+  printItinerary: function (city, days) {
+    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (!printWindow) { console.warn("列印視窗被瀏覽器封鎖。"); return; }
+    printWindow.document.write(`<title>${city.name} ${days} 日行程</title><pre style="font:16px/1.8 sans-serif;white-space:pre-wrap;">${this.getItineraryText(city, days)}</pre>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   }
 };

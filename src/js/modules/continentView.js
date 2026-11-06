@@ -75,13 +75,15 @@ window.ContinentView = {
 
     if (filtered.length === 0) {
       listContainer.innerHTML = "";
+      emptyState.hidden = false;
       emptyState.style.display = "block";
       return;
     }
 
+    emptyState.hidden = true;
     emptyState.style.display = "none";
     listContainer.innerHTML = filtered.map(c => `
-      <article class="country-card" role="button" tabindex="0" aria-label="探索 ${c.name}，${c.englishName}；${c.cities.length} 個熱門城市" onclick="window.appNavigate('country', { countryId: '${c.id}' })" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.appNavigate('country', { countryId: '${c.id}' });}">
+      <article class="country-card">
         <div>
           <div class="country-header">
             <div class="country-title">
@@ -110,5 +112,18 @@ window.ContinentView = {
         <span class="btn-card-action">探索目的地 <span aria-hidden="true">↗</span></span>
       </article>
     `).join("");
+    listContainer.querySelectorAll(".country-card").forEach((card, index) => {
+      const country = filtered[index];
+      card.tabIndex = 0;
+      card.setAttribute("role", "link");
+      card.setAttribute("aria-label", `探索 ${country.name}，${country.englishName}；${country.cities.length} 個熱門城市`);
+      const openCountry = () => window.appNavigate("country", { countryId: country.id });
+      card.addEventListener("click", openCountry);
+      card.addEventListener("keydown", event => {
+        if (event.target !== card || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        openCountry();
+      });
+    });
   }
 };
