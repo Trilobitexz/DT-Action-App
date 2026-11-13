@@ -53,3 +53,22 @@
 - 已加入 PWA manifest 與 Service Worker；需透過 HTTP(S) 部署後才會啟用安裝與離線殼層，直接以 `file://` 開啟時會維持一般預覽模式。
 - 頁面會即時提示目前是否離線；離線時仍可使用已保存的比較清單、預算與行程，重新連線後可再次取得外部資料。
 - 首頁會保留最近瀏覽的城市；城市與景點詳情頁也可加入收藏，資料會保存於目前裝置的瀏覽器中。
+
+## Firebase Analytics 與帳戶登入
+
+Firebase 初始化與 Web SDK 設定位於 [`src/js/firebase.js`](./src/js/firebase.js)，並以一般延遲載入的瀏覽器腳本載入 Firebase Compat SDK，避免 ES module 在本機檔案預覽時遭瀏覽器 CORS 阻擋。頁面開啟、主要導覽及登入相關事件會以 Firebase Analytics 記錄；帳戶登入使用 Firebase Authentication，登入狀態預設保存在瀏覽器本機。Firebase Web SDK 的 API key 與專案識別資料是前端公開設定，請勿在前端放置服務帳戶金鑰或私密憑證。
+
+### 登入功能
+
+頁面右上角的帳戶選單提供 Google 登入，以及電子郵件／密碼註冊與登入。註冊後系統會寄出 Firebase 電子郵件驗證信；未驗證的電子郵件帳戶不可登入。驗證信使用 Firebase Console 的 Authentication 電子郵件範本設定。
+
+### Firebase Console 必要設定
+
+1. 確認 Web App 的 Firebase 設定與 `src/js/firebase.js` 中 `firebaseConfig` 相符。
+2. 在 **Authentication → Sign-in method** 啟用 **Google** 與 **Email/Password**。
+3. 在 **Authentication → Settings → Authorized domains** 加入正式網站網域；本機測試使用 `localhost`。
+4. 在 Firebase Authentication 的電子郵件範本中確認寄件者、主旨、應用程式名稱和驗證連結設定。
+5. 點 Firebase Console 左側 **Hosting** → **Get started**，照畫面流程安裝／登入 Firebase CLI，選取 `dt-action-app` 專案並將網站根目錄 `.` 設為 public directory（此專案的 `index.html` 位於根目錄，部署時請略過覆寫 index.html 的預設範本）。完成後部署至 Hosting，使用產生的 `https://dt-action-app.web.app` 網址測試；若 Firebase 顯示不同網址，請以 Console 實際顯示為準。
+
+
+> 若偏好命令列部署，也可在專案根目錄加入 `firebase.json`（Hosting public 設為 `.`、ignore 至少排除 `firebase.json`、`.firebaserc`、`node_modules`），再執行 `firebase login`、`firebase use dt-action-app` 與 `firebase deploy --only hosting`。不要執行會覆寫現有首頁的 `firebase init hosting` 預設範本步驟。

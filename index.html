@@ -17,8 +17,6 @@
   <!-- Leaflet 樣式主來源與 CDN 備援；兩者使用相同版本，避免地圖容器缺少必要樣式。 -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" onerror="this.onerror=null;var fallback=document.createElement('link');fallback.rel='stylesheet';fallback.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(fallback);" />
   <link rel="stylesheet" href="src/css/style.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.127.0/Build/Cesium/Widgets/widgets.css" onerror="this.onerror=null;this.href='https://unpkg.com/cesium@1.127.0/Build/Cesium/Widgets/widgets.css';">
-  <script>window.CESIUM_BASE_URL = "https://cdn.jsdelivr.net/npm/cesium@1.127.0/Build/Cesium/";</script>
 
 </head>
 <body>
@@ -40,9 +38,36 @@
           <span class="breadcrumb-item active">🌍 世界地圖</span>
         </nav>
 
-        <button class="btn-reset" id="btn-reset-global" title="回到起點重新篩選">
-          🔄 重新選擇
-        </button>
+        <div class="header-actions">
+          <div class="auth-menu" id="auth-menu">
+            <button class="btn-auth auth-menu-trigger" id="auth-menu-trigger" type="button" aria-expanded="false" aria-controls="auth-menu-panel">
+              <span class="auth-avatar" id="auth-avatar" aria-hidden="true">👤</span>
+              <span id="auth-menu-label">登入 / 註冊</span>
+              <span class="auth-menu-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <div class="auth-menu-panel" id="auth-menu-panel" hidden>
+              <div class="auth-menu-account" id="google-user-status" role="status">尚未登入</div>
+              <div class="auth-panel-divider" aria-hidden="true"></div>
+              <button class="btn-auth auth-google-button" id="btn-google-sign-in" type="button"><span class="google-g" aria-hidden="true">G</span>使用 Google 繼續</button>
+              <form class="auth-email-form" id="email-auth-form">
+                <label for="auth-email">電子郵件</label>
+                <input id="auth-email" name="email" type="email" autocomplete="email" placeholder="name@example.com" required>
+                <label for="auth-password">密碼 <span>至少 6 個字元</span></label>
+                <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="6" placeholder="輸入密碼" required>
+                <p class="auth-feedback" id="auth-feedback" role="status" aria-live="polite"></p>
+                <div class="auth-email-actions">
+                  <button class="auth-email-submit" id="btn-email-sign-in" type="submit">電子郵件登入</button>
+                  <button class="auth-email-register" id="btn-email-register" type="button">建立帳戶</button>
+                </div>
+              </form>
+              <button class="auth-resend" id="btn-resend-verification" type="button" hidden>重新寄送驗證信</button>
+              <button class="auth-logout" id="btn-google-sign-out" type="button" hidden>登出</button>
+            </div>
+          </div>
+          <button class="btn-reset" id="btn-reset-global" title="回到起點重新篩選">
+            🔄 重新選擇
+          </button>
+        </div>
       </div>
     </header>
     <div id="connectivity-status" class="connectivity-status" role="status" aria-live="polite" hidden></div>
@@ -61,24 +86,37 @@
       <div id="map-world-slot">
       <section id="map-hero-card" class="map-hero-card map-first-card" aria-labelledby="map-heading">
         <div class="map-toolbar">
-          <div class="map-toolbar-copy">
-            <span class="section-kicker">EXPLORE AT YOUR OWN PACE</span>
-            <h2 id="map-heading">探索地圖</h2>
-            <p>切換底圖風格或開啟 3D 地球欣賞世界；城市探索與景點導覽仍在此地圖中進行。</p>
-          </div>
-          <div class="map-controls">
-            <div class="map-layer-selector">
-              <button type="button" class="map-btn map-layer-btn active" id="btn-layer-voyager" title="探索地圖" aria-label="探索彩色地圖圖層" aria-pressed="true">🗺️ 探索</button>
-              <button type="button" class="map-btn map-layer-btn" id="btn-layer-light" title="簡約地圖" aria-label="簡約淺色地圖圖層" aria-pressed="false">⚪ 簡約</button>
-              <button type="button" class="map-btn map-layer-btn" id="btn-layer-satellite" title="衛星航照" aria-label="衛星航照地圖圖層" aria-pressed="false">🛰️ 衛星</button>
+          <div class="map-toolbar-heading">
+            <div class="map-toolbar-copy">
+              <span class="section-kicker">EXPLORE AT YOUR OWN PACE</span>
+              <h2 id="map-heading">探索地圖</h2>
+              <p>拖曳地圖慢慢找方向；左右跨越世界邊界時，地圖會循環接續，地標也會留在正確位置。</p>
             </div>
-            <button type="button" class="map-btn map-3d-launch" id="btn-map-3d" aria-controls="map-3d-experience" aria-expanded="false" aria-label="開啟互動式 3D 地球" title="展開互動式 3D 地球">🌐 3D 地球</button>
-            <button class="map-btn" id="btn-zoom-in" title="放大地圖" aria-label="放大地圖">+</button>
-            <button class="map-btn" id="btn-zoom-out" title="縮小地圖" aria-label="縮小地圖">−</button>
-            <button class="map-btn" id="btn-tilt-toggle" aria-label="切換地圖傾斜視角" aria-pressed="false" title="切換傾斜視角">3D 傾斜</button>
-            <button class="map-btn" id="btn-zoom-reset" title="重設視圖" style="font-size:0.8rem; width:auto; padding:0 8px;">世界全景</button>
-            <button class="map-btn map-context-action" id="btn-map-back" title="返回上一層地圖" aria-label="返回上一層地圖">← 返回上一層</button>
-            <button class="map-btn map-context-action" id="btn-map-world" title="返回世界大地圖" aria-label="返回世界大地圖">🌍 世界地圖</button>
+            <span class="map-world-state"><i aria-hidden="true"></i> 世界循環探索</span>
+          </div>
+          <div class="map-controls" aria-label="地圖控制">
+            <div class="map-control-cluster map-style-cluster">
+              <span class="map-control-caption">底圖風格</span>
+              <div class="map-layer-selector" role="group" aria-label="選擇底圖風格">
+                <button type="button" class="map-btn map-layer-btn active" id="btn-layer-voyager" title="探索地圖" aria-label="探索彩色地圖圖層" aria-pressed="true">🗺️ 探索</button>
+                <button type="button" class="map-btn map-layer-btn" id="btn-layer-light" title="簡約地圖" aria-label="簡約淺色地圖圖層" aria-pressed="false">⚪ 簡約</button>
+                <button type="button" class="map-btn map-layer-btn" id="btn-layer-satellite" title="衛星航照" aria-label="衛星航照地圖圖層" aria-pressed="false">🛰️ 衛星</button>
+              </div>
+            </div>
+            <div class="map-control-cluster map-tools-cluster">
+              <span class="map-control-caption">探索工具</span>
+              <div class="map-control-actions">
+                <div class="map-zoom-group" role="group" aria-label="縮放與視角">
+                  <button type="button" class="map-btn map-zoom-btn" id="btn-zoom-in" title="放大地圖" aria-label="放大地圖">+</button>
+                  <button type="button" class="map-btn map-zoom-btn" id="btn-zoom-out" title="縮小地圖" aria-label="縮小地圖">−</button>
+                  <button type="button" class="map-btn map-reset-btn" id="btn-zoom-reset" title="回到世界全景" aria-label="回到世界全景">世界全景</button>
+                </div>
+                <button type="button" class="map-btn map-3d-launch" id="btn-map-3d" aria-controls="map-3d-experience" aria-expanded="false" aria-label="開啟互動式 3D 地球" title="展開互動式 3D 地球">🌐 3D 地球</button>
+                <button type="button" class="map-btn map-tilt-btn" id="btn-tilt-toggle" aria-label="切換地圖傾斜視角" aria-pressed="false" title="切換傾斜視角">3D 傾斜</button>
+                <button type="button" class="map-btn map-context-action" id="btn-map-back" title="返回上一層地圖" aria-label="返回上一層地圖">← 返回上一層</button>
+                <button type="button" class="map-btn map-context-action" id="btn-map-world" title="返回世界大地圖" aria-label="返回世界大地圖">🌍 世界地圖</button>
+              </div>
+            </div>
           </div>
         </div>
         <div id="leaflet-map" role="region" aria-label="互動式世界地圖"></div>
@@ -304,6 +342,7 @@
     <script src="src/js/modules/countryView.js"></script>
     <script src="src/js/modules/globalCitiesView.js"></script>
     <script src="src/js/modules/plannerView.js"></script>
+    <script src="src/js/firebase.js" defer></script>
     <script src="src/js/app.js"></script>
     <script src="src/js/pwa.js"></script>
   </div>

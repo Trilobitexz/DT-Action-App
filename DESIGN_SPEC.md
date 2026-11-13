@@ -159,3 +159,7 @@
    - 現代簡潔 UI 風格（Tailwind CSS 設計規範、乾淨卡片化呈現、清晰色彩區分直飛狀態與物價等級）。
 3. **資料模擬 (Mock Data)**：
    - 建立內建標準化結構資料集（亞洲/歐洲/美洲熱門國家的直飛、物價、城市與景點資料）。
+
+## Firebase 帳戶登入
+
+頁面右上角提供帳戶選單，支援 Firebase Authentication Google 登入，以及電子郵件／密碼註冊與登入。電子郵件註冊會寄送 Firebase 驗證信，未完成驗證的帳戶不能登入。首次部署需在 Firebase Console 啟用 Google 與 Email/Password 登入方式，並設定授權網域與電子郵件範本。需先透過 Firebase Hosting 或其他 HTTPS 靜態網站服務部署，再使用 https://dt-action-app.web.app 等實際 Hosting 網址操作；不可用 file:// 直接驗證登入。登入狀態儲存於瀏覽器本機，登出後可由同一選單操作。
