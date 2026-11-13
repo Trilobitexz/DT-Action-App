@@ -1,5 +1,6 @@
 // 旅遊地點分析 APP - 全域控制器
 document.addEventListener("DOMContentLoaded", async () => {
+
   try {
     if (window.leafletReady) await window.leafletReady;
   } catch (error) {
@@ -241,6 +242,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   let map3dViewer = null;
   let cesiumLoadPromise = null;
   let map3dResizeObserver = null;
+  let map3dFirstRenderTimeout = null;
+  let map3dImageryFailed = false;
   const update3DStatus = message => { if (map3dStatus) map3dStatus.textContent = message; };
   let map3dOpenToken = 0;
   const cesiumSources = [
@@ -257,26 +260,49 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (window.Cesium) return Promise.resolve(window.Cesium);
     if (cesiumLoadPromise) return cesiumLoadPromise;
     cesiumLoadPromise = new Promise((resolve, reject) => {
-      const tryNext = () => {
-        const source = cesiumSources.shift();
-        if (!source) { reject(new Error("所有 Cesium CDN 都無法載入")); return; }
+      const tryNext = sourceIndex => {
+        const source = cesiumSources[sourceIndex];
+        if (!source) {
+          reject(new Error("所有 Cesium CDN 都無法載入"));
+          return;
+        }
         const script = document.createElement("script");
         script.dataset.cesiumLoader = "journey-atlas";
         script.src = source.script;
         script.async = true;
+        // Load widget UI styles only when 3D is requested so the optional globe
+        // cannot block initial rendering of the 2D map.
+        if (!document.getElementById("cesium-widget-styles")) {
+          const styles = document.createElement("link");
+          styles.id = "cesium-widget-styles";
+          styles.rel = "stylesheet";
+          styles.href = `${source.baseUrl}Widgets/widgets.css`;
+          styles.onerror = () => {
+            if (styles.dataset.fallbackAttempted) return;
+            styles.dataset.fallbackAttempted = "true";
+            styles.href = "https://unpkg.com/cesium@1.127.0/Build/Cesium/Widgets/widgets.css";
+          };
+          document.head.appendChild(styles);
+        }
+        // Workers and bundled imagery resolve relative to this value, so it must
+        // match the current CDN before Cesium's script begins evaluating.
+        window.CESIUM_BASE_URL = source.baseUrl;
         let settled = false;
         const loadTimeout = window.setTimeout(() => {
           if (settled) return;
           settled = true;
           script.remove();
-          tryNext();
+          tryNext(sourceIndex + 1);
         }, 12000);
         script.onload = () => {
           if (settled) return;
           settled = true;
           window.clearTimeout(loadTimeout);
-          if (!window.Cesium) { script.remove(); tryNext(); return; }
-          window.CESIUM_BASE_URL = source.baseUrl;
+          if (!window.Cesium) {
+            script.remove();
+            tryNext(sourceIndex + 1);
+            return;
+          }
           resolve(window.Cesium);
         };
         script.onerror = () => {
@@ -284,20 +310,24 @@ document.addEventListener("DOMContentLoaded", async () => {
           settled = true;
           window.clearTimeout(loadTimeout);
           script.remove();
-          tryNext();
+          tryNext(sourceIndex + 1);
         };
         document.head.appendChild(script);
       };
-      tryNext();
-    }).catch(error => { cesiumLoadPromise = null; cesiumSources.splice(0, cesiumSources.length,
-      { script: "https://cdn.jsdelivr.net/npm/cesium@1.127.0/Build/Cesium/Cesium.js", baseUrl: "https://cdn.jsdelivr.net/npm/cesium@1.127.0/Build/Cesium/" },
-      { script: "https://unpkg.com/cesium@1.127.0/Build/Cesium/Cesium.js", baseUrl: "https://unpkg.com/cesium@1.127.0/Build/Cesium/" }
-    ); throw error; });
+      tryNext(0);
+    }).catch(error => {
+      cesiumLoadPromise = null;
+      throw error;
+    });
     return cesiumLoadPromise;
   };
   const destroy3DViewer = () => {
     map3dResizeObserver?.disconnect();
     map3dResizeObserver = null;
+    if (map3dFirstRenderTimeout !== null) {
+      window.clearTimeout(map3dFirstRenderTimeout);
+      map3dFirstRenderTimeout = null;
+    }
     if (map3dViewer && !map3dViewer.isDestroyed()) {
       map3dViewer.destroy();
     }
@@ -331,16 +361,27 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (!globe || globe.getBoundingClientRect().width < 2 || globe.getBoundingClientRect().height < 2) {
         throw new Error("3D 地圖容器沒有可用尺寸");
       }
-      window.CESIUM_BASE_URL = window.CESIUM_BASE_URL || "https://cdn.jsdelivr.net/npm/cesium@1.127.0/Build/Cesium/";
-      // Cesium's Natural Earth II texture is bundled with the library; no ion token required.
+      // Load the bundled Natural Earth II imagery explicitly before creating the
+      // viewer. This keeps the globe independent from Cesium ion and makes a
+      // missing/mismatched asset base URL fail visibly instead of showing a blank globe.
+      map3dImageryFailed = false;
+      const imageryProvider = await Cesium.TileMapServiceImageryProvider.fromUrl(
+        Cesium.buildModuleUrl("Assets/Textures/NaturalEarthII")
+      );
+      if (map3dPanel.hidden || openToken !== map3dOpenToken) return;
+
       map3dViewer = new Cesium.Viewer(globe, {
-        animation: false, baseLayerPicker: false, fullscreenButton: true,
+        animation: false, baseLayerPicker: false, baseLayer: false, fullscreenButton: true,
         geocoder: false, homeButton: true, infoBox: true, sceneModePicker: true,
         selectionIndicator: true, timeline: false, navigationHelpButton: true,
-        requestRenderMode: true, maximumRenderTimeChange: Infinity,
-        baseLayer: Cesium.ImageryLayer.fromProviderAsync(
-          Cesium.TileMapServiceImageryProvider.fromUrl(Cesium.buildModuleUrl("Assets/Textures/NaturalEarthII"))
-        )
+        requestRenderMode: true, maximumRenderTimeChange: Infinity
+      });
+      map3dViewer.imageryLayers.addImageryProvider(imageryProvider);
+      imageryProvider.errorEvent?.addEventListener(error => {
+        if (openToken !== map3dOpenToken || map3dPanel.hidden) return;
+        map3dImageryFailed = true;
+        console.error("Cesium 全球底圖載入錯誤：", error);
+        update3DStatus("3D 地球已建立，但全球底圖圖磚載入失敗。請確認網路可連線，或關閉後重試；若地球仍為空白，請檢查 CDN 資源是否遭封鎖。");
       });
       map3dViewer.scene.globe.enableLighting = true;
       map3dViewer.scene.globe.showGroundAtmosphere = true;
@@ -358,20 +399,40 @@ document.addEventListener("DOMContentLoaded", async () => {
           });
           entity.description = `<strong>${city.name}</strong><br>${city.countryName || ""}<br>座標：${city.lat.toFixed(3)}, ${city.lng.toFixed(3)}<br><small>城市詳細探索請使用下方 2D 地圖。</small>`;
         });
-      map3dResizeObserver = new ResizeObserver(() => {
-        if (map3dViewer && !map3dViewer.isDestroyed()) {
-          map3dViewer.resize();
-          map3dViewer.scene.requestRender();
-        }
-      });
-      map3dResizeObserver.observe(globe);
+      if ("ResizeObserver" in window) {
+        map3dResizeObserver = new window.ResizeObserver(() => {
+          if (map3dViewer && !map3dViewer.isDestroyed()) {
+            map3dViewer.resize();
+            map3dViewer.scene.requestRender();
+          }
+        });
+        map3dResizeObserver.observe(globe);
+      }
       map3dViewer.scene.renderError.addEventListener((scene, renderError) => {
         console.error("Cesium WebGL render error:", renderError);
         update3DStatus(`3D 圖形渲染失敗：${renderError?.message || "WebGL 無法繪製"}。請更新瀏覽器或啟用硬體加速；2D 地圖仍可使用。`);
       });
       map3dViewer.resize();
       map3dViewer.scene.requestRender();
-      update3DStatus("3D 地球已就緒（Natural Earth 全球底圖）。可拖曳旋轉、滾輪縮放，點選熱門城市查看資訊。");
+      update3DStatus("3D 地球已建立，正在載入全球底圖與城市標記…可拖曳旋轉、滾輪縮放，點選熱門城市查看資訊。");
+      // Distinguish a constructed WebGL scene from a globe that actually rendered
+      // a frame. This catches hidden/zero-size and GPU rendering failures.
+      map3dFirstRenderTimeout = window.setTimeout(() => {
+        map3dFirstRenderTimeout = null;
+        if (openToken !== map3dOpenToken || map3dPanel.hidden || !map3dViewer || map3dViewer.isDestroyed()) return;
+        update3DStatus("3D 地球已啟動但尚未完成畫面繪製。請檢查瀏覽器硬體加速、WebGL 與網路/CDN 存取。");
+      }, 8000);
+      const onFirstRender = () => {
+        if (map3dFirstRenderTimeout !== null) {
+          window.clearTimeout(map3dFirstRenderTimeout);
+          map3dFirstRenderTimeout = null;
+        }
+        map3dViewer.scene.postRender.removeEventListener(onFirstRender);
+        if (openToken === map3dOpenToken && !map3dPanel.hidden && !map3dImageryFailed) {
+          update3DStatus("3D 地球畫面已繪製；全球底圖圖磚可能仍在載入。可拖曳旋轉、滾輪縮放，點選城市標記查看資訊。");
+        }
+      };
+      map3dViewer.scene.postRender.addEventListener(onFirstRender);
     } catch (error) {
       if (openToken !== map3dOpenToken || map3dPanel.hidden) return;
       console.error("3D 地球初始化失敗：", error);

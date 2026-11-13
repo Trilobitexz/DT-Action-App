@@ -101,7 +101,7 @@ class MapManager {
       markerZoomAnimation: !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
       touchZoom: true,
       scrollWheelZoom: !this.isCoarsePointer,
-      worldCopyJump: false
+      worldCopyJump: true
     });
     if (status) status.textContent = "";
 
@@ -187,6 +187,7 @@ class MapManager {
       updateWhenZooming: false,
       updateInterval: 180,
       keepBuffer: 2,
+      noWrap: false,
       className: "journey-map-tiles"
     };
     if (source.subdomains) layerOptions.subdomains = source.subdomains;
