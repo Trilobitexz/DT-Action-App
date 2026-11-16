@@ -10,13 +10,12 @@
   <link rel="manifest" href="manifest.json">
   <title>旅途指南 Journey Atlas｜目的地探索與旅行規劃</title>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
-  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin>
   <link rel="preconnect" href="https://api.open-meteo.com" crossorigin>
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
-  <!-- Leaflet 樣式主來源與 CDN 備援；兩者使用相同版本，避免地圖容器缺少必要樣式。 -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" onerror="this.onerror=null;var fallback=document.createElement('link');fallback.rel='stylesheet';fallback.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(fallback);" />
-  <link rel="stylesheet" href="src/css/style.css">
+  <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="src/css/style.css?v=18">
 
 </head>
 <body>
@@ -111,7 +110,7 @@
                   <button type="button" class="map-btn map-zoom-btn" id="btn-zoom-out" title="縮小地圖" aria-label="縮小地圖">−</button>
                   <button type="button" class="map-btn map-reset-btn" id="btn-zoom-reset" title="回到世界全景" aria-label="回到世界全景">世界全景</button>
                 </div>
-                <button type="button" class="map-btn map-3d-launch" id="btn-map-3d" aria-controls="map-3d-experience" aria-expanded="false" aria-label="開啟互動式 3D 地球" title="展開互動式 3D 地球">🌐 3D 地球</button>
+                <button type="button" class="map-btn map-3d-launch" id="btn-map-3d" aria-pressed="false" aria-label="切換平面或 3D 地球投影" title="切換 2D／3D 地圖投影">🌐 3D 地球</button>
                 <button type="button" class="map-btn map-tilt-btn" id="btn-tilt-toggle" aria-label="切換地圖傾斜視角" aria-pressed="false" title="切換傾斜視角">3D 傾斜</button>
                 <button type="button" class="map-btn map-context-action" id="btn-map-back" title="返回上一層地圖" aria-label="返回上一層地圖">← 返回上一層</button>
                 <button type="button" class="map-btn map-context-action" id="btn-map-world" title="返回世界大地圖" aria-label="返回世界大地圖">🌍 世界地圖</button>
@@ -122,15 +121,7 @@
         <div id="leaflet-map" role="region" aria-label="互動式世界地圖"></div>
         <div id="map-context-info" class="map-context-info" hidden></div>
         <p id="map-load-status" class="map-load-status" role="status" aria-live="polite"></p>
-        <section id="map-3d-experience" class="map-3d-experience" aria-labelledby="map-3d-heading" hidden>
-          <div class="map-3d-heading-row">
-            <div><span class="section-kicker">INTERACTIVE 3D GLOBE</span><h3 id="map-3d-heading">God's Eye View 3D 地球</h3><p>拖曳旋轉、滾輪縮放，點選地球上的地點查看座標。城市導覽仍可使用下方原有地圖。</p></div>
-            <button type="button" class="map-3d-close" id="btn-map-3d-close" aria-label="關閉 3D 地球">關閉 3D</button>
-          </div>
-          <div id="map-3d-globe" class="map-3d-globe" role="application" aria-label="互動式三維地球"></div>
-          <p id="map-3d-status" class="map-3d-status" role="status" aria-live="polite">正在載入 3D 地球…</p>
-          <p class="map-3d-note">3D 地球適合瀏覽世界與觀察地形；若要查看城市街區、景點與航線，請使用本頁互動地圖。</p>
-        </section>
+
         <nav class="map-continent-chips" aria-label="地圖探索捷徑">
           <span class="quick-pick-label">世界視角</span>
           <button class="continent-chip-btn" data-continent-id="asia">🌏 亞洲</button>
@@ -293,33 +284,33 @@
       <div class="footer-inner"><a href="#view-world" class="footer-brand" onclick="window.appNavigate('world'); return false;">✈ 旅途指南 <span>JOURNEY ATLAS</span></a><p>旅行資訊為行前規劃參考；實際票價、匯率、簽證與天氣請以官方及服務提供者最新資料為準。</p><a class="footer-top-link" href="#view-world" onclick="window.appNavigate('world'); return false;">回到探索首頁 ↑</a></div>
     </footer>
 
-    <!-- Leaflet CDN 載入失敗時，依序嘗試備援來源；初始化移至 DOMContentLoaded，確保備援載入完成。 -->
+    <!-- MapLibre 載入失敗時可從備援 CDN 載入，app 會等待此 Promise 後初始化地圖。 -->
     <script>
-      window.leafletReady = new Promise((resolve, reject) => {
+      window.mapLibreReady = new Promise((resolve, reject) => {
         const sources = [
-          "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js",
-          "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          "https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js",
+          "https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.6.2/maplibre-gl.js"
         ];
         const loadNext = () => {
           const src = sources.shift();
           if (!src) {
             const status = document.getElementById("map-load-status");
-            if (status) status.textContent = "地圖程式載入失敗，請確認網路連線或稍後重試。";
-            reject(new Error("所有 Leaflet CDN 均載入失敗。"));
+            if (status) status.textContent = "地圖程式載入失敗，請檢查網路連線後重試。";
+            reject(new Error("所有 MapLibre CDN 均載入失敗。"));
             return;
           }
           const script = document.createElement("script");
           script.src = src;
-          script.onload = () => window.L ? resolve(window.L) : loadNext();
+          script.onload = () => window.maplibregl ? resolve(window.maplibregl) : loadNext();
           script.onerror = loadNext;
           document.head.appendChild(script);
         };
         loadNext();
       });
-      window.leafletReady.catch(error => console.error(error));
+      window.mapLibreReady.catch(error => console.error(error));
     </script>
     <script src="src/js/map/geoContinents.js"></script>
-    <script src="src/js/map/mapManager.js"></script>
+    <script src="src/js/map/mapManager.js?v=18"></script>
 
     <!-- 載入資料庫與各洲資料模組 -->
     <script src="src/data/travelData.js"></script>
@@ -343,7 +334,7 @@
     <script src="src/js/modules/globalCitiesView.js"></script>
     <script src="src/js/modules/plannerView.js"></script>
     <script src="src/js/firebase.js" defer></script>
-    <script src="src/js/app.js"></script>
+    <script src="src/js/app.js?v=18"></script>
     <script src="src/js/pwa.js"></script>
   </div>
 </body>

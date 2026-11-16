@@ -316,6 +316,24 @@ button { color: inherit; }
   color: #fff;
 }
 
+.map-spot-marker,
+.map-city-center-marker,
+.map-airport-marker {
+  z-index: 2;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.map-spot-marker:focus-visible,
+.map-city-center-marker:focus-visible,
+.map-airport-marker:focus-visible {
+  outline: 3px solid #f59e0b;
+  outline-offset: 3px;
+  border-radius: 50%;
+}
+
 .map-spot-popup strong,
 .map-spot-popup span,
 .map-spot-popup p {
@@ -438,15 +456,11 @@ button { color: inherit; }
   display: none;
 }
 
-/* 確保 Leaflet 圖磚與控制項樣式正確渲染 */
-.leaflet-container {
-  font-family: inherit;
-  background-color: #d4dadc !important;
-}
-
-.leaflet-tile {
-  visibility: inherit !important;
-}
+/* MapLibre 單一 WebGL 畫布，供平面與 globe 投影共用。 */
+.maplibregl-map { font-family: inherit; background: #d4dadc; }
+.maplibregl-canvas { outline: none; }
+.maplibregl-ctrl-attrib { font-size: 0.65rem; }
+.maplibregl-popup-content { border-radius: 12px; box-shadow: 0 8px 28px rgba(15, 35, 45, .18); }
 
 /* 自訂大洲浮動標籤 Marker */
 .custom-continent-marker {
@@ -537,17 +551,132 @@ button { color: inherit; }
   text-overflow: ellipsis;
 }
 
-.leaflet-container.global-city-labels-visible .global-city-pin-badge {
-  width: max-content;
-  max-width: 118px;
-  height: auto;
-  padding: 3px 7px;
+.global-city-pin-text[hidden] { display: none !important; }
+
+.map-global-city-marker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border: 1px solid #2563eb;
+  border-radius: 12px;
+  background: rgba(239, 246, 255, 0.96);
+  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.28);
+  color: #1e3a8a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.leaflet-container.global-city-labels-visible .global-city-pin-text {
-  display: inline;
+.map-global-city-marker:hover,
+.map-global-city-marker:focus-visible {
+  background: #2563eb;
+  color: #fff;
+  outline: none;
+  transform: scale(1.08);
 }
-.global-city-pin-text[hidden] { display: none !important; }
+
+.map-global-city-marker.city-tier-major,
+.map-local-city-marker.city-tier-major {
+  border-width: 2px;
+  box-shadow: 0 3px 12px rgba(37, 99, 235, 0.3);
+}
+
+.map-global-city-marker.city-tier-major .map-global-city-dot,
+.map-local-city-marker.city-tier-major .map-local-city-dot {
+  width: 10px;
+  height: 10px;
+}
+
+.map-global-city-marker.city-tier-medium .map-global-city-dot,
+.map-local-city-marker.city-tier-medium .map-local-city-dot {
+  width: 8px;
+  height: 8px;
+}
+
+.map-global-city-marker.city-tier-small,
+.map-local-city-marker.city-tier-small {
+  opacity: 0.9;
+  font-size: 0.7rem;
+}
+
+.map-global-city-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+.map-global-city-label { display: none; }
+.map-global-city-marker.labels-visible .map-global-city-label { display: inline; }
+.map-global-city-marker[hidden] { display: none; }
+
+.map-continent-marker,
+.map-local-city-marker {
+  padding: 3px 7px;
+  border: 1px solid rgba(23, 56, 71, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 8px rgba(25, 43, 54, 0.2);
+  color: #173847;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.map-continent-marker:hover,
+.map-continent-marker:focus-visible,
+.map-local-city-marker:hover,
+.map-local-city-marker:focus-visible {
+  background: #173847;
+  color: #fff;
+  outline: 3px solid rgba(20, 184, 166, 0.35);
+}
+
+.map-local-city-marker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-color: #138b80;
+  color: #18544f;
+}
+
+.map-local-city-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #138b80;
+}
+
+.map-local-city-label { display: none; }
+.map-local-city-marker.labels-visible .map-local-city-label { display: inline; }
+.map-continent-marker[hidden],
+.map-local-city-marker[hidden] { display: none; }
+
+.map-context-landmark {
+  position: relative;
+}
+
+.map-context-landmark-label {
+  display: none;
+  margin-left: 4px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.map-context-landmark.labels-visible .map-context-landmark-label,
+.map-context-landmark:hover .map-context-landmark-label,
+.map-context-landmark:focus-visible .map-context-landmark-label {
+  display: inline-block;
+}
 
 .city-pin-badge {
   background: rgba(255, 255, 255, 0.95);
@@ -1614,7 +1743,7 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-  .leaflet-container *, .leaflet-container *::before, .leaflet-container *::after { animation: none !important; }
+  .maplibregl-map *, .maplibregl-map *::before, .maplibregl-map *::after { animation: none !important; }
 }
 
 .map-load-status { color: #85543d; font-size: 0.81rem; }
@@ -1937,9 +2066,6 @@ body {
 
 .itinerary-remove { min-height: 30px; }
 
-/* Keep Leaflet's low-resolution fallback visible while map tiles are arriving. */
-.leaflet-tile.journey-map-tiles { filter: none; }
-
 /* Map-first exploration flow: map is the first actionable content, tools follow it. */
 #view-world { padding-top: clamp(0.8rem, 2vw, 1.5rem); }
 #view-world > .world-intro { min-height: 0; margin-bottom: 0.8rem; padding: clamp(1.2rem, 3.6vw, 2.25rem); }
@@ -1991,18 +2117,6 @@ body {
 
 
 
-/* Embedded, optional 3D globe; Leaflet city exploration remains intact underneath. */
-.map-3d-experience { margin: 0.9rem 1.2rem 0; overflow: hidden; border: 1px solid #dbe7e7; border-radius: 16px; background: #f7fafb; box-shadow: 0 12px 28px rgba(20, 45, 60, 0.1); }
-.map-3d-experience[hidden] { display: none; }
-.map-3d-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem 0.65rem; }
-.map-3d-heading-row h3 { margin: 0.25rem 0; color: #173847; font-size: 1.05rem; }
-.map-3d-heading-row p { margin: 0; color: #64747a; font-size: 0.78rem; line-height: 1.5; }
-.map-3d-close { flex: 0 0 auto; min-height: 36px; padding: 0 0.75rem; border: 1px solid #d4dfdf; border-radius: 9px; background: #fff; color: #36515a; cursor: pointer; }
-.map-3d-globe { width: 100%; height: clamp(340px, 48vw, 580px); background: radial-gradient(ellipse at 50% 42%, #102f50, #06111f 72%); }
-.map-3d-status { min-height: 1.2rem; margin: 0; padding: 0.5rem 1rem; color: #496269; background: #eef5f5; font-size: 0.75rem; }
-.map-3d-note { margin: 0; padding: 0.55rem 1rem 0.75rem; color: #627177; background: #f7fafb; font-size: 0.74rem; line-height: 1.55; }
-.map-3d-close:focus-visible, #btn-map-3d:focus-visible { outline: 3px solid #41b7a9; outline-offset: 3px; }
-@media (max-width: 760px) { .map-3d-experience { margin-inline: 0.7rem; } .map-3d-globe { height: min(65vh, 440px); min-height: 320px; } .map-3d-heading-row { padding: 0.8rem; } }
 /* Redesigned map controls: clear hierarchy, wrapped tools, and a compact mobile layout. */
 #map-hero-card .map-toolbar {
   display: grid;

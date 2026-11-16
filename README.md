@@ -32,11 +32,9 @@
 
 ---
 
-## 3D 地球延伸體驗
+## 2D／3D 整合地圖
 
-地圖工具列的「3D 地球」會在頁面內展開互動式 Cesium 地球，呈現衛星影像、全球地形與熱門城市標記；Journey Atlas 原有 Leaflet 地圖仍負責大洲、城市、景點與航線互動，兩種體驗互不取代。CesiumJS 與線上地形／影像服務需要網路，且瀏覽器需支援 WebGL；離線或不支援時，原有 2D 地圖仍可照常使用。
-
-3D 地圖可以作為「世界概覽／靈感探索」的沉浸式入口，適合旋轉地球、觀察地形與宏觀位置；若要規劃實際行程，仍建議回到本專案的 2D 城市地圖檢視街區、景點與機場。God's Eye View 的 GitHub 專案可供參考進一步的 3D 地圖體驗；目前本頁提供直接可操作的地球，而不是把使用者導向程式碼儲存庫。
+互動地圖使用 MapLibre GL JS 單一 WebGL 畫布，以 globe 與 Mercator 投影切換 3D 地球和平面地圖；城市、景點、航線和底圖風格在兩種投影中共用，不再另外建立 Cesium renderer。城市標記依重要度分為大、中、小三級：大城市先出現，中型城市與小城市必須逐步放大後才顯示，避免世界視角擁擠；城市詳情會確保至少提供機場或城市地標入口，並在高縮放顯示景點名稱。底圖使用 OpenFreeMap 向量樣式與 CARTO 向量夜間樣式，依服務條款保留圖面 attribution；圖資需要網路，瀏覽器需支援 WebGL。
 
 ## 專案規格文件
 
@@ -68,7 +66,4 @@ Firebase 初始化與 Web SDK 設定位於 [`src/js/firebase.js`](./src/js/fireb
 2. 在 **Authentication → Sign-in method** 啟用 **Google** 與 **Email/Password**。
 3. 在 **Authentication → Settings → Authorized domains** 加入正式網站網域；本機測試使用 `localhost`。
 4. 在 Firebase Authentication 的電子郵件範本中確認寄件者、主旨、應用程式名稱和驗證連結設定。
-5. 點 Firebase Console 左側 **Hosting** → **Get started**，照畫面流程安裝／登入 Firebase CLI，選取 `dt-action-app` 專案並將網站根目錄 `.` 設為 public directory（此專案的 `index.html` 位於根目錄，部署時請略過覆寫 index.html 的預設範本）。完成後部署至 Hosting，使用產生的 `https://dt-action-app.web.app` 網址測試；若 Firebase 顯示不同網址，請以 Console 實際顯示為準。
-
-
-> 若偏好命令列部署，也可在專案根目錄加入 `firebase.json`（Hosting public 設為 `.`、ignore 至少排除 `firebase.json`、`.firebaserc`、`node_modules`），再執行 `firebase login`、`firebase use dt-action-app` 與 `firebase deploy --only hosting`。不要執行會覆寫現有首頁的 `firebase init hosting` 預設範本步驟。
+5. 你提供的應用程式資訊顯示「連結的 Firebase 託管網站：dt-action-app」，請在 Firebase Console → Hosting 查看該網站狀態與實際網址。只有已建立並完成部署的 Hosting 網站才可開啟；預設網址通常為 `https://dt-action-app.web.app` 或 `https://dt-action-app.firebaseapp.com`，請以 Hosting 頁面顯示為準。若尚未建立 Hosting 網站，請先在 Console 的 Hosting 流程建立並部署。

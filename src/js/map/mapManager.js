@@ -1,133 +1,84 @@
-// 地圖管理器 (支援多來源免金鑰圖磚、大洲與熱門城市雙層地標)
+// MapLibre GL JS 單一地圖引擎：Mercator 與 globe 投影共用向量圖層及互動狀態。
 class MapManager {
   constructor(containerId, options = {}) {
     this.containerId = containerId;
-    this.defaultCenter = options.center || [25.0, 10.0];
+    this.defaultCenter = options.center || [25, 10];
     this.defaultZoom = options.zoom || 2.4;
     this.map = null;
-    this.currentTileLayer = null;
     this.activeLayerKey = "voyager";
-    this.failedTileProviders = new Set();
-    this.continentMarkersLayer = null;
-    this.cityMarkersLayer = null;
-    this.globalCityMarkersLayer = null;
-    this.flightRouteLayer = null;
-    this.citySpotsLayer = null;
-    this.cityAirportLayer = null;
-    this.cityCenterLayer = null;
-    this.citySpotMarkers = new Map();
-    this.visibleCityUpdateFrame = null;
-    this.tiltedView = false;
-    this.currentCityContext = null;
-    this.invalidateSizeTimer = null;
-    this.flightOrigin = [25.0797, 121.2342];
-    this.isCoarsePointer = window.matchMedia?.("(pointer: coarse)").matches === true;
-    this.prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
     this.navigationAnimationEnabled = true;
-
+    this.prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+    this.isCoarsePointer = window.matchMedia?.("(pointer: coarse)").matches === true;
+    this.tiltedView = false;
+    this.citySpotMarkers = new Map();
+    this.globalCityDomMarkers = new Map();
+    this.cityContextDomMarkers = new Map();
+    this.continentDomMarkers = new Map();
+    this.localCityDomMarkers = new Map();
+    this.currentCityContext = null;
+    this.visibleCityUpdateFrame = null;
+    this.invalidateSizeTimer = null;
+    this.layerInstallScheduled = false;
+    this.layerInstallAttempts = 0;
+    this.flightOrigin = [25.0797, 121.2342];
+    this.layersReady = false;
     this.onContinentSelect = options.onContinentSelect || (() => {});
     this.onCountrySelect = options.onCountrySelect || (() => {});
     this.onCitySelect = options.onCitySelect || (() => {});
     this.onGlobalCitySelect = options.onGlobalCitySelect || (() => {});
-
-    // 使用 Esri 公開圖磚，避免 OSM 403 與 CARTO API key 限制。
-    const esriAttribution = 'Tiles &copy; <a href="https://www.esri.com/">Esri</a>';
     this.tileProviders = {
-      // 探索風格：Esri 街道圖。
-      voyager: {
-        name: "探索地圖",
-        sources: [
-          { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", attribution: esriAttribution },
-          { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", subdomains: "abc", attribution: '&copy; OpenStreetMap contributors' },
-          { url: "https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", attribution: '&copy; OpenStreetMap contributors, HOT' }
-        ],
-        maxZoom: 19
-      },
-      // 簡約風格：Esri 地形圖，與探索街道圖保持明顯差異。
-      light: {
-        name: "簡約地圖",
-        sources: [
-          { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}", attribution: esriAttribution },
-          { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", subdomains: "abcd", attribution: '&copy; CARTO' },
-          { url: "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png", attribution: '&copy; CARTO' }
-        ],
-        maxZoom: 18
-      },
-      // 3. ESRI ArcGIS World Imagery：世界高解析度真實衛星航照
-      satellite: {
-        name: "ESRI World Imagery (衛星)",
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        subdomains: "",
-        attribution: 'Tiles &copy; Esri &mdash; DigitalGlobe, GeoEye, Earthstar Geographics',
-        maxZoom: 18
-      },
-      // 4. ESRI ArcGIS Street Map (街道備援)
-      esriStreet: {
-        name: "OSM Humanitarian (備援)",
-        url: "https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
-        subdomains: "",
-        attribution: '&copy; OpenStreetMap contributors, HOT',
-        maxZoom: 19
-      }
+      voyager: { name: "探索地圖", style: "https://tiles.openfreemap.org/styles/liberty" },
+      light: { name: "簡約地圖", style: "https://tiles.openfreemap.org/styles/positron" },
+      satellite: { name: "衛星航照", style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json" }
     };
+    this.geojson = { continents: this.emptyCollection(), cities: this.emptyCollection(), globalCities: this.emptyCollection(), spots: this.emptyCollection(), airports: this.emptyCollection(), routes: this.emptyCollection() };
   }
+
+  emptyCollection() { return { type: "FeatureCollection", features: [] }; }
+  feature(id, coordinates, properties = {}) { return { type: "Feature", id: String(id), properties, geometry: { type: "Point", coordinates } }; }
+  lineFeature(id, coordinates, properties = {}) { return { type: "Feature", id: String(id), properties, geometry: { type: "LineString", coordinates } }; }
+  sourceData(key) { return this.map?.getSource(key); }
+  syncSource(key) { this.sourceData(key)?.setData(this.geojson[key]); }
+  syncAllSources() { Object.keys(this.geojson).forEach(key => this.syncSource(key)); }
 
   init() {
     const container = document.getElementById(this.containerId);
     const status = document.getElementById("map-load-status");
-    if (!container) {
-      console.error("找不到地圖容器：", this.containerId);
-      if (status) status.textContent = "找不到地圖容器，請重新載入頁面。";
-      return;
-    }
-    if (!window.L) {
-      console.error("Leaflet.js 未載入。請確認 CDN 網路連線。");
-      if (status) status.textContent = "地圖程式載入失敗，請確認網路連線或稍後重試。";
-      return;
-    }
+    if (!container) { if (status) status.textContent = "找不到地圖容器，請重新載入頁面。"; return; }
+    if (!window.maplibregl) { if (status) status.textContent = "地圖程式載入失敗，請確認網路連線。"; return; }
     if (this.map) return;
-
-    // 初始化 Leaflet 地圖；允許小數縮放並修正隱藏/動畫容器的尺寸測量。
-    this.map = window.L.map(container, {
-      center: this.defaultCenter,
-      zoom: this.defaultZoom,
-      zoomSnap: 0.1,
-      minZoom: 2,
-      maxZoom: 18,
-      zoomControl: false,
-      preferCanvas: true,
-      zoomAnimation: !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
-      fadeAnimation: !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
-      markerZoomAnimation: !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
-      touchZoom: true,
-      scrollWheelZoom: !this.isCoarsePointer,
-      worldCopyJump: true
+    this.map = new window.maplibregl.Map({
+      container, style: this.tileProviders.voyager.style,
+      center: [this.defaultCenter[1], this.defaultCenter[0]], zoom: this.defaultZoom,
+      minZoom: 1.5, maxZoom: 18, projection: { type: "mercator" },
+      renderWorldCopies: true, attributionControl: false,
+      canvasContextAttributes: { antialias: false, preserveDrawingBuffer: false }, fadeDuration: 0
     });
-    if (status) status.textContent = "";
-
-    // 載入預設探索圖層
-    this.setTileLayer("voyager");
-
-    this.continentMarkersLayer = window.L.layerGroup().addTo(this.map);
-    this.cityMarkersLayer = window.L.layerGroup().addTo(this.map);
-    this.globalCityMarkersLayer = window.L.layerGroup().addTo(this.map);
-    this.flightRouteLayer = window.L.layerGroup().addTo(this.map);
-    this.citySpotsLayer = window.L.layerGroup().addTo(this.map);
-    this.cityAirportLayer = window.L.layerGroup().addTo(this.map);
-    this.cityCenterLayer = window.L.layerGroup().addTo(this.map);
-
-    this.renderContinentMarkers();
-
-    this.map.on("zoomend", () => {
+    this.map.addControl(new window.maplibregl.AttributionControl({ compact: true }), "bottom-right");
+    this.map.on("error", event => { if (event?.error) console.warn("MapLibre map/tile error:", event.error); });
+    this.map.on("load", () => {
+      this.layersReady = false;
+      this.ensureLayersInstalled();
+      if (status) status.textContent = "";
       this.updateMarkersVisibility();
-      this.scheduleVisibleCityUpdate();
+    });
+    this.map.on("style.load", () => {
+      if (!this.layersReady || !this.map.getSource("continents")) {
+        this.layersReady = false;
+        this.ensureLayersInstalled();
+      }
+    });
+    this.map.on("idle", () => {
+      if (!this.layersReady) this.ensureLayersInstalled();
     });
     this.map.on("moveend", () => this.scheduleVisibleCityUpdate());
-    this.map.on("tileload", () => {
-      const status = document.getElementById("map-load-status");
-      if (status) status.textContent = "";
+    this.map.on("zoomend", () => { this.updateMarkersVisibility(); this.scheduleVisibleCityUpdate(); });
+    this.map.on("click", event => this.handleMapClick(event));
+    ["continent-symbols", "city-circles", "city-symbols", "global-city-symbols", "global-city-labels"].forEach(layer => {
+      this.map.on("mouseenter", layer, () => { this.map.getCanvas().style.cursor = "pointer"; });
+      this.map.on("mouseleave", layer, () => { this.map.getCanvas().style.cursor = ""; });
     });
-    this.map.on("resize", () => this.invalidateSize());
+    if (this.isCoarsePointer) this.map.scrollZoom.disable();
     if ("ResizeObserver" in window) {
       this.mapResizeObserver = new window.ResizeObserver(entries => {
         if (entries.some(entry => entry.contentRect.width > 0 && entry.contentRect.height > 0)) this.invalidateSize();
@@ -136,625 +87,372 @@ class MapManager {
     }
     this.onVisibilityChange = () => { if (!document.hidden) this.invalidateSize(); };
     document.addEventListener("visibilitychange", this.onVisibilityChange);
-
     this.invalidateSize();
   }
 
-  // 設定底圖樣式。一般圖層可逐一嘗試多個免金鑰來源，衛星保留原始圖源。
+  installSourcesAndLayers() {
+    if (!this.map) return;
+    if (!this.map.isStyleLoaded()) {
+      if (!this.layerInstallScheduled) {
+        this.layerInstallScheduled = true;
+        this.map.once("idle", () => {
+          this.layerInstallScheduled = false;
+          this.installSourcesAndLayers();
+        });
+      }
+      return;
+    }
+    if (this.map.getSource("continents")) {
+      this.layersReady = true;
+      return;
+    }
+    Object.keys(this.geojson).forEach(key => this.map.addSource(key, { type: "geojson", data: this.geojson[key], ...(key === "globalCities" ? { cluster: true, clusterMaxZoom: 4, clusterRadius: 42 } : {}) }));
+    this.map.addLayer({ id: "route-lines", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#0f766e", "line-width": 2.5, "line-opacity": 0.9, "line-dasharray": [2, 2] } });
+    this.map.addLayer({ id: "continent-symbols", type: "symbol", source: "continents", layout: { "text-field": ["get", "label"], "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"], "text-size": 13, "text-padding": 8, "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#173847", "text-halo-color": "#ffffff", "text-halo-width": 2.5 } });
+    this.map.addLayer({ id: "city-circles", type: "circle", source: "cities", layout: { visibility: "none" }, paint: { "circle-radius": 5, "circle-color": "#138b80", "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 } });
+    this.map.addLayer({ id: "city-symbols", type: "symbol", source: "cities", layout: { visibility: "none", "text-field": ["get", "label"], "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"], "text-size": 11, "text-offset": [0, 1.3], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#18544f", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
+    this.map.addLayer({ id: "global-city-clusters", type: "circle", source: "globalCities", filter: ["has", "point_count"], layout: { visibility: "none" }, paint: { "circle-color": "#2563eb", "circle-radius": ["step", ["get", "point_count"], 13, 10, 17, 30, 21], "circle-opacity": 0.86, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
+    this.map.addLayer({ id: "global-city-cluster-count", type: "symbol", source: "globalCities", filter: ["has", "point_count"], layout: { visibility: "none", "text-field": ["get", "point_count_abbreviated"], "text-size": 11 }, paint: { "text-color": "#ffffff" } });
+    this.map.addLayer({ id: "global-city-symbols", type: "circle", source: "globalCities", filter: ["!", ["has", "point_count"]], layout: { visibility: "none" }, paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 5, 6, 9, 9], "circle-color": "#2563eb", "circle-opacity": 0.96, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.6 } });
+    this.map.addLayer({ id: "global-city-labels", type: "symbol", source: "globalCities", filter: ["!", ["has", "point_count"]], layout: { visibility: "none", "text-field": ["get", "label"], "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"], "text-size": ["step", ["zoom"], 0, 3.3, 9, 5.2, 11], "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true, "text-allow-overlap": false }, paint: { "text-color": "#1e3a8a", "text-halo-color": "#ffffff", "text-halo-width": 1.6 } });
+    this.map.addLayer({ id: "spot-circles", type: "circle", source: "spots", filter: ["!=", ["get", "kind"], "center"], paint: { "circle-radius": 8, "circle-color": "#d3483c", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+    this.map.addLayer({ id: "spot-labels", type: "symbol", source: "spots", filter: ["!=", ["get", "kind"], "center"], layout: { "text-field": ["get", "label"], "text-size": 11, "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#7f2927", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
+    this.map.addLayer({ id: "city-center", type: "circle", source: "spots", filter: ["==", ["get", "kind"], "center"], paint: { "circle-radius": 7, "circle-color": "#1689bb", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+    this.map.addLayer({ id: "airport-circles", type: "circle", source: "airports", paint: { "circle-radius": 8, "circle-color": "#0f766e", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+    this.map.addLayer({ id: "airport-labels", type: "symbol", source: "airports", layout: { "text-field": ["get", "label"], "text-size": 10, "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#125a55", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
+    this.layersReady = true;
+    this.renderContinentMarkers(); this.renderCityMarkers(); this.updateMarkersVisibility();
+    this.renderGlobalCityDomMarkers();
+    this.renderOverviewDomMarkers();
+  }
+
+  ensureLayersInstalled() {
+    if (!this.map || this.layersReady || this.layerInstallScheduled) return;
+    this.layerInstallScheduled = true;
+    const attempt = () => {
+      this.layerInstallScheduled = false;
+      if (!this.map || this.layersReady) return;
+      if (!this.map.isStyleLoaded()) {
+        this.layerInstallAttempts += 1;
+        if (this.layerInstallAttempts < 60) window.setTimeout(() => this.ensureLayersInstalled(), 100);
+        return;
+      }
+      this.layerInstallAttempts = 0;
+      this.installSourcesAndLayers();
+      this.syncAllSources();
+      this.updateMarkersVisibility();
+    };
+    if (this.map.isStyleLoaded()) attempt();
+    else window.setTimeout(attempt, 50);
+  }
+
+  handleMapClick(event) {
+    if (!this.map) return;
+    const layers = ["continent-symbols", "city-circles", "city-symbols", "global-city-symbols", "global-city-labels", "global-city-clusters", "spot-circles", "airport-circles"];
+    const feature = this.map.queryRenderedFeatures(event.point, { layers: layers.filter(id => this.map.getLayer(id)) })[0];
+    if (!feature) return;
+    const props = feature.properties || {};
+    if (props.kind === "continent") { this.onContinentSelect(props.id); return; }
+    if (props.kind === "local-city") { this.onCitySelect(props.continentId, props.countryId, props.cityId); return; }
+    if (props.kind === "global-city") { this.onGlobalCitySelect(props.cityId); return; }
+    if (props.cluster_id) {
+      this.sourceData("globalCities")?.getClusterExpansionZoom(props.cluster_id, (error, zoom) => {
+        if (!error) this.map.easeTo({ center: feature.geometry.coordinates, zoom, duration: 450 });
+      }); return;
+    }
+    if (props.kind === "spot") this.openSpotPopup(feature);
+    if (props.kind === "airport") new window.maplibregl.Popup({ maxWidth: "280px" }).setLngLat(feature.geometry.coordinates).setHTML(`<strong>${this.escapePopupText(props.name)}</strong><p>城市交通節點，建議出發前確認航班與接駁方式。</p>`).addTo(this.map);
+  }
+
   setTileLayer(layerKey) {
     if (!this.map) return;
     layerKey = this.tileProviders[layerKey] ? layerKey : "voyager";
-    this.activeLayerKey = layerKey;
-    this.sourceAttempt = 0;
-    const status = document.getElementById("map-load-status");
-    if (status) status.textContent = "";
-    this.loadTileSource(layerKey);
-  }
-
-  loadTileSource(layerKey) {
-    if (!this.map || this.activeLayerKey !== layerKey) return;
-    const config = this.tileProviders[layerKey];
-    const sources = config.sources || [config];
-    const sourceIndex = this.sourceAttempt || 0;
-    const source = sources[sourceIndex];
-    const loadToken = (this.tileLoadToken || 0) + 1;
-    this.tileLoadToken = loadToken;
-    const status = document.getElementById("map-load-status");
-
-    if (!source) {
-      if (this.currentTileLayer) {
-        this.map.removeLayer(this.currentTileLayer);
-        this.currentTileLayer = null;
-      }
-      if (status) status.textContent = `${config.name}載入失敗，請檢查網路連線後切換圖層重試。`;
-      console.error(`${config.name} 的所有免金鑰圖磚來源皆無法載入。`);
-      return;
-    }
-
-    if (this.currentTileLayer) {
-      this.map.removeLayer(this.currentTileLayer);
-      this.currentTileLayer = null;
-    }
-
-    if (status) status.textContent = `${config.name}地圖載入中…`;
-
-    const layerOptions = {
-      attribution: source.attribution || config.attribution,
-      maxZoom: config.maxZoom,
-      detectRetina: false,
-      crossOrigin: false,
-      updateWhenIdle: true,
-      updateWhenZooming: false,
-      updateInterval: 180,
-      keepBuffer: 2,
-      noWrap: false,
-      className: "journey-map-tiles"
-    };
-    if (source.subdomains) layerOptions.subdomains = source.subdomains;
-
-    const requestedIndex = sourceIndex;
-    const tileLayer = window.L.tileLayer(source.url, layerOptions);
-    this.currentTileLayer = tileLayer;
-    let tileLoaded = false;
-    let fallbackStarted = false;
-    let tileErrorCount = 0;
-    let fallbackTimer = null;
-
-    const fallbackToNextSource = (reason) => {
-      if (fallbackStarted || tileLoaded || this.activeLayerKey !== layerKey || this.currentTileLayer !== tileLayer || this.tileLoadToken !== loadToken) return;
-      fallbackStarted = true;
-      if (fallbackTimer) window.clearTimeout(fallbackTimer);
-      this.sourceAttempt = requestedIndex + 1;
-      console.warn(`${config.name} 圖磚來源 ${requestedIndex + 1} 失敗，嘗試備援來源。`, reason || "");
-      this.loadTileSource(layerKey);
-    };
-
-    tileLayer.on("tileload", () => {
-      if (this.activeLayerKey !== layerKey || this.currentTileLayer !== tileLayer || this.tileLoadToken !== loadToken) return;
-      tileLoaded = true;
-      this.sourceAttempt = requestedIndex;
-      this.failedTileProviders.delete(layerKey);
-      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+    const config = this.tileProviders[layerKey]; this.activeLayerKey = layerKey;
+    const status = document.getElementById("map-load-status"); if (status) status.textContent = `${config.name}樣式載入中…`;
+    this.layersReady = false;
+    this.layerInstallAttempts = 0;
+    this.map.setStyle(config.style, { diff: false });
+    this.map.once("style.load", () => {
+      if (this.activeLayerKey !== layerKey) return;
+      this.layersReady = false;
+      this.ensureLayersInstalled();
       if (status) status.textContent = "";
     });
-
-    tileLayer.on("tileerror", (event) => {
-      if (this.activeLayerKey !== layerKey || this.currentTileLayer !== tileLayer || this.tileLoadToken !== loadToken || tileLoaded) return;
-      tileErrorCount += 1;
-      // 單張圖磚可能是服務端暫時缺圖，累積錯誤後才切換來源，避免畫面閃爍。
-      if (tileErrorCount >= 3) fallbackToNextSource(event && event.error);
-    });
-
-    tileLayer.once("load", () => {
-      if (this.activeLayerKey === layerKey && this.currentTileLayer === tileLayer && this.tileLoadToken === loadToken && status) {
-        status.textContent = "";
-      }
-    });
-
-    this.map.addLayer(tileLayer);
-
-    // Keep the primary layer during interaction; switch only if it never yields a tile.
-    fallbackTimer = window.setTimeout(() => {
-      if (this.activeLayerKey !== layerKey || this.currentTileLayer !== tileLayer || this.tileLoadToken !== loadToken || tileLoaded) return;
-      if (requestedIndex + 1 < sources.length) {
-        fallbackToNextSource("圖磚逾時");
-      } else if (status) {
-        status.textContent = `${config.name}載入逾時，請檢查網路連線後切換圖層重試。`;
-      }
-    }, 4500);
   }
 
-  setNavigationAnimationEnabled(enabled) {
-    this.navigationAnimationEnabled = Boolean(enabled);
-  }
-
-  // 渲染大洲層級的懸浮地標徽章
+  setNavigationAnimationEnabled(enabled) { this.navigationAnimationEnabled = Boolean(enabled); }
+  animateAllowed(animate = true) { return animate && this.navigationAnimationEnabled && !this.prefersReducedMotion; }
   renderContinentMarkers() {
-    this.continentMarkersLayer.clearLayers();
-    const continents = window.GEO_CONTINENTS;
-    if (!continents) return;
-
-    Object.keys(continents).forEach(key => {
-      const cont = continents[key];
-      const customIcon = window.L.divIcon({
-        className: "custom-continent-marker",
-        html: `
-          <div class="continent-pin-badge" data-continent-id="${cont.id}">
-            <span class="pin-icon">🌏</span>
-            <span class="pin-name">${cont.name}</span>
-          </div>
-        `,
-        iconSize: [110, 36],
-        iconAnchor: [55, 18]
-      });
-
-      const marker = window.L.marker(cont.center, { icon: customIcon });
-      marker.on("click", (e) => {
-        if (window.L && window.L.DomEvent) window.L.DomEvent.stopPropagation(e);
-        this.flyToContinent(cont.id);
-        this.onContinentSelect(cont.id);
-      });
-      this.continentMarkersLayer.addLayer(marker);
-    });
-
-    this.renderCityMarkers();
+    this.geojson.continents = this.emptyCollection();
+    Object.entries(window.GEO_CONTINENTS || {}).forEach(([id, continent]) => this.geojson.continents.features.push(this.feature(`continent-${id}`, [continent.center[1], continent.center[0]], { kind: "continent", id, label: `🌏 ${continent.name}` })));
+    this.syncSource("continents");
   }
-
-  // 渲染熱門城市地標 (支援多縮放細節 LOD)
   renderCityMarkers() {
-    if (!this.cityMarkersLayer || !this.globalCityMarkersLayer) return;
-    this.cityMarkersLayer.clearLayers();
-    this.globalCityMarkersLayer.clearLayers();
-
-    const globalCities = window.TRAVEL_DATA?.globalCities || [];
-    this.globalCityMarkers = [];
-    globalCities.forEach(city => {
-      if (!Number.isFinite(city.lat) || !Number.isFinite(city.lng)) return;
-
-      const cityIcon = window.L.divIcon({
-        className: "custom-global-city-marker",
-        html: `
-          <div class="global-city-pin-badge" title="${city.name} (${city.countryName})">
-            <span class="global-city-pin-dot"></span>
-            <span class="global-city-pin-text">${city.flag} ${city.name}</span>
-          </div>
-        `,
-        iconSize: [118, 28],
-        iconAnchor: [59, 14]
-      });
-      const marker = window.L.marker([city.lat, city.lng], {
-        icon: cityIcon,
-        title: `${city.name} (${city.countryName})`,
-        riseOnHover: true
-      });
-      marker.on("click", event => {
-        if (window.L?.DomEvent) window.L.DomEvent.stopPropagation(event);
+    this.geojson.globalCities = this.emptyCollection();
+    (window.TRAVEL_DATA?.globalCities || []).forEach(city => {
+      const lat = Number(city.lat);
+      const lng = Number(city.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) this.geojson.globalCities.features.push(this.feature(city.id, [lng, lat], { kind: "global-city", cityId: city.id, rank: Number(city.travelRank) || 999, label: `${city.flag || ""} ${city.name}`.trim(), name: city.name, country: city.countryName || "" }));
+    });
+    this.geojson.cities = this.emptyCollection();
+    (window.TRAVEL_DATA?.countries || []).forEach(country => (country.cities || []).forEach(city => {
+      const lat = Number(city.lat);
+      const lng = Number(city.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) this.geojson.cities.features.push(this.feature(city.id, [lng, lat], { kind: "local-city", cityId: city.id, countryId: country.id, continentId: country.continentId, label: `${country.flag || ""} ${city.name}`.trim() }));
+    }));
+    this.syncSource("globalCities"); this.syncSource("cities");
+  }
+  renderGlobalCityDomMarkers() {
+    if (!this.map || !window.maplibregl) return;
+    this.globalCityDomMarkers.forEach(marker => marker.remove());
+    this.globalCityDomMarkers.clear();
+    (window.TRAVEL_DATA?.globalCities || []).forEach(city => {
+      const lat = Number(city.lat);
+      const lng = Number(city.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = `map-global-city-marker city-tier-${this.getCityTier(city)}`;
+      element.title = `${city.name} (${city.countryName || ""})`;
+      element.innerHTML = `<span class="map-global-city-dot"></span><span class="map-global-city-label">${this.escapePopupText(`${city.flag || ""} ${city.name}`.trim())}</span>`;
+      element.addEventListener("click", event => {
+        event.stopPropagation();
         this.onGlobalCitySelect(city.id);
       });
-      this.globalCityMarkersLayer.addLayer(marker);
-      this.globalCityMarkers.push({ marker, city });
+      const marker = new window.maplibregl.Marker({ element, anchor: "center" }).setLngLat([lng, lat]).addTo(this.map);
+      this.globalCityDomMarkers.set(city.id, marker);
     });
-
-    if (!window.TRAVEL_DATA?.countries) {
-      this.updateMarkersVisibility();
-      this.scheduleVisibleCityUpdate();
-      return;
-    }
-
-    window.TRAVEL_DATA.countries.forEach(country => {
-      country.cities.forEach(city => {
-        if (!Number.isFinite(city.lat) || !Number.isFinite(city.lng)) return;
-
-        const cityIcon = window.L.divIcon({
-          className: "custom-city-marker",
-          html: `
-            <div class="city-pin-badge" title="${city.name} (${country.name})">
-              <span class="city-pin-dot"></span>
-              <span class="city-pin-text">${country.flag} ${city.name}</span>
-            </div>
-          `,
-          iconSize: [96, 26],
-          iconAnchor: [48, 13]
-        });
-
-        const marker = window.L.marker([city.lat, city.lng], { icon: cityIcon });
-        marker.on("click", (e) => {
-          if (window.L && window.L.DomEvent) window.L.DomEvent.stopPropagation(e);
-          if (this.onCitySelect) {
-            this.onCitySelect(country.continentId, country.id, city.id);
-          }
-        });
-        this.cityMarkersLayer.addLayer(marker);
-      });
-    });
-
     this.updateMarkersVisibility();
+  }
+  renderOverviewDomMarkers() {
+    if (!this.map || !window.maplibregl) return;
+    [...this.continentDomMarkers.values(), ...this.localCityDomMarkers.values()].forEach(marker => marker.remove());
+    this.continentDomMarkers.clear();
+    this.localCityDomMarkers.clear();
+    const addMarker = (collection, key, coordinates, className, content, title, onClick) => {
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = className;
+      element.title = title;
+      element.innerHTML = content;
+      element.addEventListener("click", event => {
+        event.stopPropagation();
+        onClick();
+      });
+      collection.set(key, new window.maplibregl.Marker({ element, anchor: "center" }).setLngLat(coordinates).addTo(this.map));
+    };
+    Object.entries(window.GEO_CONTINENTS || {}).forEach(([id, continent]) => {
+      addMarker(this.continentDomMarkers, id, [continent.center[1], continent.center[0]], "map-continent-marker", `<span class="map-continent-label">🌏 ${this.escapePopupText(continent.name)}</span>`, continent.name, () => this.onContinentSelect(id));
+    });
+    (window.TRAVEL_DATA?.countries || []).forEach(country => (country.cities || []).forEach(city => {
+      const lat = Number(city.lat);
+      const lng = Number(city.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      addMarker(this.localCityDomMarkers, `${country.id}:${city.id}`, [lng, lat], `map-local-city-marker city-tier-${this.getCityTier(city)}`, `<span class="map-local-city-dot"></span><span class="map-local-city-label">${this.escapePopupText(`${country.flag || ""} ${city.name}`.trim())}</span>`, `${city.name} (${country.name})`, () => this.onCitySelect(country.continentId, country.id, city.id));
+    }));
+    this.updateMarkersVisibility();
+  }
+  getCityTier(city) {
+    const globalCity = (window.TRAVEL_DATA?.globalCities || []).find(item => item.id === city.id);
+    const rank = Number(globalCity?.populationRank || globalCity?.travelRank);
+    if (Number.isFinite(rank)) return rank <= 30 ? "major" : rank <= 70 ? "medium" : "small";
+    if (Array.isArray(city.airports) && city.airports.length) return "medium";
+    return "small";
+  }
+  scheduleVisibleCityUpdate() {
+    if (!this.map || this.visibleCityUpdateFrame !== null) return;
+    this.visibleCityUpdateFrame = window.requestAnimationFrame(() => {
+      this.visibleCityUpdateFrame = null; if (!this.map || !this.layersReady) return;
+      ["global-city-clusters", "global-city-cluster-count", "global-city-symbols", "global-city-labels"].forEach(id => this.map.getLayer(id)?.setLayoutProperty("visibility", "none"));
+    });
+  }
+  updateVisibleGlobalCities() { this.scheduleVisibleCityUpdate(); }
+  updateMarkersVisibility() {
+    if (!this.map || !this.layersReady) return;
+    const world = !this.currentCityContext, zoom = this.map.getZoom();
+    this.map.getLayer("continent-symbols")?.setLayoutProperty("visibility", world && zoom < 3.4 ? "visible" : "none");
+    ["city-circles", "city-symbols"].forEach(id => this.map.getLayer(id)?.setLayoutProperty("visibility", "none"));
+    ["global-city-symbols", "global-city-labels", "global-city-clusters", "global-city-cluster-count"].forEach(id => this.map.getLayer(id)?.setLayoutProperty("visibility", "none"));
+    this.globalCityDomMarkers.forEach(marker => {
+      const element = marker.getElement();
+      const tier = element.classList.contains("city-tier-major") ? "major" : element.classList.contains("city-tier-medium") ? "medium" : "small";
+      const minimumZoom = tier === "major" ? 2.2 : tier === "medium" ? 3.2 : 4.6;
+      element.hidden = !world || zoom < minimumZoom;
+      element.classList.toggle("labels-visible", zoom >= (tier === "major" ? 2.8 : tier === "medium" ? 3.8 : 5.2));
+    });
+    this.cityContextDomMarkers.forEach(marker => {
+      marker.getElement().hidden = !this.currentCityContext;
+      marker.getElement().classList.toggle("labels-visible", Boolean(this.currentCityContext) && zoom >= 7.5);
+    });
+    this.continentDomMarkers.forEach(marker => {
+      marker.getElement().hidden = !world || zoom >= 3.4;
+    });
+    this.localCityDomMarkers.forEach(marker => {
+      const element = marker.getElement();
+      const tier = element.classList.contains("city-tier-major") ? "major" : element.classList.contains("city-tier-medium") ? "medium" : "small";
+      const minimumZoom = tier === "major" ? 4.0 : tier === "medium" ? 4.6 : 5.2;
+      element.hidden = !world || zoom < minimumZoom;
+      element.classList.toggle("labels-visible", zoom >= (tier === "major" ? 3.8 : tier === "medium" ? 4.7 : 5.8));
+    });
     this.scheduleVisibleCityUpdate();
   }
-
-  // 合併地圖移動期間的標籤計算，避免重複掃描 200 個城市。
-  scheduleVisibleCityUpdate() {
-    if (!this.map || !this.globalCityMarkers) return;
-    if (this.visibleCityUpdateFrame !== null) return;
-    this.visibleCityUpdateFrame = window.requestAnimationFrame(() => {
-      this.visibleCityUpdateFrame = null;
-      this.updateVisibleGlobalCities();
-    });
-  }
-
-  // 依地圖視窗與熱門度顯示少量城市標籤，避免全球城市名稱互相遮擋。
-  updateVisibleGlobalCities() {
-    if (!this.map || !this.globalCityMarkers || !this.map.hasLayer(this.globalCityMarkersLayer)) return;
-    const bounds = this.map.getBounds().pad(0.08);
-    const maxLabels = this.isCoarsePointer ? 10 : 18;
-    const zoom = this.map.getZoom();
-    const candidates = this.globalCityMarkers
-      .filter(({ marker }) => marker.getOpacity() > 0 && bounds.contains(marker.getLatLng()))
-      .filter(({ city }) => city.travelRank <= maxLabels || (zoom >= 5.2 && city.travelRank <= maxLabels * 2))
-      .sort((a, b) => a.city.travelRank - b.city.travelRank)
-      .slice(0, maxLabels);
-    const visibleMarkers = new Set(candidates.map(item => item.marker));
-    this.globalCityMarkers.forEach(({ marker }) => {
-      const label = marker.getElement()?.querySelector(".global-city-pin-text");
-      if (label && label.hidden !== !visibleMarkers.has(marker)) {
-        label.hidden = !visibleMarkers.has(marker);
-      }
-    });
-  }
-
-  // 根據縮放等級調整標記顯隱
-  updateMarkersVisibility() {
-    if (!this.map || !this.cityMarkersLayer || !this.globalCityMarkersLayer) return;
-    const currentZoom = this.map.getZoom();
-    const mapContainer = this.map.getContainer();
-    mapContainer.classList.toggle("global-city-labels-visible", currentZoom >= 4.2);
-    if (currentZoom >= 2.2) {
-      if (!this.map.hasLayer(this.globalCityMarkersLayer)) {
-        this.map.addLayer(this.globalCityMarkersLayer);
-      }
-    } else {
-      if (this.map.hasLayer(this.globalCityMarkersLayer)) {
-        this.map.removeLayer(this.globalCityMarkersLayer);
-      }
-    }
-
-    if (currentZoom >= 4.2) {
-      if (!this.map.hasLayer(this.cityMarkersLayer)) {
-        this.map.addLayer(this.cityMarkersLayer);
-      }
-    } else {
-      if (this.map.hasLayer(this.cityMarkersLayer)) {
-        this.map.removeLayer(this.cityMarkersLayer);
-      }
-    }
-  }
-
-  // 平滑飛向特定大洲（下鑽動畫）
   flyToContinent(continentId, { animate = true } = {}) {
-    const cont = window.GEO_CONTINENTS?.[continentId];
-    if (!cont || !this.map) return;
-    const bounds = window.L.latLngBounds(cont.bounds);
-    if (!animate || !this.navigationAnimationEnabled || this.prefersReducedMotion) {
-      this.map.stop();
-      this.map.fitBounds(bounds, { padding: this.isCoarsePointer ? [28, 28] : [48, 48], maxZoom: cont.zoom || 5, animate: false });
-      return;
-    }
-    this.map.flyToBounds(bounds, {
-      padding: this.isCoarsePointer ? [28, 28] : [48, 48],
-      maxZoom: cont.zoom || 5,
-      duration: this.isCoarsePointer ? 1.1 : 1.45,
-      easeLinearity: 0.22
-    });
+    const continent = window.GEO_CONTINENTS?.[continentId]; if (!continent || !this.map) return;
+    const bounds = [[continent.bounds[0][1], continent.bounds[0][0]], [continent.bounds[1][1], continent.bounds[1][0]]];
+    this.map.stop(); this.map.fitBounds(bounds, { padding: this.isCoarsePointer ? 28 : 48, maxZoom: continent.zoom || 5, duration: this.animateAllowed(animate) ? 1200 : 0, essential: false });
   }
-
-  // 聚焦至特定城市
   flyToCity(lat, lng, zoom = 7, { animate = true } = {}) {
     if (!this.map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    if (!animate || !this.navigationAnimationEnabled || this.prefersReducedMotion) {
-      this.map.stop();
-      this.map.setView([lat, lng], zoom, { animate: false });
-      return;
-    }
-    this.map.flyTo([lat, lng], zoom, {
-      animate: true,
-      duration: this.isCoarsePointer ? 0.85 : 1.1,
-      easeLinearity: 0.2
-    });
+    this.map.stop(); const opts = { center: [lng, lat], zoom, duration: this.animateAllowed(animate) ? (this.isCoarsePointer ? 700 : 1000) : 0, essential: false };
+    if (opts.duration) this.map.flyTo(opts); else this.map.jumpTo(opts);
   }
-
   showCityContext(city, { animate = true } = {}) {
     if (!this.map || !city || !Number.isFinite(city.lat) || !Number.isFinite(city.lng)) return;
-    this.currentCityContext = city;
-    [this.continentMarkersLayer, this.cityMarkersLayer, this.globalCityMarkersLayer].forEach(layer => {
-      if (layer && this.map.hasLayer(layer)) this.map.removeLayer(layer);
+    this.currentCityContext = city; this.clearCitySpots();
+    const sourceSpots = Array.isArray(city.spots) && city.spots.length ? city.spots : [{
+      name: `${city.name} 城市地標`,
+      category: "城市地標",
+      rating: "—",
+      note: "此城市目前尚未提供精確景點座標，先以城市中心作為探索入口。"
+    }];
+    const spots = sourceSpots.map((spot, index) => {
+      const hasCoords = Number.isFinite(spot.lat) && Number.isFinite(spot.lng);
+      const coordinates = hasCoords ? [spot.lng, spot.lat] : [city.lng + ((index % 3) - 1) * 0.008, city.lat + (Math.floor(index / 3) - 1) * 0.008];
+      const feature = this.feature(`${city.id}-spot-${index}`, coordinates, { kind: "spot", cityId: city.id, index, name: spot.name, label: `${index + 1}. ${spot.name}`, category: spot.category || "景點", rating: spot.rating || "—", note: spot.note || "精選景點", approximate: !hasCoords });
+      this.citySpotMarkers.set(`${city.id}:${index}`, { feature, city, spot, index });
+      if (!hasCoords) window.SpotService?.fetchSpotDetail(spot.name, city.name, city).then(detail => {
+        if (!detail?.location || this.citySpotMarkers.get(`${city.id}:${index}`)?.feature !== feature) return;
+        this.updateSpotDetail(city.id, index, detail);
+      }).catch(error => console.warn(`無法定位「${spot.name}」：`, error));
+      return feature;
     });
-    [this.citySpotsLayer, this.cityAirportLayer, this.cityCenterLayer].forEach(layer => {
-      if (layer && !this.map.hasLayer(layer)) this.map.addLayer(layer);
-    });
-    this.clearCitySpots();
-    this.renderCitySpotMarkers(city);
-    this.renderCityContextMarkers(city);
-    if (!animate || !this.navigationAnimationEnabled || this.prefersReducedMotion) {
-      this.map.stop();
-      this.map.setView([city.lat, city.lng], 11, { animate: false });
-    } else {
-      this.flyToCity(city.lat, city.lng, 11, { animate: true });
-    }
+    this.geojson.spots = { type: "FeatureCollection", features: [{ type: "Feature", id: `${city.id}-center`, properties: { kind: "center", cityId: city.id, label: `${city.name} 市中心` }, geometry: { type: "Point", coordinates: [city.lng, city.lat] } }, ...spots] };
+    this.geojson.airports = { type: "FeatureCollection", features: this.getAirportData(city).filter(a => Number.isFinite(a.lat) && Number.isFinite(a.lng)).map((a, i) => this.feature(`${city.id}-airport-${i}`, [a.lng, a.lat], { kind: "airport", name: `${a.name} (${a.code})`, label: `✈ ${a.code}` })) };
+    this.syncSource("spots"); this.syncSource("airports"); this.geojson.routes = this.emptyCollection(); this.syncSource("routes");
+    this.renderCityContextDomMarkers();
+    this.updateMarkersVisibility();
+    this.map.resize();
     this.fitCityContext(city, animate);
   }
-
   restoreOverviewMarkers() {
-    if (!this.map) return;
-    this.currentCityContext = null;
-    if (this.visibleCityUpdateFrame !== null) {
-      window.cancelAnimationFrame(this.visibleCityUpdateFrame);
-      this.visibleCityUpdateFrame = null;
-    }
-    if (this.continentMarkersLayer && !this.map.hasLayer(this.continentMarkersLayer)) {
-      this.map.addLayer(this.continentMarkersLayer);
-    }
-    this.updateMarkersVisibility();
-    this.scheduleVisibleCityUpdate();
+    this.currentCityContext = null; this.clearCitySpots(); this.geojson.routes = this.emptyCollection(); this.syncSource("routes"); this.updateMarkersVisibility();
   }
-
   clearCitySpots() {
-    if (this.citySpotsLayer) this.citySpotsLayer.clearLayers();
-    if (this.cityAirportLayer) this.cityAirportLayer.clearLayers();
-    if (this.cityCenterLayer) this.cityCenterLayer.clearLayers();
-    this.citySpotMarkers.clear();
+    this.citySpotMarkers.clear(); this.geojson.spots = this.emptyCollection(); this.geojson.airports = this.emptyCollection();
+    this.cityContextDomMarkers.forEach(marker => marker.remove());
+    this.cityContextDomMarkers.clear();
+    this.syncSource("spots"); this.syncSource("airports");
   }
-
+  renderCityContextDomMarkers() {
+    if (!this.map || !window.maplibregl) return;
+    this.cityContextDomMarkers.forEach(marker => marker.remove());
+    this.cityContextDomMarkers.clear();
+    const addMarker = (coordinates, className, content, title, onClick) => {
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = `${className} map-context-landmark`;
+      element.title = title;
+      element.innerHTML = content;
+      element.addEventListener("click", event => {
+        event.stopPropagation();
+        onClick?.();
+      });
+      const marker = new window.maplibregl.Marker({ element, anchor: "center" }).setLngLat(coordinates).addTo(this.map);
+      this.cityContextDomMarkers.set(`${className}-${this.cityContextDomMarkers.size}`, marker);
+    };
+    const city = this.currentCityContext;
+    addMarker([city.lng, city.lat], "map-city-center-marker", `<span class="city-center-pin">●</span>`, `${city.name} 市中心`, () => {
+      new window.maplibregl.Popup({ maxWidth: "260px" }).setLngLat([city.lng, city.lat]).setHTML(`<strong>${this.escapePopupText(city.name)} 市中心</strong><p>城市探索中心位置。</p>`).addTo(this.map);
+    });
+    this.geojson.spots.features.filter(feature => feature.properties.kind === "spot").forEach(feature => {
+      const properties = feature.properties;
+      addMarker(feature.geometry.coordinates, "map-spot-marker", `<span class="spot-pin-number"><b>${Number(properties.index) + 1}</b></span><span class="map-context-landmark-label">${this.escapePopupText(properties.name)}</span>`, properties.name, () => this.openSpotPopup(feature));
+    });
+    this.geojson.airports.features.forEach(feature => {
+      const properties = feature.properties;
+      addMarker(feature.geometry.coordinates, "map-airport-marker", `<span class="airport-pin">✈</span><span class="map-context-landmark-label">${this.escapePopupText(properties.name)}</span>`, properties.name, () => {
+        new window.maplibregl.Popup({ maxWidth: "280px" }).setLngLat(feature.geometry.coordinates).setHTML(`<strong>${this.escapePopupText(properties.name)}</strong><p>城市交通節點，建議出發前確認航班與接駁方式。</p>`).addTo(this.map);
+      });
+    });
+  }
   getAirportData(city) {
     if (Array.isArray(city.airports)) return city.airports;
-    const airportCatalog = {
+    const catalog = {
       "東京": [{ name: "成田國際機場", code: "NRT", lat: 35.772, lng: 140.392 }, { name: "羽田機場", code: "HND", lat: 35.549, lng: 139.779 }],
-      "大阪": [{ name: "關西國際機場", code: "KIX", lat: 34.434, lng: 135.244 }],
-      "京都": [{ name: "關西國際機場", code: "KIX", lat: 34.434, lng: 135.244 }],
+      "大阪": [{ name: "關西國際機場", code: "KIX", lat: 34.434, lng: 135.244 }], "京都": [{ name: "關西國際機場", code: "KIX", lat: 34.434, lng: 135.244 }],
       "首爾": [{ name: "仁川國際機場", code: "ICN", lat: 37.46, lng: 126.441 }, { name: "金浦機場", code: "GMP", lat: 37.558, lng: 126.791 }],
-      "曼谷": [{ name: "蘇凡納布國際機場", code: "BKK", lat: 13.69, lng: 100.75 }],
-      "新加坡": [{ name: "樟宜機場", code: "SIN", lat: 1.364, lng: 103.991 }],
+      "曼谷": [{ name: "蘇凡納布國際機場", code: "BKK", lat: 13.69, lng: 100.75 }], "新加坡": [{ name: "樟宜機場", code: "SIN", lat: 1.364, lng: 103.991 }],
       "巴黎": [{ name: "戴高樂機場", code: "CDG", lat: 49.009, lng: 2.548 }, { name: "奧利機場", code: "ORY", lat: 48.726, lng: 2.365 }],
-      "倫敦": [{ name: "希斯洛機場", code: "LHR", lat: 51.47, lng: -0.454 }],
-      "雪梨": [{ name: "雪梨機場", code: "SYD", lat: -33.946, lng: 151.177 }],
-      "洛杉磯": [{ name: "洛杉磯國際機場", code: "LAX", lat: 33.942, lng: -118.408 }],
-      "舊金山": [{ name: "舊金山國際機場", code: "SFO", lat: 37.621, lng: -122.379 }],
-      "台北": [{ name: "桃園國際機場", code: "TPE", lat: 25.079, lng: 121.235 }]
+      "倫敦": [{ name: "希斯洛機場", code: "LHR", lat: 51.47, lng: -0.454 }], "雪梨": [{ name: "雪梨機場", code: "SYD", lat: -33.946, lng: 151.177 }],
+      "洛杉磯": [{ name: "洛杉磯國際機場", code: "LAX", lat: 33.942, lng: -118.408 }], "舊金山": [{ name: "舊金山國際機場", code: "SFO", lat: 37.621, lng: -122.379 }, { name: "桃園國際機場", code: "TPE", lat: 25.079, lng: 121.235 }]
     };
-    return airportCatalog[city.name] || [];
+    return catalog[city.name] || [];
   }
-
-  getSpotCoordinates(city, spot, index) {
-    if (Number.isFinite(spot.lat) && Number.isFinite(spot.lng)) {
-      return [spot.lat, spot.lng];
-    }
-    // Do not invent coordinates: request a real OSM place match, otherwise keep a
-    // clearly identified city-level fallback marker until the lookup completes.
-    return [city.lat, city.lng];
-  }
-
-  escapePopupText(value) {
-    return String(value || "").replace(/[&<>"']/g, character => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    }[character]));
-  }
-
+  escapePopupText(value) { return String(value || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   createSpotPopup(city, spot, index, detail = null) {
-    const title = this.escapePopupText(detail?.title || spot.name);
-    const description = this.escapePopupText(detail?.extract || spot.note || "精選景點");
-    const category = this.escapePopupText(spot.category || "景點");
-    return `
-      <div class="map-spot-popup">
-        <strong>#${index + 1} ${title}</strong>
-        <span>${category} · ★ ${this.escapePopupText(spot.rating)}</span>
-        <p>${description}</p>
-        <button type="button" data-map-spot-index="${index}">查看景點詳細資訊</button>
-      </div>
-    `;
+    return `<div class="map-spot-popup"><strong>#${index + 1} ${this.escapePopupText(detail?.title || spot.name)}</strong><span>${this.escapePopupText(spot.category || "景點")} · ★ ${this.escapePopupText(spot.rating || "—")}</span><p>${this.escapePopupText(detail?.extract || spot.note || "精選景點")}</p><button type="button" data-map-spot-index="${index}">查看景點詳細資訊</button></div>`;
   }
-
-  renderCitySpotMarkers(city) {
-    if (!this.citySpotsLayer || !Array.isArray(city.spots)) return;
-    city.spots.forEach((spot, index) => {
-      const coordinates = this.getSpotCoordinates(city, spot, index);
-      const icon = window.L.divIcon({
-        className: "custom-spot-marker",
-        html: `<span class="spot-pin-number"><b>${index + 1}</b></span>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
-      });
-      const marker = window.L.marker(coordinates, { icon, title: spot.name });
-      marker.bindPopup(this.createSpotPopup(city, spot, index));
-      marker.on("popupopen", event => {
-        event.popup.getElement()?.querySelector("[data-map-spot-index]")?.addEventListener("click", () => {
-          const card = document.querySelector(`[data-city-id="${city.id}"][data-spot-index="${index}"]`);
-          card?.scrollIntoView({ behavior: "smooth", block: "center" });
-          card?.classList.add("spot-item-map-focus");
-          window.setTimeout(() => card?.classList.remove("spot-item-map-focus"), 1600);
-        });
-      });
-      this.citySpotsLayer.addLayer(marker);
-      this.citySpotMarkers.set(`${city.id}:${index}`, { marker, city, spot, index });
-      if (!Number.isFinite(spot.lat) || !Number.isFinite(spot.lng)) {
-        window.SpotService?.fetchSpotDetail(spot.name, city.name, city).then(detail => {
-          if (!detail?.location || this.citySpotMarkers.get(`${city.id}:${index}`)?.marker !== marker) return;
-          this.updateSpotDetail(city.id, index, detail);
-          this.fitCityContext(city, false);
-        }).catch(error => console.warn(`無法定位「${spot.name}」：`, error));
-      }
+  openSpotPopup(feature) {
+    const p = feature.properties || {}, entry = this.citySpotMarkers.get(`${p.cityId}:${p.index}`); if (!entry) return;
+    const popup = new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates).setHTML(this.createSpotPopup(entry.city, entry.spot, entry.index)).addTo(this.map);
+    popup.getElement().querySelector("[data-map-spot-index]")?.addEventListener("click", () => {
+      const card = document.querySelector(`[data-city-id="${entry.city.id}"][data-spot-index="${entry.index}"]`);
+      card?.scrollIntoView({ behavior: this.prefersReducedMotion ? "auto" : "smooth", block: "center" }); card?.classList.add("spot-item-map-focus");
+      window.setTimeout(() => card?.classList.remove("spot-item-map-focus"), 1600); popup.remove();
     });
   }
-
-  fitCityContext(city, animate = true) {
-    if (!this.map || !this.citySpotsLayer || !this.cityCenterLayer) return;
-    animate = animate && this.currentCityContext?.id === city.id;
-    const points = [];
-    this.citySpotMarkers.forEach(({ city: markerCity, marker, spot }) => {
-      if (markerCity.id === city.id && Number.isFinite(spot.lat) && Number.isFinite(spot.lng)) points.push(marker.getLatLng());
-    });
-    const airports = this.getAirportData(city).filter(airport => Number.isFinite(airport.lat) && Number.isFinite(airport.lng));
-    const fitPoints = [...points, ...airports.map(airport => window.L.latLng(airport.lat, airport.lng))];
-    if (fitPoints.length > 1) {
-      const bounds = window.L.latLngBounds(fitPoints);
-      if (bounds.isValid()) {
-        if (animate && this.navigationAnimationEnabled && !this.prefersReducedMotion) {
-          this.map.flyToBounds(bounds, {
-            padding: this.isCoarsePointer ? [56, 56] : [76, 76],
-            maxZoom: 13,
-            duration: this.isCoarsePointer ? 0.75 : 0.95
-          });
-        } else {
-          this.map.fitBounds(bounds, { padding: [48, 48], maxZoom: 13, animate: false });
-        }
-      }
-    }
-  }
-
-  renderCityContextMarkers(city) {
-    if (!this.cityCenterLayer || !this.cityAirportLayer) return;
-    const centerIcon = window.L.divIcon({
-      className: "custom-city-center-marker",
-      html: '<span class="city-center-pin">●</span>',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
-    });
-    window.L.marker([city.lat, city.lng], { icon: centerIcon, title: `${city.name}市中心` })
-      .bindTooltip(`${city.name} 市中心`, { direction: "top", offset: [0, -10] })
-      .addTo(this.cityCenterLayer);
-
-    const airportIcon = window.L.divIcon({
-      className: "custom-airport-marker",
-      html: '<span class="airport-pin">✈</span>',
-      iconSize: [30, 30],
-      iconAnchor: [15, 15]
-    });
-    this.getAirportData(city).forEach(airport => {
-      if (!Number.isFinite(airport.lat) || !Number.isFinite(airport.lng)) return;
-      const label = `${airport.name} (${airport.code})`;
-      window.L.marker([airport.lat, airport.lng], { icon: airportIcon, title: label })
-        .bindPopup(`<strong>${this.escapePopupText(label)}</strong><p>城市交通節點，建議出發前確認航班與接駁方式。</p>`)
-        .addTo(this.cityAirportLayer);
-    });
-  }
-
   updateSpotDetail(cityId, index, detail) {
-    const entry = this.citySpotMarkers.get(`${cityId}:${index}`);
-    if (!entry || !detail) return;
-    const hasRealCoordinates = Number.isFinite(detail.location?.latitude) && Number.isFinite(detail.location?.longitude)
-      && detail.location.category !== "city";
-    if (hasRealCoordinates) {
-      entry.marker.setLatLng([detail.location.latitude, detail.location.longitude]);
-      entry.spot.lat = detail.location.latitude;
-      entry.spot.lng = detail.location.longitude;
-      entry.marker.setOpacity(1);
-      entry.marker.setZIndexOffset(100 + index);
-    } else {
-      entry.marker.setOpacity(0.5);
+    const entry = this.citySpotMarkers.get(`${cityId}:${index}`); if (!entry || !detail) return;
+    const loc = detail.location;
+    if (Number.isFinite(loc?.latitude) && Number.isFinite(loc?.longitude) && loc.category !== "city") {
+      entry.spot.lat = loc.latitude; entry.spot.lng = loc.longitude; entry.feature.geometry.coordinates = [loc.longitude, loc.latitude]; entry.feature.properties.approximate = false;
     }
-    entry.marker.setPopupContent(this.createSpotPopup(entry.city, entry.spot, index, detail));
+    this.syncSource("spots");
   }
-
-  // 顯示桃園 TPE 至直飛目的地的弧線航線。
-  showFlightRoute(destination, hasDirect = false) {
-    this.clearFlightRoute();
-    if (!this.map || !this.flightRouteLayer || !hasDirect
-      || !destination || !Number.isFinite(destination.lat) || !Number.isFinite(destination.lng)) return;
-
-    const origin = this.flightOrigin;
-    const target = [destination.lat, destination.lng];
-    const longitudeDelta = target[1] - origin[1];
-    const midpoint = [
-      (origin[0] + target[0]) / 2 + Math.min(18, Math.max(7, Math.abs(longitudeDelta) * 0.08)),
-      origin[1] + longitudeDelta / 2
-    ];
-    const points = [];
-    for (let index = 0; index <= 40; index += 1) {
-      const t = index / 40;
-      const inverse = 1 - t;
-      points.push([
-        inverse * inverse * origin[0] + 2 * inverse * t * midpoint[0] + t * t * target[0],
-        inverse * inverse * origin[1] + 2 * inverse * t * midpoint[1] + t * t * target[1]
-      ]);
-    }
-
-    const route = window.L.polyline(points, {
-      className: "flight-route-line",
-      color: "#0f766e",
-      weight: 3,
-      opacity: 0.9,
-      dashArray: "8 12",
-      lineCap: "round",
-      interactive: false
-    });
-    const originMarker = window.L.circleMarker(origin, {
-      className: "flight-route-origin",
-      radius: 5,
-      color: "#0f766e",
-      weight: 2,
-      fillColor: "#ffffff",
-      fillOpacity: 1
-    }).bindTooltip("桃園 TPE", { direction: "top", offset: [0, -4] });
-    const destinationMarker = window.L.circleMarker(target, {
-      className: "flight-route-destination",
-      radius: 6,
-      color: "#f97316",
-      weight: 2,
-      fillColor: "#fff7ed",
-      fillOpacity: 1
-    }).bindTooltip(`${destination.name || "目的地"} 直飛`, { direction: "top", offset: [0, -5] });
-
-    this.flightRouteLayer.addLayer(route);
-    this.flightRouteLayer.addLayer(originMarker);
-    this.flightRouteLayer.addLayer(destinationMarker);
-  }
-
-  clearFlightRoute() {
-    if (this.flightRouteLayer) this.flightRouteLayer.clearLayers();
-  }
-
-  // 重設至世界全景
-  flyToWorld({ animate = true } = {}) {
-    if (!this.map) return;
-    if (!animate || !this.navigationAnimationEnabled || this.prefersReducedMotion) {
-      this.map.stop();
-      this.map.setView(this.defaultCenter, this.defaultZoom, { animate: false });
+  fitCityContext(city, animate = true) {
+    if (!this.map || this.currentCityContext?.id !== city.id) return;
+    const points = [[city.lng, city.lat], ...this.geojson.spots.features.map(item => item.geometry.coordinates), ...this.geojson.airports.features.map(item => item.geometry.coordinates)];
+    if (points.length < 2) {
+      this.flyToCity(city.lat, city.lng, 11, { animate });
       return;
     }
-    this.map.flyTo(this.defaultCenter, this.defaultZoom, {
-      duration: this.isCoarsePointer ? 0.75 : 1,
-      easeLinearity: 0.2
-    });
+    const bounds = points.reduce((b, point) => b.extend(point), new window.maplibregl.LngLatBounds(points[0], points[0]));
+    if (!bounds.isEmpty()) this.map.fitBounds(bounds, { padding: this.isCoarsePointer ? 48 : 68, maxZoom: 11, duration: this.animateAllowed(animate) ? 900 : 0, essential: false });
+    else this.flyToCity(city.lat, city.lng, 11, { animate });
   }
-
-  zoomIn() {
-    if (this.map) {
-      this.map.zoomIn(1, { animate: true });
-    }
+  showFlightRoute(destination, hasDirect = false) {
+    this.geojson.routes = this.emptyCollection();
+    if (!hasDirect || !destination || !Number.isFinite(destination.lat) || !Number.isFinite(destination.lng)) { this.syncSource("routes"); return; }
+    const o = this.flightOrigin, t = [destination.lat, destination.lng], delta = t[1] - o[1], mid = [(o[0] + t[0]) / 2 + Math.min(18, Math.max(7, Math.abs(delta) * 0.08)), o[1] + delta / 2], coordinates = [];
+    for (let i = 0; i <= 40; i += 1) { const x = i / 40, y = 1 - x; const lat = y*y*o[0] + 2*y*x*mid[0] + x*x*t[0]; let lng = y*y*o[1] + 2*y*x*mid[1] + x*x*t[1]; if (lng > 180) lng -= 360; if (lng < -180) lng += 360; coordinates.push([lng, lat]); }
+    this.geojson.routes.features = [this.lineFeature("direct-route", coordinates)]; this.syncSource("routes");
   }
-
-  zoomOut() {
-    if (this.map) {
-      this.map.zoomOut(1, { animate: true });
-    }
+  clearFlightRoute() { this.geojson.routes = this.emptyCollection(); this.syncSource("routes"); }
+  flyToWorld({ animate = true } = {}) {
+    if (!this.map) return;
+    this.currentCityContext = null; this.clearCitySpots(); this.clearFlightRoute(); this.updateMarkersVisibility();
+    const options = { center: [this.defaultCenter[1], this.defaultCenter[0]], zoom: this.defaultZoom, duration: this.animateAllowed(animate) ? 850 : 0, essential: false };
+    this.map.stop(); if (options.duration) this.map.flyTo(options); else this.map.jumpTo(options);
   }
-
-  invalidateSize() {
-    if (!this.map || this.invalidateSizeTimer !== null) return;
-    this.invalidateSizeTimer = window.setTimeout(() => {
-      this.invalidateSizeTimer = null;
-      if (this.map) this.map.invalidateSize({ pan: false, debounceMoveend: true });
-    }, 80);
+  setProjection(mode) {
+    if (!this.map) return;
+    const type = mode === "globe" ? "globe" : "mercator"; this.map.setProjection({ type }); this.tiltedView = type === "globe";
+    this.map.easeTo({ pitch: 0, bearing: 0, duration: this.animateAllowed(true) ? 450 : 0 });
   }
-
-  // 儲存當前視角至記憶庫
+  toggleProjection() { this.setProjection(this.tiltedView ? "mercator" : "globe"); return this.tiltedView; }
+  zoomIn() { this.map?.zoomIn({ duration: this.animateAllowed(true) ? 250 : 0 }); }
+  zoomOut() { this.map?.zoomOut({ duration: this.animateAllowed(true) ? 250 : 0 }); }
+  invalidateSize() { if (!this.map || this.invalidateSizeTimer !== null) return; this.invalidateSizeTimer = window.setTimeout(() => { this.invalidateSizeTimer = null; this.map?.resize(); }, 80); }
   recordCurrentView(scope) {
-    if (!this.map || !window.AppStore) return;
-    if (this.map._animatingZoom || this.map._flyToFrame) return;
-    const center = this.map.getCenter();
-    const zoom = this.map.getZoom();
-    if (!center || !Number.isFinite(center.lat) || !Number.isFinite(center.lng) || !Number.isFinite(zoom)) return;
-    window.AppStore.saveMapView(scope, [center.lat, center.lng], zoom);
+    if (!this.map || !window.AppStore || this.map.isMoving()) return;
+    const center = this.map.getCenter(); window.AppStore.saveMapView(scope, [center.lat, center.lng], this.map.getZoom());
   }
-
-  // 從記憶庫還原視角 (Memory Restore)
   restoreSavedView(scope, { animate = true } = {}) {
     if (!this.map || !window.AppStore) return false;
     const saved = window.AppStore.getSavedMapView(scope);
-    if (saved && Array.isArray(saved.center) && saved.center.length === 2
-      && saved.center.every(Number.isFinite) && Number.isFinite(saved.zoom)) {
-      if (!animate || !this.navigationAnimationEnabled || this.prefersReducedMotion) {
-        this.map.stop();
-        this.map.setView(saved.center, saved.zoom, { animate: false });
-      } else {
-        this.map.flyTo(saved.center, saved.zoom, { duration: this.isCoarsePointer ? 0.7 : 0.95 });
-      }
-      return true;
-    }
-    return false;
+    if (!saved || !Array.isArray(saved.center) || saved.center.length !== 2 || !saved.center.every(Number.isFinite) || !Number.isFinite(saved.zoom)) return false;
+    const options = { center: [saved.center[1], saved.center[0]], zoom: saved.zoom, duration: this.animateAllowed(animate) ? 800 : 0 };
+    this.map.stop(); if (options.duration) this.map.flyTo(options); else this.map.jumpTo(options); return true;
   }
 }
-
 window.MapManager = MapManager;
