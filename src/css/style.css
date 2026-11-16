@@ -687,7 +687,12 @@ button { color: inherit; }
   place-items: center;
   width: 30px;
   height: 30px;
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
+  line-height: 1;
+  font-size: 0;
+  overflow: visible;
 }
 
 .map-context-landmark-label {
@@ -706,6 +711,7 @@ button { color: inherit; }
   text-overflow: ellipsis;
   transform: translateY(-50%);
   white-space: nowrap;
+  pointer-events: none;
 }
 
 .map-context-landmark.labels-visible .map-context-landmark-label,

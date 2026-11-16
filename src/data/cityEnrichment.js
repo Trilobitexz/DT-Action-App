@@ -158,7 +158,7 @@
   });
 
   const cityDataVersion = "2026.11.16";
-  const releaseVersion = "2026.11.16-marker-anchor-2";
+  const releaseVersion = "2026.11.16-css-layout-1";
   const localCitiesById = new Map(
     window.TRAVEL_DATA.countries.flatMap(country => country.cities || []).map(city => [city.id, city])
   );
