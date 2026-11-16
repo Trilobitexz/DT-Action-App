@@ -43,11 +43,18 @@
     window.firebaseAuth = auth;
 
     var analyticsReady = firebase.analytics.isSupported()
-      .then(function (supported) { return supported ? firebase.analytics.getAnalytics(app) : null; })
+      .then(function (supported) { return supported ? firebase.analytics(app) : null; })
       .catch(function (error) { console.warn("Firebase Analytics 初始化失敗：", error); return null; });
     window.firebaseAnalyticsReady = analyticsReady;
     window.trackFirebaseEvent = function (name, params) {
-      analyticsReady.then(function (analytics) { if (analytics) firebase.analytics.logEvent(analytics, name, params || {}); });
+      analyticsReady.then(function (analytics) {
+        if (!analytics) return;
+        try {
+          analytics.logEvent(name, params || {});
+        } catch (error) {
+          console.warn("Firebase Analytics 事件記錄失敗：", error);
+        }
+      });
     };
 
     var el = {
@@ -88,6 +95,13 @@
       };
       feedback(messages[error.code] || "登入失敗，請稍後再試。", "error");
     }
+    function shouldUseRedirect(error) {
+      return ["auth/popup-blocked", "auth/popup-closed-by-user", "auth/cancelled-popup-request", "auth/internal-error", "auth/web-storage-unsupported"].indexOf(error?.code) >= 0;
+    }
+    function signInWithGoogleRedirect() {
+      feedback("正在切換至 Google 登入頁面…", "success");
+      return auth.signInWithRedirect(provider).catch(fail);
+    }
     function openMenu(open) {
       el.panel.hidden = !open;
       el.trigger.setAttribute("aria-expanded", String(open));
@@ -112,7 +126,20 @@
     document.addEventListener("keydown", function (event) { if (event.key === "Escape" && !el.panel.hidden) { openMenu(false); el.trigger.focus(); } });
     el.google.addEventListener("click", function () {
       el.google.disabled = true; feedback("");
-      auth.signInWithPopup(provider).then(function () { window.trackFirebaseEvent("google_sign_in"); openMenu(false); }).catch(fail).finally(function () { el.google.disabled = false; });
+      var popupTimeout = new Promise(function (_, reject) {
+        window.setTimeout(function () {
+          var timeout = new Error("Google 登入視窗逾時");
+          timeout.code = "auth/popup-timeout";
+          reject(timeout);
+        }, 10000);
+      });
+      Promise.race([auth.signInWithPopup(provider), popupTimeout])
+        .then(function () { window.trackFirebaseEvent("google_sign_in"); openMenu(false); })
+        .catch(function (error) {
+          if (shouldUseRedirect(error) || error.code === "auth/popup-timeout") return signInWithGoogleRedirect();
+          fail(error);
+        })
+        .finally(function () { el.google.disabled = false; });
     });
     el.form.addEventListener("submit", function (event) {
       event.preventDefault(); if (!el.form.reportValidity()) return;
@@ -140,6 +167,9 @@
     el.signOut.addEventListener("click", function () {
       el.signOut.disabled = true;
       auth.signOut().then(function () { window.trackFirebaseEvent("sign_out"); feedback(""); }).catch(fail).finally(function () { el.signOut.disabled = false; });
+    });
+    auth.getRedirectResult().catch(function (error) {
+      if (error?.code && error.code !== "auth/no-auth-event") fail(error);
     });
     auth.onAuthStateChanged(renderUser, fail);
     window.trackFirebaseEvent("journey_app_open");

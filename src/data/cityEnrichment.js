@@ -156,6 +156,77 @@
       window.TRAVEL_DATA.globalCities.push(city);
     }
   });
+
+  const cityDataVersion = "2026.11.16";
+  const releaseVersion = "2026.11.16-marker-anchor-2";
+  const localCitiesById = new Map(
+    window.TRAVEL_DATA.countries.flatMap(country => country.cities || []).map(city => [city.id, city])
+  );
+  const toSpot = (name, index) => ({
+    name,
+    category: index === 0 ? "城市地標" : "城市體驗",
+    rating: (4.7 - index * 0.1).toFixed(1),
+    tag: "推薦探索",
+    note: "可查詢百科摘要、圖片與地圖位置，建議預留 1–2 小時探索。"
+  });
+  const airportCatalog = {
+    "東京": [{ name: "成田國際機場", code: "NRT", lat: 35.772, lng: 140.392 }, { name: "羽田機場", code: "HND", lat: 35.549, lng: 139.779 }],
+    "大阪": [{ name: "關西國際機場", code: "KIX", lat: 34.434, lng: 135.244 }],
+    "首爾": [{ name: "仁川國際機場", code: "ICN", lat: 37.46, lng: 126.441 }, { name: "金浦機場", code: "GMP", lat: 37.558, lng: 126.791 }],
+    "曼谷": [{ name: "蘇凡納布國際機場", code: "BKK", lat: 13.69, lng: 100.75 }],
+    "新加坡": [{ name: "樟宜機場", code: "SIN", lat: 1.364, lng: 103.991 }],
+    "巴黎": [{ name: "戴高樂機場", code: "CDG", lat: 49.009, lng: 2.548 }, { name: "奧利機場", code: "ORY", lat: 48.726, lng: 2.365 }],
+    "倫敦": [{ name: "希斯洛機場", code: "LHR", lat: 51.47, lng: -0.454 }],
+    "雪梨": [{ name: "雪梨機場", code: "SYD", lat: -33.946, lng: 151.177 }],
+    "洛杉磯": [{ name: "洛杉磯國際機場", code: "LAX", lat: 33.942, lng: -118.408 }],
+    "紐約": [{ name: "甘迺迪國際機場", code: "JFK", lat: 40.6413, lng: -73.7781 }, { name: "紐華克自由國際機場", code: "EWR", lat: 40.6895, lng: -74.1745 }, { name: "拉瓜迪亞機場", code: "LGA", lat: 40.7769, lng: -73.874 }],
+    "舊金山": [{ name: "舊金山國際機場", code: "SFO", lat: 37.621, lng: -122.379 }]
+  };
+  const fallbackAirport = city => {
+    const airportCode = String(city.id || city.name || "CITY")
+      .replace(/[^a-z]/gi, "")
+      .slice(0, 3)
+      .toUpperCase()
+      .padEnd(3, "X");
+    return [{
+      name: `${city.name} 主要機場`,
+      code: airportCode,
+      lat: Number(city.lat) + 0.025,
+      lng: Number(city.lng) + 0.025,
+      approximate: true
+    }];
+  };
+  const normalizeCity = city => {
+    const localCity = localCitiesById.get(city.id);
+    const sourceSpots = localCity?.spots?.length
+      ? localCity.spots
+      : city.spots?.length
+        ? city.spots
+        : (city.attractions || []).map((name, index) => typeof name === "string" ? toSpot(name, index) : name);
+    city.spots = sourceSpots.slice(0, 3);
+    while (city.spots.length < 3) {
+      city.spots.push(toSpot(`${city.name} 城市地標 ${city.spots.length + 1}`, city.spots.length));
+    }
+    city.airports = localCity?.airports?.length
+      ? localCity.airports
+      : city.airports?.length
+        ? city.airports
+        : airportCatalog[city.name] || fallbackAirport(city);
+    city.dataVersion = cityDataVersion;
+    city.dataStatus = {
+      spots: localCity?.spots?.length || city.spots.some(spot => !spot.approximate) ? "curated" : "generated",
+      airport: city.airports.some(airport => !airport.approximate) ? "curated" : "approximate"
+    };
+    city.attractions = city.spots.map(spot => spot.name);
+    return city;
+  };
+
+  window.TRAVEL_DATA.countries.forEach(country => {
+    country.cities = (country.cities || []).map(normalizeCity);
+  });
+  window.TRAVEL_DATA.globalCities = window.TRAVEL_DATA.globalCities.map(normalizeCity);
+  window.TRAVEL_DATA.cityDataVersion = cityDataVersion;
+  window.TRAVEL_DATA.releaseVersion = releaseVersion;
   window.TRAVEL_DATA.globalCities.forEach((city, index) => {
     city.populationRank = index + 1;
     city.travelRank = ((index * 37) % 100) + 1;

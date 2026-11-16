@@ -8,7 +8,10 @@ window.CountryView = {
       "新加坡": { hasDirect: true, flightTime: "約 4.5 小時", airlines: ["中華航空", "長榮航空", "酷航"], budget: "中等", rating: "$$-$$$" },
       "越南": { hasDirect: true, flightTime: "約 3 ~ 3.5 小時", airlines: ["中華航空", "越捷航空", "星宇航空"], budget: "親民", rating: "$$" },
       "中國": { hasDirect: true, flightTime: "依城市約 2 ~ 4 小時", airlines: ["中華航空", "長榮航空"], budget: "中等", rating: "$$-$$$" },
-      "香港": { hasDirect: true, flightTime: "約 2 小時", airlines: ["中華航空", "長榮航空", "國泰航空"], budget: "中等", rating: "$$-$$$" }
+      "香港": { hasDirect: true, flightTime: "約 2 小時", airlines: ["中華航空", "長榮航空", "國泰航空"], budget: "中等", rating: "$$-$$$" },
+      "美國": { hasDirect: true, flightTime: "約 13 ~ 15 小時", airlines: ["中華航空", "長榮航空", "星宇航空"], budget: "中高", rating: "$$$" },
+      "加拿大": { hasDirect: true, flightTime: "約 11 ~ 13 小時", airlines: ["中華航空", "長榮航空"], budget: "中高", rating: "$$$" },
+      "澳洲": { hasDirect: true, flightTime: "約 9 ~ 10 小時", airlines: ["中華航空", "長榮航空", "澳洲航空"], budget: "中高", rating: "$$$" }
     };
     return profiles[city.countryName] || { hasDirect: false, flightTime: "依季節與航線而異", airlines: [], budget: "依旅行風格而異", rating: "$$-$$$" };
   },
@@ -24,7 +27,9 @@ window.CountryView = {
       cities: [{
         ...globalCity,
         description: `${globalCity.name}是${globalCity.countryName}的重要城市，適合從城市地標、在地生活與歷史脈絡開始探索。`,
-        spots: globalCity.attractions.map((name, index) => ({ name, category: index === 0 ? "歷史文化" : "城市體驗", rating: (4.7 - index * 0.1).toFixed(1), tag: "推薦探索", note: "可查詢百科摘要、圖片與地圖位置，建議預留 1–2 小時探索。" }))
+        spots: ((Array.isArray(globalCity.spots) && globalCity.spots.length ? globalCity.spots : globalCity.attractions || []).length ? (Array.isArray(globalCity.spots) && globalCity.spots.length ? globalCity.spots : globalCity.attractions || []) : [`${globalCity.name} 城市地標`]).slice(0, 3).map((name, index) => typeof name === "string"
+          ? { name, category: index === 0 ? "歷史文化" : "城市體驗", rating: (4.7 - index * 0.1).toFixed(1), tag: "推薦探索", note: "可查詢百科摘要、圖片與地圖位置，建議預留 1–2 小時探索。" }
+          : name)
       }]
     } : window.TRAVEL_DATA.countries.find(c => c.id === state.selectedCountryId);
     if (!country) return;

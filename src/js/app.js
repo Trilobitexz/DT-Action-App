@@ -63,9 +63,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           .find(cityItem => cityItem.id === state.selectedCityId);
       mapContextInfo.hidden = !city || viewName !== "country";
       if (city && viewName === "country") {
-        const spotCount = Array.isArray(city.spots) ? city.spots.length : 0;
+        const spotCount = mapManager.getCitySpots(city).length;
         const airportCount = mapManager.getAirportData(city).length;
-        mapContextInfo.innerHTML = `<strong>📍 ${city.name} 城市地圖</strong><span>🔴 精選景點 ${spotCount} 個</span><span>✈ 機場 ${airportCount ? `${airportCount} 個` : "資料待補充"}</span><small>景點若尚無精確座標會以淡色顯示；取得真實地點資料後會自動移到正確位置。</small><div class="city-map-key" aria-label="地圖圖例"><span><i>1</i>推薦景點編號與下方清單一致</span><span>🔵 市中心</span><span>✈ 機場</span><span>點擊標記看景點資訊</span></div>`;
+        const hasDirect = state.globalCityId
+          ? window.CountryView?.getGlobalCityProfile(city)?.hasDirect === true
+          : window.TRAVEL_DATA.countries.find(country => country.id === state.selectedCountryId)?.directFlight === true;
+        mapContextInfo.innerHTML = `<strong>📍 ${city.name} 城市地圖</strong><span>🔴 精選景點 ${spotCount} 個</span><span>✈ 機場 ${airportCount} 個</span><span>${hasDirect ? "🛫 台灣可直飛" : "🔁 台灣出發需轉機，地圖已顯示參考路線"}</span><small>資料版本：${window.TRAVEL_DATA.releaseVersion || window.TRAVEL_DATA.cityDataVersion || "內建資料"}<br>縮小至城市外圍後會自動回到附近城市，再縮小可返回洲別視圖。</small><div class="city-map-key" aria-label="地圖圖例"><span><i>1</i>推薦景點編號與下方清單一致</span><span>🔵 市中心</span><span>✈ 機場</span><span>點擊標記看景點資訊</span></div>`;
       }
     }
   };
@@ -110,6 +113,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     },
     onGlobalCitySelect: (cityId) => {
       navigateTo("global-city", { cityId });
+    },
+    onCityContextExit: (city) => {
+      if (state.globalCityId) {
+        navigateTo("world", { animateMap: true });
+        return;
+      }
+      const country = window.TRAVEL_DATA.countries.find(item => item.cities?.some(cityItem => cityItem.id === city.id));
+      if (country) {
+        navigateTo("continent", { continentId: country.continentId, animateMap: true });
+      } else {
+        navigateTo("world", { animateMap: true });
+      }
     }
   });
   mapManager.init();
@@ -236,13 +251,27 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // 平面地圖與 3D globe 使用同一 MapLibre 畫布，切換時保留目前圖層與城市上下文。
-  const projectionToggle = document.getElementById("btn-map-3d");
-  projectionToggle?.addEventListener("click", () => {
-    const globeEnabled = mapManager.toggleProjection();
-    projectionToggle.setAttribute("aria-pressed", String(globeEnabled));
-    projectionToggle.textContent = globeEnabled ? "🗺️ 2D 平面" : "🌐 3D 地球";
-    projectionToggle.setAttribute("aria-label", globeEnabled ? "切換回平面地圖" : "切換為 3D 地球");
-    projectionToggle.title = globeEnabled ? "切換回平面地圖" : "切換為 3D 地球";
+  const projectionButtons = {
+    mercator: document.getElementById("btn-map-2d"),
+    globe: document.getElementById("btn-map-3d")
+  };
+  const syncProjectionButtons = mode => {
+    Object.entries(projectionButtons).forEach(([key, button]) => {
+      if (!button) return;
+      const active = key === mode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+  };
+  projectionButtons.mercator?.addEventListener("click", () => {
+    mapManager.setProjection("mercator");
+    syncProjectionButtons("mercator");
+    window.trackFirebaseEvent?.("map_projection_changed", { projection: "2d" });
+  });
+  projectionButtons.globe?.addEventListener("click", () => {
+    mapManager.setProjection("globe");
+    syncProjectionButtons("globe");
+    window.trackFirebaseEvent?.("map_projection_changed", { projection: "3d" });
   });
   document.getElementById("btn-zoom-in")?.addEventListener("click", () => mapManager.zoomIn());
   document.getElementById("btn-zoom-out")?.addEventListener("click", () => mapManager.zoomOut());

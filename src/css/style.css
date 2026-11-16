@@ -435,6 +435,28 @@ button { color: inherit; }
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+#leaflet-map[data-map-theme="satellite"] .map-global-city-marker,
+#leaflet-map[data-map-theme="satellite"] .map-local-city-marker,
+#leaflet-map[data-map-theme="satellite"] .map-continent-marker,
+#leaflet-map[data-map-theme="satellite"] .map-context-landmark {
+  border-color: #fff;
+  background: rgba(15, 23, 42, 0.86);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+#leaflet-map[data-map-theme="satellite"] .map-global-city-dot,
+#leaflet-map[data-map-theme="satellite"] .map-local-city-dot {
+  background: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.35);
+}
+
+#leaflet-map[data-map-theme="satellite"] .map-spot-marker,
+#leaflet-map[data-map-theme="satellite"] .map-airport-marker {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.75));
+}
+
 /* Leaflet 地圖容器 */
 #leaflet-map {
   width: 100%;
@@ -660,16 +682,30 @@ button { color: inherit; }
 .map-local-city-marker[hidden] { display: none; }
 
 .map-context-landmark {
-  position: relative;
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  box-sizing: border-box;
 }
 
 .map-context-landmark-label {
   display: none;
-  margin-left: 4px;
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 4px);
+  z-index: 1;
   max-width: 150px;
+  padding: 3px 6px;
+  border: 1px solid rgba(38, 53, 61, 0.16);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 6px rgba(25, 43, 54, 0.16);
   overflow: hidden;
   text-overflow: ellipsis;
-  vertical-align: middle;
+  transform: translateY(-50%);
+  white-space: nowrap;
 }
 
 .map-context-landmark.labels-visible .map-context-landmark-label,
@@ -2250,8 +2286,59 @@ body {
   font-weight: 750;
   white-space: nowrap;
 }
-#map-hero-card .map-control-actions > .map-3d-launch { border-color: #214d4a; background: #214d4a; color: #fff; }
-#map-hero-card .map-control-actions > .map-3d-launch:hover { border-color: #173c39; background: #173c39; color: #fff; }
+#map-hero-card .map-projection-switch {
+  display: inline-flex;
+  align-items: stretch;
+  gap: .16rem;
+  padding: .2rem;
+  border: 1px solid #dce8df;
+  border-radius: 11px;
+  background: #edf4ef;
+}
+#map-hero-card .map-projection-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 .38rem;
+  color: #71817a;
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+#map-hero-card .map-projection-option {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: 1fr 1fr;
+  column-gap: .28rem;
+  align-items: center;
+  min-width: 58px;
+  height: 40px;
+  padding: .22rem .5rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #62736b;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+#map-hero-card .map-projection-option > span {
+  grid-row: 1 / span 2;
+  font-size: 1.22rem;
+  line-height: 1;
+}
+#map-hero-card .map-projection-option strong { font-size: .74rem; line-height: 1; }
+#map-hero-card .map-projection-option small { font-size: .58rem; line-height: 1; }
+#map-hero-card .map-projection-option:hover { color: #20584e; background: #e2eee7; }
+#map-hero-card .map-projection-option.active {
+  border-color: #214d4a;
+  background: #214d4a;
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(33, 77, 74, .22);
+}
+#map-hero-card .map-projection-option.active:hover { background: #173c39; color: #fff; }
+#map-hero-card .map-projection-option:focus-visible { outline: 3px solid rgba(48, 151, 126, .36); outline-offset: 1px; }
 #map-hero-card .map-control-actions > .map-tilt-btn { background: #f4f8f5; }
 #map-hero-card .map-control-actions > .map-btn:hover { border-color: #97b8aa; background-color: #edf6f1; color: #20584e; }
 #map-hero-card .map-control-actions > .map-3d-launch:hover { color: #fff; }
