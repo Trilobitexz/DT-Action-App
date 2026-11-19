@@ -1,0 +1,8 @@
+{
+  "name": "dt-action-app",
+  "private": true,
+  "description": "旅途指南 Journey Atlas",
+  "dependencies": {
+    "firebase": "^11.0.2"
+  }
+}
