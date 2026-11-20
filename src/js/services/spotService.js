@@ -200,6 +200,10 @@ window.SpotService = {
         label: "Wikidata 中文結構化資料"
       }
     ];
+    const normalizeTitle = value => String(value || "").replace(/_/g, " ").normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase()
+      .replace(/[\s\p{P}]+/gu, "");
+    const requestedCity = normalizeTitle(cityName);
     for (const source of sources) {
       try {
         const result = await source.fetch();
@@ -207,7 +211,8 @@ window.SpotService = {
         const verifiedLocation = Number.isFinite(cityCoordinates?.lat) && Number.isFinite(cityCoordinates?.lng)
           && Number.isFinite(location?.latitude) && Number.isFinite(location?.longitude)
           && this.distanceKm(cityCoordinates.lat, cityCoordinates.lng, location.latitude, location.longitude) <= 35;
-        if (result?.extract && verifiedLocation) {
+        const matchingArticle = requestedCity && normalizeTitle(result?.title) === requestedCity;
+        if (result?.extract && (verifiedLocation || matchingArticle)) {
           const summary = {
             extract: result.extract,
             sourceLabel: source.label,

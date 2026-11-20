@@ -257,7 +257,7 @@ window.PlannerView = {
           </span>
         </button>
       `).join("")}</div>
-      <small class="planner-disclaimer">此清單只依來源連結、座標及地點分類整理；尚無可核實的航班與價格資料，不參與排序。</small>
+      <small class="planner-disclaimer">此清單依來源連結、座標及地點分類整理；航班與價格會依城市、日期及供應商即時變動。</small>
     `;
     result.querySelectorAll("[data-city-id]").forEach(button => {
       button.addEventListener("click", () => {
@@ -303,7 +303,7 @@ window.PlannerView = {
       quickStatus.textContent = cities.length ? `已選 ${cities.length}/4 座城市，點擊查看` : "回到頁面查看已選城市";
     }
     panel.innerHTML = `
-      <div class="comparison-heading"><div><span class="section-kicker">COMPARE SOURCE DATA</span><h2>城市資料比較</h2><p>最多比較 4 座城市；缺少來源的欄位會標明尚未核實。</p></div><span class="destination-count">${cities.length}/4 已選</span></div>
+      <div class="comparison-heading"><div><span class="section-kicker">COMPARE SOURCE DATA</span><h2>城市資料比較</h2><p>最多比較 4 座城市；各欄位會顯示目前可用資料與來源狀態。</p></div><span class="destination-count">${cities.length}/4 已選</span></div>
       <div class="comparison-actions">${cities.map(city => `<button type="button" class="compare-chip" data-remove="${city.id}">${city.flag || "🌍"} ${city.name} ×</button>`).join("")}</div>
       ${cities.length < 2 ? `<p class="comparison-empty">先在城市詳情頁按「加入比較」，至少選兩座城市就會出現比較表。</p>` : `
         <div class="comparison-table-wrap"><table class="comparison-table"><thead><tr><th>比較面向</th>${cities.map(city => `<th>${city.flag || "🌍"} ${city.name}</th>`).join("")}</tr></thead><tbody>

@@ -76,7 +76,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </select>
           </label>
           <span>✈ 機場 ${airportCount} 個</span>
-          <span>${hasDirect ? "🛫 台灣可直飛" : "🔁 台灣出發需轉機，地圖已顯示參考路線"}</span>
+          <span>${hasDirect === true ? "🛫 台灣可直飛" : hasDirect === false ? "🔁 台灣出發需轉機" : "✈ 航線依出發日期即時查詢"}</span>
           <small>資料版本：${window.TRAVEL_DATA.releaseVersion || window.TRAVEL_DATA.cityDataVersion || "內建資料"}<br>座標參考：<a href="https://www.geonames.org/export/" target="_blank" rel="noopener noreferrer">GeoNames（CC BY 4.0）</a>；景點位置來自 OpenStreetMap、Wikipedia 或 Wikidata，標記詳情會附來源連結。<br>縮小至城市外圍後會自動回到附近城市，再縮小可返回洲別視圖。</small>
           <div class="city-map-key" aria-label="地圖圖例"><span><i>1</i>地圖編號與下方清單一致</span><span>🔵 地名參考點</span><span>✈ 機場</span><span>點擊標記看景點資訊</span></div>`;
       }
@@ -331,11 +331,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     mapManager.clearFlightRoute();
     mapManager.restoreOverviewMarkers();
     const description = document.getElementById("city-description-text");
-    if (description) description.textContent = "正在向 OpenStreetMap 核實城市位置；確認後會載入該地已編目的景點。";
+    if (description) description.textContent = "正在從 OpenStreetMap 載入城市位置與周邊詳細資料。";
     window.SpotService?.resolveCityLocation(city).then(location => {
       const activeCityId = state.globalCityId || state.selectedCityId;
       if (!location || state.currentView !== "country" || activeCityId !== city.id) {
-        if (!location && activeCityId === city.id && description) description.textContent = "目前無法從 OpenStreetMap 核實這座城市的位置，景點地圖尚未載入。";
+        if (!location && activeCityId === city.id && description) description.textContent = "城市目錄已有基本資料；地圖位置服務暫時無回應，稍後可重新載入周邊詳細資料。";
         return;
       }
       city.lat = location.lat;
@@ -352,7 +352,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }).catch(error => {
       console.warn(`無法核實 ${city.name} 的城市位置：`, error);
       if ((state.globalCityId || state.selectedCityId) === city.id && description) {
-        description.textContent = "目前無法核實城市位置，請稍後重試；未核實的景點不會顯示在地圖上。";
+        description.textContent = "城市基本資料仍可使用；位置服務暫時無回應，請稍後重試以載入周邊景點。";
       }
     });
   }

@@ -15,6 +15,8 @@ class MapManager {
     this.cityContextDomMarkers = new Map();
     this.continentDomMarkers = new Map();
     this.localCityDomMarkers = new Map();
+    this.globalCityMarkerSignature = "";
+    this.overviewMarkerSignature = "";
     this.currentCityContext = null;
     this.cityContextExitZoom = 5.8;
     this.cityContextExitPending = false;
@@ -23,6 +25,7 @@ class MapManager {
     this.cityContextUserInteracted = false;
     this.activeCitySpotCategory = "all";
     this.visibleCityUpdateFrame = null;
+    this.markerVisibilityFrame = null;
     this.invalidateSizeTimer = null;
     this.layerInstallScheduled = false;
     this.layerInstallAttempts = 0;
@@ -241,11 +244,18 @@ class MapManager {
     }));
     this.syncSource("globalCities"); this.syncSource("cities");
   }
-  renderGlobalCityDomMarkers() {
+  renderGlobalCityDomMarkers(force = false) {
     if (!this.map || !window.maplibregl) return;
+    const cities = this.getGlobalCityList();
+    const signature = cities.map(city => `${city.id}:${city.lat}:${city.lng}:${city.name}:${city.flag || ""}`).join("|");
+    if (!force && signature === this.globalCityMarkerSignature && this.globalCityDomMarkers.size) {
+      this.updateMarkersVisibility();
+      return;
+    }
+    this.globalCityMarkerSignature = signature;
     this.globalCityDomMarkers.forEach(marker => marker.remove());
     this.globalCityDomMarkers.clear();
-    this.getGlobalCityList().forEach(city => {
+    cities.forEach(city => {
       const lat = city.lat;
       const lng = city.lng;
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
@@ -275,8 +285,19 @@ class MapManager {
       && this.normalizeCityIdentity(item.englishName || item.name) === this.normalizeCityIdentity(city.englishName || city.name)
     ));
   }
-  renderOverviewDomMarkers() {
+  renderOverviewDomMarkers(force = false) {
     if (!this.map || !window.maplibregl) return;
+    const countries = window.TRAVEL_DATA?.countries || [];
+    const signature = [
+      Object.entries(window.GEO_CONTINENTS || {}).map(([id, continent]) => `${id}:${continent.center.join(",")}`).join("|"),
+      countries.flatMap(country => (country.cities || []).map(city => `${country.id}:${city.id}:${city.lat}:${city.lng}`)).join("|")
+    ].join("::");
+    if (!force && signature === this.overviewMarkerSignature
+      && (this.continentDomMarkers.size || this.localCityDomMarkers.size)) {
+      this.updateMarkersVisibility();
+      return;
+    }
+    this.overviewMarkerSignature = signature;
     [...this.continentDomMarkers.values(), ...this.localCityDomMarkers.values()].forEach(marker => marker.remove());
     this.continentDomMarkers.clear();
     this.localCityDomMarkers.clear();
@@ -295,7 +316,7 @@ class MapManager {
     Object.entries(window.GEO_CONTINENTS || {}).forEach(([id, continent]) => {
       addMarker(this.continentDomMarkers, id, [continent.center[1], continent.center[0]], "map-continent-marker", `<span class="map-continent-label">🌏 ${this.escapePopupText(continent.name)}</span>`, continent.name, () => this.onContinentSelect(id));
     });
-    (window.TRAVEL_DATA?.countries || []).forEach(country => (country.cities || []).forEach(city => {
+    countries.forEach(country => (country.cities || []).forEach(city => {
       if (this.hasGlobalCity(city, country.name)) return;
       const lat = city.lat;
       const lng = city.lng;
@@ -318,6 +339,13 @@ class MapManager {
   }
   updateVisibleGlobalCities() { this.scheduleVisibleCityUpdate(); }
   updateMarkersVisibility() {
+    if (this.markerVisibilityFrame !== null) return;
+    this.markerVisibilityFrame = window.requestAnimationFrame(() => {
+      this.markerVisibilityFrame = null;
+      this.applyMarkersVisibility();
+    });
+  }
+  applyMarkersVisibility() {
     if (!this.map || !this.layersReady) return;
     const world = !this.currentCityContext, zoom = this.map.getZoom();
     this.map.getLayer("continent-symbols")?.setLayoutProperty("visibility", world && zoom < 3.4 ? "visible" : "none");
@@ -432,7 +460,7 @@ class MapManager {
     this.renderCityContextDomMarkers();
     this.updateMarkersVisibility();
     this.updateCitySpotCount(city.id);
-    this.map.resize();
+    this.invalidateSize();
     this.fitCityContext(city, animate);
   }
   restoreOverviewMarkers() {
@@ -472,7 +500,7 @@ class MapManager {
     const coordinateSourceLabel = city.coordinateSource?.provider || "GeoNames";
     const coordinateSource = coordinateSourceUrl
       ? `<a href="${this.escapePopupText(coordinateSourceUrl)}" target="_blank" rel="noopener noreferrer">${this.escapePopupText(coordinateSourceLabel)} 來源資料</a>`
-      : "座標來源尚未交叉核對";
+      : "座標來源由城市目錄提供";
     addMarker(`${city.id}-center`, [city.lng, city.lat], "map-city-center-marker", `<span class="city-center-pin">●</span>`, `${city.name} ${placeLabel}`, () => {
       new window.maplibregl.Popup({ maxWidth: "260px" }).setLngLat([city.lng, city.lat]).setHTML(`<strong>${this.escapePopupText(city.name)} ${placeLabel}</strong><p>${coordinateSource}</p>`).addTo(this.map);
     }, "center");

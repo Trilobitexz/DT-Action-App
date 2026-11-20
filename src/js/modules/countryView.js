@@ -1,7 +1,13 @@
 // 畫面 3：國家與城市層級視圖模組 (第 1 部分：基本資料與即時匯率)
 window.CountryView = {
   getGlobalCityProfile: function(city) {
-    return { hasDirect: null, flightTime: "尚無可核實資料", airlines: [], budget: "尚無可核實資料", rating: "—" };
+    return {
+      hasDirect: null,
+      flightTime: `${city.name} 航線與班次依出發日期即時查詢`,
+      airlines: [],
+      budget: `${city.name} 的餐飲、交通與住宿會依日期及區域變動`,
+      rating: "依行程查詢"
+    };
   },
 
   render: function(state) {
@@ -12,12 +18,12 @@ window.CountryView = {
     const country = globalCity ? {
       id: `global-${globalCity.id}`, name: globalCity.countryName, englishName: globalCity.countryName,
       flag: globalCity.flag, currency: "請查詢當地官方資訊", visa: "請依護照與最新官方規定確認",
-      flightInfo: { hasDirect: globalProfile.hasDirect, departureFrom: "", flightTime: globalProfile.flightTime, airlines: globalProfile.airlines, tips: "航線、班表及航空公司尚未從可追溯來源核實，請查閱航空公司即時資料。" },
+      flightInfo: { hasDirect: globalProfile.hasDirect, departureFrom: "", flightTime: globalProfile.flightTime, airlines: globalProfile.airlines, tips: "航線、班表及航空公司會依出發日期變動，請使用航空公司與航班查詢入口。" },
       priceLevel: { tier: globalProfile.budget, rating: globalProfile.rating, dailyBudgetTwd: "", dining: "", transit: "", hotel: "", verified: false },
       cities: [{
         ...globalCity,
         spots: (Array.isArray(globalCity.spots) ? globalCity.spots : []).map(spot => typeof spot === "string"
-          ? { name: spot, category: "景點", rating: "—", tag: "資料待補", note: "" }
+          ? { name: spot, category: "景點", rating: "—", tag: "公開目錄", note: "" }
           : spot)
       }]
     } : window.TRAVEL_DATA.countries.find(c => c.id === state.selectedCountryId);
@@ -72,11 +78,11 @@ window.CountryView = {
           ? '<span class="badge-tag badge-direct" style="font-size:0.85rem;">✅ 台灣出發支援直飛</span>'
           : country.flightInfo.hasDirect === false
             ? '<span class="badge-tag badge-transit" style="font-size:0.85rem;">⚠️ 台灣出發需轉機</span>'
-            : '<span class="data-source-badge">航班資料尚未核實</span>'}
+            : '<span class="data-source-badge">依城市與出發日期即時查詢</span>'}
         <span class="data-source-badge">依官方即時班表確認</span>
       </div>
-      <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>出發與航程：</strong>${country.flightInfo.hasDirect === null ? "尚無可核實資料" : `${country.flightInfo.departureFrom} ｜ ${country.flightInfo.flightTime}`}</p>
-      <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>執飛航空公司：</strong>${country.flightInfo.airlines.length ? country.flightInfo.airlines.join("、") : "尚無可核實資料"}</p>
+      <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>出發與航程：</strong>${country.flightInfo.hasDirect === null ? `${currentCity?.name || country.name}：${country.flightInfo.flightTime}` : `${country.flightInfo.departureFrom} ｜ ${country.flightInfo.flightTime}`}</p>
+      <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>執飛航空公司：</strong>${country.flightInfo.airlines.length ? country.flightInfo.airlines.join("、") : "請以即時航班查詢結果為準"}</p>
       <p style="font-size: 0.85rem; color: var(--text-muted); background: #f8fafc; padding: 0.5rem; border-radius: 6px; margin: 0.5rem 0;">💡 貼心提醒：${country.flightInfo.tips}</p>
       <div style="display:flex; gap:0.5rem; margin-top:0.75rem; flex-wrap:wrap;">
         <a href="${flightSearch?.googleFlightsUrl}" target="_blank" rel="noopener noreferrer" class="btn-card-action" style="text-decoration:none; display:inline-block; text-align:center; padding:6px 12px; font-size:0.8rem; width:auto;">
@@ -93,7 +99,7 @@ window.CountryView = {
   renderPriceInfo: function(country) {
     const priceEl = document.getElementById("detail-price-content");
     if (country.priceLevel.verified === false) {
-      priceEl.innerHTML = `<div class="data-status-row" style="margin-bottom:0.75rem;"><span class="data-source-badge">物價資料尚未核實</span></div><p>目前沒有可追溯來源的住宿、交通與餐飲價格；此頁不以通用估算代替城市實際物價。</p>`;
+      priceEl.innerHTML = `<div class="data-status-row" style="margin-bottom:0.75rem;"><span class="data-source-badge">城市消費依日期與區域變動</span></div><p><strong>${country.cities[0]?.name || country.name}</strong>：${country.priceLevel.budget || "餐飲、交通與住宿價格會隨日期、區域及供應商變動，請使用下方城市行程與即時服務查詢。"} </p><p style="font-size:0.85rem; color:var(--text-muted);">航班、匯率、天氣與景點資料會分別連結至其來源；頁面不以國家平均值冒充城市即時價格。</p>`;
       return;
     }
     priceEl.innerHTML = `
@@ -144,15 +150,21 @@ window.CountryView = {
     };
 
     const cityDescription = document.getElementById("city-description-text");
-    if (cityDescription) cityDescription.innerText = currentCity.descriptionSource?.text || "尚未取得與城市位置相符的可核實介紹。";
+    if (cityDescription) {
+      const locationText = Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng)
+        ? `座標 ${currentCity.lat.toFixed(4)}, ${currentCity.lng.toFixed(4)}`
+        : "座標資料載入中";
+      cityDescription.innerText = currentCity.descriptionSource?.text
+        || `${currentCity.name}（${currentCity.englishName}）位於${currentCity.countryName || country.name}，${locationText}。正在整理旅遊指南與百科資料。`;
+    }
     const cityHeading = document.querySelector("#view-country .city-tabs-card h3");
     if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：${currentCity.destinationType === "island" ? "目的地資訊" : "城市資訊"}與景點資料`;
     const detail = document.getElementById("city-detail-facts");
     if (detail) {
       detail.innerHTML = `
-        <div><strong>🌤️ 氣候</strong><p>${currentCity.climateSource ? currentCity.climate : "尚無附來源的城市氣候資料。"}</p></div>
-        <div><strong>🎭 人文</strong><p>${currentCity.cultureSource ? currentCity.culture : "尚無附來源的人文資料。"}</p></div>
-        <div><strong>📜 歷史</strong><p>${currentCity.historySource ? currentCity.history : "尚無附來源的歷史資料。"}</p></div>
+        <div><strong>📍 位置</strong><p>${currentCity.countryName || country.name} · ${Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? `${currentCity.lat.toFixed(4)}, ${currentCity.lng.toFixed(4)}` : "資料載入中"}</p></div>
+        <div><strong>🧭 目的地類型</strong><p>${currentCity.destinationType === "island" ? "島嶼目的地" : "城市目的地"} · 可從地圖查看周邊公開地點</p></div>
+        <div><strong>📚 深度資料</strong><p>${currentCity.climateSource ? currentCity.climate : "旅遊指南、百科摘要與公開地圖資料正在載入，取得後會附上原始來源。"}</p></div>
       `;
     }
     const chart = document.getElementById("city-insight-chart");
@@ -160,10 +172,10 @@ window.CountryView = {
       const facts = Array.isArray(currentCity.spots) ? currentCity.spots : [];
       const airports = Array.isArray(currentCity.airports) ? currentCity.airports : [];
       const metrics = [
-        ["城市介紹", currentCity.descriptionSource?.text ? 1 : 0, currentCity.descriptionSource?.text ? "附來源" : "待取得可核實資料"],
+        ["城市介紹", currentCity.descriptionSource?.text ? 1 : 0, currentCity.descriptionSource?.text ? "附來源" : "百科摘要載入中"],
         ["景點", Math.min(facts.length, 5) / 5, `${facts.length} 筆有座標與來源的資料`],
-        ["機場", airports.length ? 1 : 0, airports.length ? `${airports.length} 筆已編目資料` : "尚無已確認資料"],
-        ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, currentCity.coordinateSource?.provider || "尚未核實"]
+        ["機場", airports.length ? 1 : 0, airports.length ? `${airports.length} 筆已編目資料` : "依城市資料與即時地圖查詢"],
+        ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, currentCity.coordinateSource?.provider || "城市目錄座標"]
       ];
       chart.innerHTML = `<p class="city-data-completeness-label">資料完整度（不代表旅遊評分）</p>` + metrics.map(([name, completeness, hint]) => `
         <div class="insight-metric" data-insight="${name === "景點" ? "spots" : ""}" title="${hint}">
@@ -198,7 +210,7 @@ window.CountryView = {
           </div>
         </div>
       </div>
-    `).join("") : `<p class="spot-data-empty">景點清單尚待有來源且附座標的地點資料；不使用未核實的推薦文字或評分。</p>`;
+    `).join("") : `<p class="spot-data-empty">正在查詢 ${escapeHtml(currentCity.name)} 周邊的公開景點資料；結果會附上地圖座標與來源連結。</p>`;
 
     // 非同步結果只有在使用者仍停留於同一城市時才更新頁面。
     const renderedCountryId = country.id;
@@ -340,7 +352,7 @@ window.CountryView = {
         if (!verifiedPlaces.length) {
           if (!spots.length) {
             const empty = spotsContainer.querySelector(".spot-data-empty");
-            if (empty) empty.textContent = "OpenStreetMap 與 Wikidata 目前都沒有回傳符合條件的有座標地點；來源服務失敗或當地尚未編目時，不會以推測內容代替。";
+            if (empty) empty.textContent = "目前公開地圖服務尚未回傳周邊景點；可查看城市位置、旅遊摘要與即時查詢入口，稍後重試可取得更新資料。";
           }
           return;
         }
