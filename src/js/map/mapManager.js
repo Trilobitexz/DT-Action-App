@@ -547,6 +547,7 @@ class MapManager {
   }
   getCitySpots(city) {
     if (Array.isArray(city?.spots) && city.spots.length) return city.spots;
+    if (Array.isArray(city?.spotCandidates) && city.spotCandidates.length) return city.spotCandidates;
     if (Array.isArray(city?.attractions) && city.attractions.length) {
       return city.attractions.map(name => typeof name === "string" ? { name } : name);
     }

@@ -186,7 +186,18 @@ window.CountryView = {
     }
     window.PlannerView?.renderCityTools(currentCity, state);
 
-    const spots = Array.isArray(currentCity.spots) ? currentCity.spots : [];
+    const resolvedSpots = Array.isArray(currentCity.spots) ? currentCity.spots : [];
+    const candidates = Array.isArray(currentCity.spotCandidates) ? currentCity.spotCandidates : [];
+    const candidateNames = new Set(resolvedSpots.map(spot => String(spot.name || "").normalize("NFKC").trim().toLocaleLowerCase()));
+    const spots = [
+      ...resolvedSpots,
+      ...candidates.filter(candidate => {
+        const name = String(candidate.name || "").normalize("NFKC").trim().toLocaleLowerCase();
+        if (!name || candidateNames.has(name)) return false;
+        candidateNames.add(name);
+        return true;
+      }).map(candidate => ({ ...candidate, ratingSource: null, lat: null, lng: null }))
+    ];
     spotsContainer.innerHTML = spots.length ? spots.map((spot, idx) => `
       <div class="spot-item" id="spot-item-${idx}" data-city-id="${currentCity.id}" data-spot-index="${idx}">
         <div style="display:flex; gap:1rem; align-items:center; width:100%;">
@@ -352,7 +363,23 @@ window.CountryView = {
         if (!verifiedPlaces.length) {
           if (!spots.length) {
             const empty = spotsContainer.querySelector(".spot-data-empty");
-            if (empty) empty.textContent = "目前公開地圖服務尚未回傳周邊景點；可查看城市位置、旅遊摘要與即時查詢入口，稍後重試可取得更新資料。";
+            if (empty) {
+              empty.textContent = "正在嘗試 OpenStreetMap、Wikidata 與 Wikipedia 多重來源，請稍候；若仍無結果，可重新整理城市周邊資料。";
+              if (!empty.querySelector("[data-retry-nearby]")) {
+                const retry = document.createElement("button");
+                retry.type = "button";
+                retry.dataset.retryNearby = "";
+                retry.className = "spot-map-focus";
+                retry.textContent = "重新載入景點";
+                retry.addEventListener("click", () => {
+                  const cacheKey = `journey-atlas-verified-places-v4-${currentCity.id || `${currentCity.lat.toFixed(2)}-${currentCity.lng.toFixed(2)}`}`;
+                  try { localStorage.removeItem(cacheKey); } catch (error) { console.warn("無法清除景點快取：", error); }
+                  window.CountryView.render(state);
+                });
+                empty.appendChild(document.createElement("br"));
+                empty.appendChild(retry);
+              }
+            }
           }
           return;
         }

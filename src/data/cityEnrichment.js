@@ -141,6 +141,17 @@
       : city.spots?.length
         ? city.spots
         : (city.attractions || []).map(name => typeof name === "string" ? { name } : name);
+    city.spotCandidates = sourceSpots.map(spot => typeof spot === "string" ? { name: spot } : { ...spot })
+      .filter(spot => String(spot.name || "").trim())
+      .filter((spot, index, list) => list.findIndex(candidate =>
+        String(candidate.name || "").normalize("NFKC").trim().toLocaleLowerCase()
+        === String(spot.name || "").normalize("NFKC").trim().toLocaleLowerCase()) === index)
+      .map(spot => ({
+        name: String(spot.name).trim(),
+        category: spot.category || "景點",
+        tag: spot.tag || "",
+        note: spot.note || ""
+      }));
     const seenSpotNames = new Set();
     city.spots = sourceSpots.filter(spot => {
       // Do not publish legacy editorial entries as verified attractions unless

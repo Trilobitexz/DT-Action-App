@@ -316,7 +316,8 @@ window.SpotService = {
         let requestError = null;
         for (const endpoint of [
           "https://overpass-api.de/api/interpreter",
-          "https://overpass.kumi.systems/api/interpreter"
+          "https://overpass.kumi.systems/api/interpreter",
+          "https://overpass.nchc.org.tw/api/interpreter"
         ]) {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
@@ -413,6 +414,22 @@ window.SpotService = {
             if (normalizedName && !duplicate && places.length < limit) places.push(place);
           });
         }
+        if (places.length < Math.min(8, limit)) {
+          try {
+            const wikipediaPlaces = await this.fetchWikipediaNearbyPlaces(city, { radius, limit });
+            const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+              .normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+            wikipediaPlaces.forEach(place => {
+              const normalizedName = normalizeName(place.name);
+              const duplicate = places.some(candidate => normalizeName(candidate.name) === normalizedName
+                && this.distanceKm(candidate.lat, candidate.lng, place.lat, place.lng) <= 0.35);
+              if (normalizedName && !duplicate && places.length < limit) places.push(place);
+            });
+            wikidataChecked = true;
+          } catch (error) {
+            console.warn(`Wikipedia 附近地點查詢失敗（${city.name || "此城市"}）：`, error);
+          }
+        }
         try { localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt, places, wikidataChecked })); }
         catch (error) { console.warn("OpenStreetMap 地點快取無法寫入：", error); }
         return places;
@@ -424,6 +441,65 @@ window.SpotService = {
       }
     })();
     return this.nearbyPlaceRequests[cacheKey];
+  },
+
+  fetchWikipediaNearbyPlaces: async function (city, { radius = 20000, limit = 250 } = {}) {
+    if (!Number.isFinite(city?.lat) || !Number.isFinite(city?.lng)) return [];
+    const radiusMeters = Math.max(1000, Math.min(50000, radius));
+    const params = new URLSearchParams({
+      action: "query",
+      generator: "geosearch",
+      ggscoord: `${city.lat}|${city.lng}`,
+      ggsradius: String(radiusMeters),
+      ggslimit: String(Math.max(20, Math.min(250, limit))),
+      ggsnamespace: "0",
+      prop: "coordinates|extracts|categories",
+      exintro: "1",
+      explaintext: "1",
+      exsentences: "2",
+      cllimit: "20",
+      clshow: "!hidden",
+      format: "json",
+      formatversion: "2",
+      origin: "*"
+    });
+    const fetchedAt = Date.now();
+    const data = await this.requestJson(`https://en.wikipedia.org/w/api.php?${params.toString()}`);
+    const attractionCategory = /tourist attraction|museum|gallery|monument|memorial|park|garden|temple|church|mosque|cathedral|castle|palace|historic|heritage|archaeolog|landmark|monastery|shrine|square|bridge|tower|theatre|theater|zoo|aquarium|fort|beach|waterfall|mountain|botanical|island|cave|stadium|opera|library|market|district|plaza|building|protected area/i;
+    return (data.query?.pages || []).map(page => {
+      const point = page.coordinates?.[0];
+      const lat = Number(point?.lat);
+      const lng = Number(point?.lon);
+      if (!page.title || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      const categories = (page.categories || []).map(item => String(item.title || "").replace(/^Category:/, ""));
+      if (!categories.some(category => attractionCategory.test(category))) return null;
+      const distanceKm = this.distanceKm(city.lat, city.lng, lat, lng);
+      if (distanceKm > radiusMeters / 1000) return null;
+      const categoryText = categories.join(" ").toLocaleLowerCase();
+      const category = /museum|gallery/i.test(categoryText) ? "博物館與藝術"
+        : /park|garden|botanical|protected area|waterfall|mountain|beach|island|cave/i.test(categoryText) ? "公園與自然"
+          : /temple|church|mosque|cathedral|monastery|shrine/i.test(categoryText) ? "宗教建築"
+            : /historic|heritage|archaeolog|castle|palace|fort|monument|memorial/i.test(categoryText) ? "歷史與文化遺產"
+              : /district|square|plaza|market/i.test(categoryText) ? "街區與市集" : "地標與建築";
+      const pageUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replaceAll(" ", "_"))}`;
+      return {
+        name: page.title,
+        category,
+        lat,
+        lng,
+        note: String(page.extract || "").replace(/\s+/g, " ").trim() || "Wikipedia 地理搜尋已編目地點。",
+        description: String(page.extract || "").replace(/\s+/g, " ").trim(),
+        wikipedia: page.title,
+        wikipediaUrl: pageUrl,
+        sourceId: "en-wikipedia",
+        sourceLabel: "English Wikipedia geosearch",
+        sourceUrl: pageUrl,
+        fetchedAt,
+        distanceKm
+      };
+    }).filter(Boolean)
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, limit);
   },
 
   fetchWikidataNearbyPlaces: async function (city, { radius = 20000, limit = 250 } = {}) {
