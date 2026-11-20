@@ -1,4 +1,4 @@
-const CACHE_NAME = "journey-atlas-shell-v33";
+const CACHE_NAME = "journey-atlas-shell-v35";
 const APP_SHELL = [
   "./",
   "./index.html",

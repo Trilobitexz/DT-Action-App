@@ -98,7 +98,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   window.addEventListener("online", () => updateConnectivityStatus("online"));
 
   function getGlobalCity(cityId) {
-    return window.TRAVEL_DATA.globalCities.find(city => city.id === cityId);
+    const canonicalId = window.TRAVEL_DATA.globalCityAliases?.[cityId] || cityId;
+    return window.TRAVEL_DATA.globalCities.find(city => city.id === canonicalId);
   }
 
   // 初始化 MapLibre 單一地圖管理器 (平面／globe 共用圖層及城市互動)

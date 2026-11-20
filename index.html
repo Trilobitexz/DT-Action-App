@@ -136,7 +136,7 @@
       </section>
       <div class="world-support-tools" aria-label="探索輔助工具">
         <button type="button" class="side-drawer-trigger" id="btn-open-city-rankings" aria-controls="city-rankings-drawer" aria-expanded="false">
-          <span>🏆</span><span><strong>想找靈感？看看城市榜單</strong><small>依人口或熱門旅遊城市瀏覽全球城市</small></span><b>→</b>
+          <span>🌐</span><span><strong>探索全球城市目錄</strong><small>依名稱或資料完整度瀏覽城市資料</small></span><b>→</b>
         </button>
         <button type="button" class="side-drawer-trigger secondary" id="btn-scroll-comparison">
           <span>⚖️</span><span><strong>已經有幾個想法？查看比較清單</strong><small id="comparison-quick-status">先探索喜歡的城市，再放進比較清單</small></span><b>↓</b>
@@ -162,9 +162,9 @@
           <div class="drawer-scale-control" aria-label="調整側欄顯示比例"><span>顯示比例</span><button type="button" data-drawer-scale="down" aria-label="縮小側欄內容">−</button><strong data-drawer-scale-value>100%</strong><button type="button" data-drawer-scale="up" aria-label="放大側欄內容">＋</button><button type="button" data-drawer-scale="reset" aria-label="重設側欄比例">重設</button></div>
           <div class="drawer-meta"><strong id="global-city-count"></strong><span>資料可搜尋、分批載入</span></div>
           <div class="global-city-search-wrap"><span aria-hidden="true">🔎</span><input id="global-city-search" type="search" placeholder="搜尋城市、國家或洲別" aria-label="搜尋全球城市"></div>
-          <div class="ranking-tabs" role="tablist" aria-label="城市排行榜類型"><button type="button" class="active" data-ranking-tab="population" role="tab" aria-selected="true">人口規模</button><button type="button" data-ranking-tab="travel" role="tab" aria-selected="false">熱門旅遊</button></div>
-          <div class="ranking-tab-panel active" id="ranking-panel-population"><h3>🌐 世界大城市 Top 100</h3><div id="global-population-list" class="global-city-list"></div></div>
-          <div class="ranking-tab-panel" id="ranking-panel-travel" hidden><h3>✈️ 熱門旅遊城市 Top 100</h3><div id="global-travel-list" class="global-city-list"></div></div>
+          <div class="ranking-tabs" role="tablist" aria-label="城市目錄排序"><button type="button" class="active" data-ranking-tab="population" role="tab" aria-selected="true">依名稱</button><button type="button" data-ranking-tab="travel" role="tab" aria-selected="false">資料完整度</button></div>
+          <div class="ranking-tab-panel active" id="ranking-panel-population"><h3>🌐 全球城市目錄</h3><div id="global-population-list" class="global-city-list"></div></div>
+          <div class="ranking-tab-panel" id="ranking-panel-travel" hidden><h3>📚 依資料完整度排序</h3><div id="global-travel-list" class="global-city-list"></div></div>
         </div>
       </aside>
     </main>

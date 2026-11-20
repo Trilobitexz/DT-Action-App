@@ -3,7 +3,48 @@ window.WeatherService = {
   cache: {},
   storageKey: "journey-atlas-weather-cache",
   cacheDurationMs: 30 * 60 * 1000, // 快取 30 分鐘
+  cacheRetentionMs: 7 * 24 * 60 * 60 * 1000, // 失敗時最多保留 7 天的離線備援
+  maxCacheEntries: 100,
   requestTimeoutMs: 10000,
+
+  // 天氣可重新取得；清除損壞、過期與超出上限的項目，保留近期離線備援。
+  pruneCache: function() {
+    try {
+      const raw = localStorage.getItem(this.storageKey);
+      let stored;
+      try { stored = JSON.parse(raw || "{}"); }
+      catch (error) {
+        localStorage.removeItem(this.storageKey);
+        this.cache = {};
+        return;
+      }
+      const now = Date.now();
+      const entries = stored && typeof stored === "object" && !Array.isArray(stored)
+        ? Object.entries(stored).filter(([key, entry]) => {
+          const data = entry?.data;
+          return /^-?\d+(?:\.\d{1,2})?,-?\d+(?:\.\d{1,2})?$/.test(key)
+            && Number.isFinite(entry?.timestamp)
+            && entry.timestamp <= now + 5 * 60 * 1000
+            && now - entry.timestamp <= this.cacheRetentionMs
+            && data && typeof data === "object"
+            && Number.isFinite(data.temperature)
+            && Number.isFinite(data.humidity)
+            && Number.isFinite(data.windSpeed)
+            && typeof data.description === "string"
+            && typeof data.icon === "string";
+        }).sort((a, b) => b[1].timestamp - a[1].timestamp).slice(0, this.maxCacheEntries)
+        : [];
+      const cleaned = Object.fromEntries(entries);
+      const serialized = JSON.stringify(cleaned);
+      if (localStorage.getItem(this.storageKey) !== serialized) {
+        if (entries.length) localStorage.setItem(this.storageKey, serialized);
+        else localStorage.removeItem(this.storageKey);
+      }
+      this.cache = cleaned;
+    } catch (error) {
+      console.warn("整理天氣快取失敗：", error);
+    }
+  },
 
   // 取得 Open-Meteo 當前天氣（預報模型的 current 值，非觀測站保證即時實測）
   getCityWeather: async function(lat, lng) {
@@ -69,6 +110,7 @@ window.WeatherService = {
       try {
         storedCache[cacheKey] = this.cache[cacheKey];
         localStorage.setItem(this.storageKey, JSON.stringify(storedCache));
+        this.pruneCache();
       } catch (error) {
         console.warn("儲存天氣快取失敗：", error);
       }
@@ -99,3 +141,5 @@ window.WeatherService = {
     return { text: "局部多雲", icon: "⛅" };
   }
 };
+
+window.WeatherService.pruneCache();

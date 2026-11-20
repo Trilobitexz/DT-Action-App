@@ -1,18 +1,17 @@
 // 全球城市榜單與搜尋入口
 window.GlobalCitiesView = {
   pageSize: 24,
-  state: { population: 24, travel: 24 },
+  state: { name: 24, completeness: 24 },
   render: function () {
     const lists = window.TRAVEL_DATA.globalCityLists;
     const search = document.getElementById("global-city-search");
-    const renderList = (targetId, cities, label, key) => {
+    const renderList = (targetId, cities, key) => {
       const target = document.getElementById(targetId);
       if (!target) return;
       const filtered = cities.filter(city => this.matches(city, search?.value || ""));
       const visible = filtered.slice(0, this.state[key]);
       target.innerHTML = visible.map(city => `
         <button type="button" class="global-city-card" onclick="window.appNavigate('global-city', { cityId: '${city.id}' })">
-          <span class="global-city-rank">#${label === "世界大城市" ? city.populationRank : city.travelRank}</span>
           <span class="global-city-flag">${city.flag}</span>
           <span class="global-city-copy"><strong>${city.name}</strong><small>${city.englishName} · ${city.countryName}</small></span>
           <span class="global-city-arrow">↗</span>
@@ -30,16 +29,16 @@ window.GlobalCitiesView = {
         target.appendChild(more);
       }
     };
-    renderList("global-population-list", lists.population, "世界大城市", "population");
-    renderList("global-travel-list", lists.travel, "熱門旅遊城市", "travel");
+    renderList("global-population-list", lists.nameSorted, "name");
+    renderList("global-travel-list", lists.dataComplete, "completeness");
     const count = document.getElementById("global-city-count");
-    if (count) count.textContent = `收錄 ${lists.population.length} + ${lists.travel.length} 筆城市榜單`;
+    if (count) count.textContent = `收錄 ${lists.nameSorted.length} 座去重城市`;
     if (search && !search.dataset.bound) {
       search.dataset.bound = "true";
       let timer;
       search.addEventListener("input", () => {
         window.clearTimeout(timer);
-        this.state = { population: this.pageSize, travel: this.pageSize };
+        this.state = { name: this.pageSize, completeness: this.pageSize };
         timer = window.setTimeout(() => this.render(), 180);
       });
     }

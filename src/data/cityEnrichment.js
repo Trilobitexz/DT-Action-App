@@ -1,6 +1,6 @@
-// 城市資料補充：統一維持每座城市至少 3 個景點，並補上更多航線目的地。
+// 合併城市目錄與國家城市資料，去重並保留現有景點與機場記錄。
 (function () {
-  const spot = (name, category, tag, note, rating = 4.6) => ({ name, category, rating, tag, note });
+  const spot = (name, category, tag, note) => ({ name, category, tag, note });
 
   const additionalSpots = {
     kyoto: spot("嵐山竹林與渡月橋", "自然景觀", "四季推薦", "沿著桂川散步，感受竹林、古寺與山景交織的京都風情。"),
@@ -36,8 +36,13 @@
 
   window.TRAVEL_DATA.countries.forEach(country => {
     country.cities.forEach(city => {
-      if (additionalSpots[city.id] && Array.isArray(city.spots) && city.spots.length < 5) {
-        city.spots.push(additionalSpots[city.id]);
+      const suggestedSpot = additionalSpots[city.id];
+      const alreadyListed = suggestedSpot && city.spots?.some(item =>
+        String(item.name || "").normalize("NFKC").trim().toLocaleLowerCase()
+          === suggestedSpot.name.normalize("NFKC").trim().toLocaleLowerCase()
+      );
+      if (suggestedSpot && !alreadyListed && Array.isArray(city.spots) && city.spots.length < 5) {
+        city.spots.push(suggestedSpot);
       }
     });
   });
@@ -140,9 +145,6 @@
     countryName: country.name,
     flag: country.flag,
     continentName: window.TRAVEL_DATA.continents.find(item => item.id === country.continentId)?.name || country.continentId,
-    climate: "依季節呈現鮮明氣候特色，適合先確認當地天氣與活動開放時間。",
-    culture: `${city.name}融合${country.name}的飲食、歷史與日常生活，適合用步行與公共交通深入探索。`,
-    history: `${city.name}保有歷史街區與現代城市景觀，能從文化古蹟與在地市場認識城市脈絡。`,
     attractions: city.spots.map(item => item.name)
   })));
   newGlobalCities.forEach(city => {
@@ -157,18 +159,11 @@
     }
   });
 
-  const cityDataVersion = "2026.11.16";
-  const releaseVersion = "2026.11.16-css-layout-1";
+  const cityDataVersion = "2026.11.20";
+  const releaseVersion = "2026.11.20-city-catalog-1";
   const localCitiesById = new Map(
     window.TRAVEL_DATA.countries.flatMap(country => country.cities || []).map(city => [city.id, city])
   );
-  const toSpot = (name, index) => ({
-    name,
-    category: index === 0 ? "城市地標" : "城市體驗",
-    rating: (4.7 - index * 0.1).toFixed(1),
-    tag: "推薦探索",
-    note: "可查詢百科摘要、圖片與地圖位置，建議預留 1–2 小時探索。"
-  });
   const airportCatalog = {
     "東京": [{ name: "成田國際機場", code: "NRT", lat: 35.772, lng: 140.392 }, { name: "羽田機場", code: "HND", lat: 35.549, lng: 139.779 }],
     "大阪": [{ name: "關西國際機場", code: "KIX", lat: 34.434, lng: 135.244 }],
@@ -182,40 +177,33 @@
     "紐約": [{ name: "甘迺迪國際機場", code: "JFK", lat: 40.6413, lng: -73.7781 }, { name: "紐華克自由國際機場", code: "EWR", lat: 40.6895, lng: -74.1745 }, { name: "拉瓜迪亞機場", code: "LGA", lat: 40.7769, lng: -73.874 }],
     "舊金山": [{ name: "舊金山國際機場", code: "SFO", lat: 37.621, lng: -122.379 }]
   };
-  const fallbackAirport = city => {
-    const airportCode = String(city.id || city.name || "CITY")
-      .replace(/[^a-z]/gi, "")
-      .slice(0, 3)
-      .toUpperCase()
-      .padEnd(3, "X");
-    return [{
-      name: `${city.name} 主要機場`,
-      code: airportCode,
-      lat: Number(city.lat) + 0.025,
-      lng: Number(city.lng) + 0.025,
-      approximate: true
-    }];
-  };
   const normalizeCity = city => {
     const localCity = localCitiesById.get(city.id);
     const sourceSpots = localCity?.spots?.length
       ? localCity.spots
       : city.spots?.length
         ? city.spots
-        : (city.attractions || []).map((name, index) => typeof name === "string" ? toSpot(name, index) : name);
-    city.spots = sourceSpots.slice(0, 3);
-    while (city.spots.length < 3) {
-      city.spots.push(toSpot(`${city.name} 城市地標 ${city.spots.length + 1}`, city.spots.length));
-    }
+        : (city.attractions || []).map(name => typeof name === "string" ? { name } : name);
+    const seenSpotNames = new Set();
+    city.spots = sourceSpots.filter(spot => {
+      const name = String(spot?.name || spot || "").normalize("NFKC").trim().toLocaleLowerCase();
+      if (!name || seenSpotNames.has(name)) return false;
+      seenSpotNames.add(name);
+      return true;
+    }).map(spot => {
+      const normalizedSpot = typeof spot === "string" ? { name: spot } : { ...spot };
+      if (!normalizedSpot.ratingSource) delete normalizedSpot.rating;
+      return normalizedSpot;
+    });
     city.airports = localCity?.airports?.length
       ? localCity.airports
       : city.airports?.length
         ? city.airports
-        : airportCatalog[city.name] || fallbackAirport(city);
+        : airportCatalog[city.name] || [];
     city.dataVersion = cityDataVersion;
     city.dataStatus = {
-      spots: localCity?.spots?.length || city.spots.some(spot => !spot.approximate) ? "curated" : "generated",
-      airport: city.airports.some(airport => !airport.approximate) ? "curated" : "approximate"
+      spots: city.spots.length ? "listed" : "unavailable",
+      airport: city.airports.length ? "listed" : "unavailable"
     };
     city.attractions = city.spots.map(spot => spot.name);
     return city;
@@ -224,16 +212,42 @@
   window.TRAVEL_DATA.countries.forEach(country => {
     country.cities = (country.cities || []).map(normalizeCity);
   });
-  window.TRAVEL_DATA.globalCities = window.TRAVEL_DATA.globalCities.map(normalizeCity);
+  const normalizedText = value => String(value || "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+  const uniqueGlobalCities = [];
+  const cityByIdentity = new Map();
+  const cityAliases = {};
+  window.TRAVEL_DATA.globalCities.map(normalizeCity).forEach(city => {
+    const identity = `${normalizedText(city.countryName)}|${normalizedText(city.englishName || city.name)}`;
+    const existing = cityByIdentity.get(identity);
+    if (!existing) {
+      cityByIdentity.set(identity, city);
+      uniqueGlobalCities.push(city);
+      return;
+    }
+    cityAliases[city.id] = existing.id;
+    if (city.spots.length > existing.spots.length) existing.spots = city.spots;
+    if (city.airports.length > existing.airports.length) existing.airports = city.airports;
+    if (!existing.description && city.description) existing.description = city.description;
+  });
+  window.TRAVEL_DATA.globalCities = uniqueGlobalCities;
+  window.TRAVEL_DATA.globalCityAliases = cityAliases;
   window.TRAVEL_DATA.cityDataVersion = cityDataVersion;
   window.TRAVEL_DATA.releaseVersion = releaseVersion;
-  window.TRAVEL_DATA.globalCities.forEach((city, index) => {
-    city.populationRank = index + 1;
-    city.travelRank = ((index * 37) % 100) + 1;
+  uniqueGlobalCities.forEach(city => {
+    city.dataStatus = {
+      spots: city.spots.length ? "listed" : "unavailable",
+      airport: city.airports.length ? "listed" : "unavailable"
+    };
   });
   window.GLOBAL_CITIES = window.TRAVEL_DATA.globalCities;
+  const byName = [...uniqueGlobalCities].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+  const byCompleteness = [...uniqueGlobalCities].sort((a, b) => {
+    const score = city => Number(Boolean(city.description)) + Number(Boolean(city.climate)) + Number(Boolean(city.culture))
+      + Number(Boolean(city.history)) + Math.min(city.spots.length, 5) + Math.min(city.airports.length, 2);
+    return score(b) - score(a) || a.name.localeCompare(b.name, "zh-Hant");
+  });
   window.TRAVEL_DATA.globalCityLists = {
-    population: window.TRAVEL_DATA.globalCities.slice(0, 100),
-    travel: window.TRAVEL_DATA.globalCities.slice().sort((a, b) => a.travelRank - b.travelRank).slice(0, 100)
+    nameSorted: byName,
+    dataComplete: byCompleteness
   };
 })();

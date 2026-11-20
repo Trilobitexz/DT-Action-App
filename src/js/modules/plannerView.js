@@ -18,7 +18,71 @@ function readStoredJson(key, fallback) {
 
 function readStoredArray(key) {
   const value = readStoredJson(key, []);
-  return Array.isArray(value) ? value : [];
+  if (!Array.isArray(value)) return [];
+  const aliases = window.TRAVEL_DATA?.globalCityAliases || {};
+  const normalized = value.map(item => {
+    if (typeof item === "string") {
+      if (item.startsWith("city:")) return `city:${aliases[item.slice(5)] || item.slice(5)}`;
+      return aliases[item] || item;
+    }
+    if (item && typeof item === "object" && aliases[item.id]) return { ...item, id: aliases[item.id] };
+    return item;
+  });
+  const identity = item => item && typeof item === "object" && item.id ? String(item.id) : String(item);
+  return normalized.filter((item, index, list) => list.findIndex(candidate => identity(candidate) === identity(item)) === index);
+}
+
+function migrateCityAliasesInLocalStorage(cloudReady = false) {
+  const aliases = window.TRAVEL_DATA?.globalCityAliases || {};
+  if (!Object.keys(aliases).length) return;
+  try {
+    const saveMigratedValue = (key, value) => {
+      const serialized = JSON.stringify(value);
+      if (localStorage.getItem(key) === serialized) return;
+      localStorage.setItem(key, serialized);
+      window.FirebaseCloudData?.saveLocal(key, serialized);
+    };
+    ["journey-atlas-compare", "journey-atlas-favorites", "journey-atlas-recent"].forEach(key => {
+      const current = readStoredJson(key, []);
+      if (Array.isArray(current)) saveMigratedValue(key, readStoredArray(key));
+    });
+    const itineraryKey = "journey-atlas-itineraries";
+    const itineraries = readStoredJson(itineraryKey, {});
+    if (itineraries && typeof itineraries === "object" && !Array.isArray(itineraries)) {
+      let changed = false;
+      Object.entries(aliases).forEach(([oldId, newId]) => {
+        if (!Object.prototype.hasOwnProperty.call(itineraries, oldId)) return;
+        if (!Object.prototype.hasOwnProperty.call(itineraries, newId)) {
+          itineraries[newId] = itineraries[oldId];
+          delete itineraries[oldId];
+          changed = true;
+        } else if (JSON.stringify(itineraries[newId]) === JSON.stringify(itineraries[oldId])) {
+          delete itineraries[oldId];
+          changed = true;
+        }
+      });
+      if (changed) saveMigratedValue(itineraryKey, itineraries);
+    }
+    Object.entries(aliases).forEach(([oldId, newId]) => {
+      const oldKey = `journey-atlas-budget-${oldId}`;
+      const newKey = `journey-atlas-budget-${newId}`;
+      const oldValue = localStorage.getItem(oldKey);
+      if (oldValue === null) return;
+      if (localStorage.getItem(newKey) === null) {
+        localStorage.setItem(newKey, oldValue);
+        window.FirebaseCloudData?.saveLocal(newKey, oldValue);
+        if (cloudReady) {
+          localStorage.removeItem(oldKey);
+          window.FirebaseCloudData?.removeLocal(oldKey);
+        }
+      } else if (localStorage.getItem(newKey) === oldValue && cloudReady) {
+        localStorage.removeItem(oldKey);
+        window.FirebaseCloudData?.removeLocal(oldKey);
+      }
+    });
+  } catch (error) {
+    console.warn("城市資料合併後的本機資料整理失敗：", error);
+  }
 }
 
 window.PlannerView = {
@@ -30,6 +94,7 @@ window.PlannerView = {
   travelModes: { transit: "大眾運輸", walking: "步行", driving: "開車" },
 
   init: function () {
+    migrateCityAliasesInLocalStorage();
     const form = document.getElementById("recommendation-form");
     if (form && !form.dataset.bound) {
       form.dataset.bound = "true";
@@ -44,6 +109,7 @@ window.PlannerView = {
   },
 
   refreshCloudData: function () {
+    migrateCityAliasesInLocalStorage(true);
     this.compareIds = readStoredArray("journey-atlas-compare");
     this.favoriteIds = readStoredArray("journey-atlas-favorites");
     this.renderComparison();
@@ -135,9 +201,14 @@ window.PlannerView = {
     const localCities = (window.TRAVEL_DATA.countries || []).flatMap(country =>
       country.cities.map(city => ({ ...city, countryName: country.name, flag: country.flag, countryId: country.id }))
     );
-    return [...globalCities, ...localCities].filter((city, index, list) =>
-      list.findIndex(item => item.name === city.name && item.countryName === city.countryName) === index
-    );
+    const seen = new Set();
+    return [...globalCities, ...localCities].filter(city => {
+      const normalize = value => String(value || "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+      const key = `${normalize(city.countryName)}|${normalize(city.englishName || city.name)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   },
 
   renderRecommendations: function (formData) {
@@ -380,7 +451,10 @@ window.PlannerView = {
   },
 
   readBudget: function (city) {
-    const saved = readStoredJson(`journey-atlas-budget-${city.id}`, null);
+    const aliases = Object.entries(window.TRAVEL_DATA.globalCityAliases || {});
+    const legacyId = aliases.find(([, canonicalId]) => canonicalId === city.id)?.[0];
+    const saved = readStoredJson(`journey-atlas-budget-${city.id}`, null)
+      || (legacyId ? readStoredJson(`journey-atlas-budget-${legacyId}`, null) : null);
     if (!saved || typeof saved !== "object" || Array.isArray(saved)) {
       return { hotel: 12000, transport: 3500, food: 7000, activity: 5000 };
     }
@@ -540,14 +614,18 @@ window.PlannerView = {
   getItinerary: function (city, days) {
     const stored = readStoredJson(this.itineraryStorageKey, {});
     if (!stored || typeof stored !== "object" || Array.isArray(stored)) return Array.from({ length: days }, () => []);
-    const saved = stored[city.id]?.[days];
+    const aliases = Object.entries(window.TRAVEL_DATA.globalCityAliases || {});
+    const legacyId = aliases.find(([, canonicalId]) => canonicalId === city.id)?.[0];
+    const saved = (stored[city.id] || stored[legacyId])?.[days];
     return Array.from({ length: days }, (_, index) => Array.isArray(saved?.[index]) ? saved[index] : []);
   },
 
   getItineraryMeta: function (city, days) {
     const stored = readStoredJson(this.itineraryStorageKey, {});
     const metaKey = String(days) + "Meta";
-    const meta = stored && typeof stored === "object" && !Array.isArray(stored) ? stored[city.id]?.[metaKey] : null;
+    const aliases = Object.entries(window.TRAVEL_DATA.globalCityAliases || {});
+    const legacyId = aliases.find(([, canonicalId]) => canonicalId === city.id)?.[0];
+    const meta = stored && typeof stored === "object" && !Array.isArray(stored) ? (stored[city.id] || stored[legacyId])?.[metaKey] : null;
     return Array.isArray(meta) ? meta : [];
   },
 

@@ -6,7 +6,8 @@
 // dataId: compare | favorites | recent | itineraries | budget-{cityId}
 // Fields: value (JSON string, required, max 700,000 chars),
 //         updatedAt (server timestamp, required; immutable to client time).
-// A user may read/write only their own documents; no public or cross-user reads.
+// A user may list their own appData collection and read/write only supported
+// documents; no public or cross-user reads.
 // ===============================================================
 
 rules_version = '2';
@@ -36,7 +37,11 @@ service cloud.firestore {
     }
 
     match /users/{userId}/appData/{dataId} {
-      allow get, list: if isOwner(userId) && isAllowedDataId(dataId);
+      // The app fetches this user's whole appData collection. Firestore rules
+      // are not filters, so list authorization must depend on the owning path,
+      // not on each returned document ID. Writes remain restricted below.
+      allow get: if isOwner(userId) && isAllowedDataId(dataId);
+      allow list: if isOwner(userId);
       allow create: if isOwner(userId) && isValidAppData(dataId);
       allow update: if isOwner(userId) && isValidAppData(dataId);
       allow delete: if isOwner(userId) && isAllowedDataId(dataId);

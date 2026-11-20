@@ -212,13 +212,14 @@ class MapManager {
   }
   renderCityMarkers() {
     this.geojson.globalCities = this.emptyCollection();
-    (window.TRAVEL_DATA?.globalCities || []).forEach(city => {
+    this.getGlobalCityList().forEach(city => {
       const lat = Number(city.lat);
       const lng = Number(city.lng);
-      if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) this.geojson.globalCities.features.push(this.feature(city.id, [lng, lat], { kind: "global-city", cityId: city.id, rank: Number(city.travelRank) || 999, label: `${city.flag || ""} ${city.name}`.trim(), name: city.name, country: city.countryName || "" }));
+      if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) this.geojson.globalCities.features.push(this.feature(city.id, [lng, lat], { kind: "global-city", cityId: city.id, label: `${city.flag || ""} ${city.name}`.trim(), name: city.name, country: city.countryName || "" }));
     });
     this.geojson.cities = this.emptyCollection();
     (window.TRAVEL_DATA?.countries || []).forEach(country => (country.cities || []).forEach(city => {
+      if (this.hasGlobalCity(city, country.name)) return;
       const lat = Number(city.lat);
       const lng = Number(city.lng);
       if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) this.geojson.cities.features.push(this.feature(city.id, [lng, lat], { kind: "local-city", cityId: city.id, countryId: country.id, continentId: country.continentId, label: `${country.flag || ""} ${city.name}`.trim() }));
@@ -229,7 +230,7 @@ class MapManager {
     if (!this.map || !window.maplibregl) return;
     this.globalCityDomMarkers.forEach(marker => marker.remove());
     this.globalCityDomMarkers.clear();
-    (window.TRAVEL_DATA?.globalCities || []).forEach(city => {
+    this.getGlobalCityList().forEach(city => {
       const lat = Number(city.lat);
       const lng = Number(city.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
@@ -246,6 +247,18 @@ class MapManager {
       this.globalCityDomMarkers.set(city.id, marker);
     });
     this.updateMarkersVisibility();
+  }
+  getGlobalCityList() {
+    return window.TRAVEL_DATA?.globalCityLists?.nameSorted || window.TRAVEL_DATA?.globalCities || [];
+  }
+  normalizeCityIdentity(value) {
+    return String(value || "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+  }
+  hasGlobalCity(city, countryName = "") {
+    return this.getGlobalCityList().some(item => item.id === city.id || (
+      this.normalizeCityIdentity(item.countryName) === this.normalizeCityIdentity(countryName || city.countryName)
+      && this.normalizeCityIdentity(item.englishName || item.name) === this.normalizeCityIdentity(city.englishName || city.name)
+    ));
   }
   renderOverviewDomMarkers() {
     if (!this.map || !window.maplibregl) return;
@@ -268,6 +281,7 @@ class MapManager {
       addMarker(this.continentDomMarkers, id, [continent.center[1], continent.center[0]], "map-continent-marker", `<span class="map-continent-label">🌏 ${this.escapePopupText(continent.name)}</span>`, continent.name, () => this.onContinentSelect(id));
     });
     (window.TRAVEL_DATA?.countries || []).forEach(country => (country.cities || []).forEach(city => {
+      if (this.hasGlobalCity(city, country.name)) return;
       const lat = Number(city.lat);
       const lng = Number(city.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
@@ -276,10 +290,8 @@ class MapManager {
     this.updateMarkersVisibility();
   }
   getCityTier(city) {
-    const globalCity = (window.TRAVEL_DATA?.globalCities || []).find(item => item.id === city.id);
-    const rank = Number(globalCity?.populationRank || globalCity?.travelRank);
-    if (Number.isFinite(rank)) return rank <= 30 ? "major" : rank <= 70 ? "medium" : "small";
-    if (Array.isArray(city.airports) && city.airports.length) return "medium";
+    const globalCity = this.getGlobalCityList().find(item => item.id === city.id);
+    if ((globalCity?.spots?.length || city.spots?.length || 0) >= 3 || (globalCity?.airports?.length || city.airports?.length || 0) > 0) return "medium";
     return "small";
   }
   scheduleVisibleCityUpdate() {
@@ -346,16 +358,18 @@ class MapManager {
     if (!this.map || !city || !Number.isFinite(city.lat) || !Number.isFinite(city.lng)) return;
     this.currentCityContext = city; this.cityContextExitPending = false; this.clearCitySpots();
     const sourceSpots = this.getCitySpots(city);
-    const spots = sourceSpots.map((spot, index) => {
-      const hasCoords = Number.isFinite(spot.lat) && Number.isFinite(spot.lng);
-      const coordinates = hasCoords ? [spot.lng, spot.lat] : [city.lng + ((index % 3) - 1) * 0.008, city.lat + (Math.floor(index / 3) - 1) * 0.008];
-      const feature = this.feature(`${city.id}-spot-${index}`, coordinates, { kind: "spot", cityId: city.id, index, name: spot.name, label: `${index + 1}. ${spot.name}`, category: spot.category || "景點", rating: spot.rating || "—", note: spot.note || "精選景點", approximate: !hasCoords });
+    const spots = [];
+    sourceSpots.forEach((spot, index) => {
+      const hasCoords = Number.isFinite(spot.lat) && Number.isFinite(spot.lng)
+        && spot.lat >= -90 && spot.lat <= 90 && spot.lng >= -180 && spot.lng <= 180;
+      const feature = hasCoords
+        ? this.feature(`${city.id}-spot-${index}`, [spot.lng, spot.lat], { kind: "spot", cityId: city.id, index, name: spot.name, label: `${index + 1}. ${spot.name}`, category: spot.category || "景點", rating: spot.rating || "—", note: spot.note || "", approximate: false })
+        : null;
       this.citySpotMarkers.set(`${city.id}:${index}`, { feature, city, spot, index });
-      if (!hasCoords) window.SpotService?.fetchSpotDetail(spot.name, city.name, city).then(detail => {
-        if (!detail?.location || this.citySpotMarkers.get(`${city.id}:${index}`)?.feature !== feature) return;
-        this.updateSpotDetail(city.id, index, detail);
-      }).catch(error => console.warn(`無法定位「${spot.name}」：`, error));
-      return feature;
+      if (feature) spots.push(feature);
+      else window.SpotService?.fetchSpotDetail(spot.name, city.name, city)
+        .then(detail => this.updateSpotDetail(city.id, index, detail))
+        .catch(error => console.warn(`無法定位「${spot.name}」：`, error));
     });
     this.geojson.spots = { type: "FeatureCollection", features: [{ type: "Feature", id: `${city.id}-center`, properties: { kind: "center", cityId: city.id, label: `${city.name} 市中心` }, geometry: { type: "Point", coordinates: [city.lng, city.lat] } }, ...spots] };
     this.geojson.airports = { type: "FeatureCollection", features: this.getAirportData(city).filter(a => Number.isFinite(a.lat) && Number.isFinite(a.lng)).map((a, i) => this.feature(`${city.id}-airport-${i}`, [a.lng, a.lat], { kind: "airport", name: `${a.name} (${a.code})`, label: `✈ ${a.code}` })) };
@@ -416,40 +430,22 @@ class MapManager {
       "巴黎": [{ name: "戴高樂機場", code: "CDG", lat: 49.009, lng: 2.548 }, { name: "奧利機場", code: "ORY", lat: 48.726, lng: 2.365 }],
       "倫敦": [{ name: "希斯洛機場", code: "LHR", lat: 51.47, lng: -0.454 }], "雪梨": [{ name: "雪梨機場", code: "SYD", lat: -33.946, lng: 151.177 }],
       "洛杉磯": [{ name: "洛杉磯國際機場", code: "LAX", lat: 33.942, lng: -118.408 }], "紐約": [{ name: "甘迺迪國際機場", code: "JFK", lat: 40.6413, lng: -73.7781 }, { name: "紐華克自由國際機場", code: "EWR", lat: 40.6895, lng: -74.1745 }, { name: "拉瓜迪亞機場", code: "LGA", lat: 40.7769, lng: -73.874 }],
-      "舊金山": [{ name: "舊金山國際機場", code: "SFO", lat: 37.621, lng: -122.379 }, { name: "桃園國際機場", code: "TPE", lat: 25.079, lng: 121.235 }]
+      "舊金山": [{ name: "舊金山國際機場", code: "SFO", lat: 37.621, lng: -122.379 }]
     };
     if (catalog[city.name]) return catalog[city.name];
-    const airportCode = String(city.id || city.name || "CITY").replace(/[^a-z]/gi, "").slice(0, 3).toUpperCase().padEnd(3, "X");
-    return [{
-      name: `${city.name} 主要機場`,
-      code: airportCode,
-      lat: Number(city.lat) + 0.025,
-      lng: Number(city.lng) + 0.025,
-      approximate: true
-    }];
+    return [];
   }
   getCitySpots(city) {
     if (Array.isArray(city?.spots) && city.spots.length) return city.spots;
     if (Array.isArray(city?.attractions) && city.attractions.length) {
-      return city.attractions.slice(0, 3).map((name, index) => ({
-        name,
-        category: index === 0 ? "城市地標" : index === 1 ? "歷史文化" : "在地體驗",
-        rating: (4.7 - index * 0.1).toFixed(1),
-        tag: "推薦探索",
-        note: `探索${city.name}的代表性景點與城市風貌。`
-      }));
+      return city.attractions.map(name => typeof name === "string" ? { name } : name);
     }
-    return [{
-      name: `${city.name} 城市地標`,
-      category: "城市地標",
-      rating: "—",
-      tag: "城市探索",
-      note: "以城市中心作為探索入口，持續補充更多精選景點。"
-    }];
+    return [];
   }
   escapePopupText(value) { return String(value || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   createSpotPopup(city, spot, index, detail = null) {
-    return `<div class="map-spot-popup"><strong>#${index + 1} ${this.escapePopupText(detail?.title || spot.name)}</strong><span>${this.escapePopupText(spot.category || "景點")} · ★ ${this.escapePopupText(spot.rating || "—")}</span><p>${this.escapePopupText(detail?.extract || spot.note || "精選景點")}</p><button type="button" data-map-spot-index="${index}">查看景點詳細資訊</button></div>`;
+    const rating = spot.ratingSource ? `★ ${spot.rating} · ${spot.ratingSource}` : "評分資料未提供";
+    return `<div class="map-spot-popup"><strong>#${index + 1} ${this.escapePopupText(detail?.title || spot.name)}</strong><span>${this.escapePopupText(spot.category || "景點")} · ${this.escapePopupText(rating)}</span><p>${this.escapePopupText(detail?.extract || spot.note || "尚無補充說明")}</p><button type="button" data-map-spot-index="${index}">查看景點詳細資訊</button></div>`;
   }
   openSpotPopup(feature) {
     const p = feature.properties || {}, entry = this.citySpotMarkers.get(`${p.cityId}:${p.index}`); if (!entry) return;
@@ -463,11 +459,22 @@ class MapManager {
   updateSpotDetail(cityId, index, detail) {
     const entry = this.citySpotMarkers.get(`${cityId}:${index}`); if (!entry || !detail) return;
     const loc = detail.location;
-    if (Number.isFinite(loc?.latitude) && Number.isFinite(loc?.longitude) && loc.category !== "city") {
-      entry.spot.lat = loc.latitude; entry.spot.lng = loc.longitude; entry.feature.geometry.coordinates = [loc.longitude, loc.latitude]; entry.feature.properties.approximate = false;
-      this.cityContextDomMarkers.get(String(entry.feature.id))?.setLngLat(entry.feature.geometry.coordinates);
+    if (!Number.isFinite(loc?.latitude) || !Number.isFinite(loc?.longitude)
+      || loc.latitude < -90 || loc.latitude > 90 || loc.longitude < -180 || loc.longitude > 180
+      || loc.category === "city" || this.currentCityContext?.id !== cityId) return;
+    entry.spot.lat = loc.latitude; entry.spot.lng = loc.longitude;
+    if (!entry.feature) {
+      entry.feature = this.feature(`${cityId}-spot-${index}`, [loc.longitude, loc.latitude], {
+        kind: "spot", cityId, index, name: entry.spot.name, label: `${index + 1}. ${entry.spot.name}`,
+        category: entry.spot.category || "景點", rating: entry.spot.rating || "—", note: entry.spot.note || "", approximate: false
+      });
+      this.geojson.spots.features.push(entry.feature);
+    } else {
+      entry.feature.geometry.coordinates = [loc.longitude, loc.latitude];
     }
     this.syncSource("spots");
+    this.renderCityContextDomMarkers();
+    this.updateMarkersVisibility();
   }
   fitCityContext(city, animate = true) {
     if (!this.map || this.currentCityContext?.id !== city.id) return;

@@ -17,6 +17,8 @@ window.CountryView = {
   },
 
   render: function(state) {
+    const aliases = window.TRAVEL_DATA.globalCityAliases || {};
+    if (state.globalCityId && aliases[state.globalCityId]) state.globalCityId = aliases[state.globalCityId];
     const globalCity = state.globalCityId && window.TRAVEL_DATA.globalCities.find(city => city.id === state.globalCityId);
     const globalProfile = globalCity ? this.getGlobalCityProfile(globalCity) : null;
     const country = globalCity ? {
@@ -26,10 +28,9 @@ window.CountryView = {
       priceLevel: { tier: globalProfile.budget, rating: globalProfile.rating, dailyBudgetTwd: globalProfile.budget === "親民" ? "約 NT$1,800–3,200／日" : "約 NT$2,800–5,500／日", dining: globalProfile.budget === "親民" ? "約 NT$500–1,000／日" : "約 NT$800–1,800／日", transit: "約 NT$150–450／日", hotel: globalProfile.budget === "親民" ? "約 NT$1,200–3,000／晚" : "約 NT$2,000–6,000／晚" },
       cities: [{
         ...globalCity,
-        description: `${globalCity.name}是${globalCity.countryName}的重要城市，適合從城市地標、在地生活與歷史脈絡開始探索。`,
-        spots: ((Array.isArray(globalCity.spots) && globalCity.spots.length ? globalCity.spots : globalCity.attractions || []).length ? (Array.isArray(globalCity.spots) && globalCity.spots.length ? globalCity.spots : globalCity.attractions || []) : [`${globalCity.name} 城市地標`]).slice(0, 3).map((name, index) => typeof name === "string"
-          ? { name, category: index === 0 ? "歷史文化" : "城市體驗", rating: (4.7 - index * 0.1).toFixed(1), tag: "推薦探索", note: "可查詢百科摘要、圖片與地圖位置，建議預留 1–2 小時探索。" }
-          : name)
+        spots: (Array.isArray(globalCity.spots) ? globalCity.spots : []).map(spot => typeof spot === "string"
+          ? { name: spot, category: "景點", rating: "—", tag: "資料待補", note: "" }
+          : spot)
       }]
     } : window.TRAVEL_DATA.countries.find(c => c.id === state.selectedCountryId);
     if (!country) return;
@@ -141,36 +142,38 @@ window.CountryView = {
     if (!currentCity) return;
 
     const cityDescription = document.getElementById("city-description-text");
-    if (cityDescription) cityDescription.innerText = currentCity.description;
+    if (cityDescription) cityDescription.innerText = currentCity.description || "目前沒有可核實的城市介紹。";
     const cityHeading = document.querySelector("#view-country .city-tabs-card h3");
-    if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：城市資訊與熱門景點`;
+    if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：城市資訊與景點資料`;
     const detail = document.getElementById("city-detail-facts");
     if (detail) {
       detail.innerHTML = `
-        <div><strong>🌤️ 氣候</strong><p>${currentCity.climate || "四季風貌各異，建議依月份查詢即時預報。"}</p></div>
-        <div><strong>🎭 人文</strong><p>${currentCity.culture || "融合在地生活、飲食、節慶與當代城市文化。"}</p></div>
-        <div><strong>📜 歷史</strong><p>${currentCity.history || "可從歷史街區、博物館與城市地標認識發展脈絡。"}</p></div>
+        <div><strong>🌤️ 氣候</strong><p>${currentCity.climate || "尚無已核實的氣候摘要。"}</p></div>
+        <div><strong>🎭 人文</strong><p>${currentCity.culture || "尚無已核實的人文資料。"}</p></div>
+        <div><strong>📜 歷史</strong><p>${currentCity.history || "尚無已核實的歷史資料。"}</p></div>
       `;
     }
     const chart = document.getElementById("city-insight-chart");
     if (chart) {
+      const facts = Array.isArray(currentCity.spots) ? currentCity.spots : [];
+      const airports = Array.isArray(currentCity.airports) ? currentCity.airports : [];
       const metrics = [
-        ["文化深度", currentCity.culture ? 88 : 62, "節慶、飲食與生活脈絡"],
-        ["歷史探索", currentCity.history ? 84 : 60, "古蹟、街區與博物館"],
-        ["城市便利", 76, "交通、資訊與移動彈性"],
-        ["初訪友善", 81, "適合作為第一次造訪的目的地"]
+        ["城市介紹", currentCity.description ? 1 : 0, currentCity.description ? "已收錄" : "待補資料"],
+        ["景點", Math.min(facts.length, 5) / 5, `${facts.length} 筆已編目資料`],
+        ["機場", airports.length ? 1 : 0, airports.length ? `${airports.length} 筆已編目資料` : "尚無已確認資料"],
+        ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, "城市中心座標"]
       ];
-      chart.innerHTML = metrics.map(([name, value, hint]) => `
+      chart.innerHTML = `<p class="city-data-completeness-label">資料完整度（不代表旅遊評分）</p>` + metrics.map(([name, completeness, hint]) => `
         <div class="insight-metric" title="${hint}">
-          <div><strong>${name}</strong><span>${value}</span></div>
-          <div class="insight-track"><i style="width:${value}%"></i></div>
-          <small>${hint}</small>
+          <div><strong>${name}</strong><span>${hint}</span></div>
+          <div class="insight-track"><i style="width:${completeness * 100}%"></i></div>
         </div>
       `).join("");
     }
     window.PlannerView?.renderCityTools(currentCity, state);
 
-    spotsContainer.innerHTML = currentCity.spots.map((spot, idx) => `
+    const spots = Array.isArray(currentCity.spots) ? currentCity.spots : [];
+    spotsContainer.innerHTML = spots.length ? spots.map((spot, idx) => `
       <div class="spot-item" id="spot-item-${idx}" data-city-id="${currentCity.id}" data-spot-index="${idx}">
         <div style="display:flex; gap:1rem; align-items:center; width:100%;">
           <div id="spot-thumb-${idx}" style="display:none; width:64px; height:64px; border-radius:8px; overflow:hidden; flex-shrink:0; background:#e2e8f0;"></div>
@@ -184,14 +187,14 @@ window.CountryView = {
             <div class="spot-note" id="spot-note-${idx}">${spot.note}</div>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.4rem;">
-            <div class="spot-score">★ ${spot.rating}</div>
+            <div class="spot-score">${spot.ratingSource ? `★ ${spot.rating} · ${spot.ratingSource}` : "評分資料未提供"}</div>
             <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name + ' ' + currentCity.name)}" target="_self" style="font-size:0.75rem; color:var(--primary); text-decoration:none; display:inline-flex; align-items:center; gap:2px; background:#eff6ff; padding:2px 6px; border-radius:4px; font-weight:500;">
               📍 地圖導航
             </a>
           </div>
         </div>
       </div>
-    `).join("");
+    `).join("") : `<p class="spot-data-empty">目前沒有可核實的景點資料；城市中心仍可用於地圖探索。</p>`;
 
     // 非同步結果只有在使用者仍停留於同一城市時才更新頁面。
     const renderedCountryId = country.id;
@@ -200,10 +203,26 @@ window.CountryView = {
       const activeCountryId = state.globalCityId ? `global-${state.globalCityId}` : state.selectedCountryId;
       return activeCountryId === renderedCountryId && state.selectedCityId === renderedCityId;
     };
+    if (!currentCity.description && cityDescription && window.SpotService?.fetchCitySummary) {
+      cityDescription.textContent = "正在查詢有來源的城市介紹…";
+      window.SpotService.fetchCitySummary(currentCity.name, country.name).then(summary => {
+        if (!summary?.extract || !isCurrentCity()) return;
+        cityDescription.textContent = summary.extract;
+        if (summary.pageUrl) {
+          const source = document.createElement("a");
+          source.href = summary.pageUrl;
+          source.target = "_blank";
+          source.rel = "noopener noreferrer";
+          source.textContent = `資料來源：${summary.sourceLabel || "百科資料"}`;
+          source.style.cssText = "display:inline-block; margin-top:0.35rem; font-size:0.78rem;";
+          cityDescription.append(document.createElement("br"), source);
+        }
+      }).catch(error => console.warn("城市介紹查詢失敗：", error));
+    }
     this.renderCityWeather(currentCity, renderedCountryId, renderedCityId, state);
 
     if (window.SpotService) {
-      currentCity.spots.forEach((spot, idx) => {
+      spots.forEach((spot, idx) => {
         window.SpotService.fetchSpotDetail(spot.name, currentCity.name, currentCity).then(wiki => {
           if (!wiki || !isCurrentCity()) return;
           const thumbEl = document.getElementById(`spot-thumb-${idx}`);

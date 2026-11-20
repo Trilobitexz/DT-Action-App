@@ -9,7 +9,6 @@
       "package.json",
       "README.md",
       "DESIGN_SPEC.md",
-      "pdf_content.txt",
       "*.pdf",
       "node_modules/**",
       ".git/**",
