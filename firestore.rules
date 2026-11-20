@@ -1,0 +1,49 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+// users/{uid}/appData/{dataId}
+// Each document stores one private Journey Atlas preference/data item.
+// dataId: compare | favorites | recent | itineraries | budget-{cityId}
+// Fields: value (JSON string, required, max 700,000 chars),
+//         updatedAt (server timestamp, required; immutable to client time).
+// A user may read/write only their own documents; no public or cross-user reads.
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAllowedDataId(dataId) {
+      return dataId in ['compare', 'favorites', 'recent', 'itineraries']
+        || dataId.matches('^budget-[A-Za-z0-9_-]{1,120}$');
+    }
+
+    function isValidAppData(dataId) {
+      return isAllowedDataId(dataId)
+        && request.resource.data.keys().hasAll(['value', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['value', 'updatedAt'])
+        && request.resource.data.value is string
+        && request.resource.data.value.size() <= 700000
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    match /users/{userId}/appData/{dataId} {
+      allow get, list: if isOwner(userId) && isAllowedDataId(dataId);
+      allow create: if isOwner(userId) && isValidAppData(dataId);
+      allow update: if isOwner(userId) && isValidAppData(dataId);
+      allow delete: if isOwner(userId) && isAllowedDataId(dataId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

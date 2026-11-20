@@ -36,7 +36,7 @@
 
 互動地圖使用 MapLibre GL JS 單一 WebGL 畫布，以 globe 與 Mercator 投影切換 3D 地球和平面地圖；2D／3D 使用雙按鈕投影選擇器，清楚標示目前視角，城市、景點、航線和底圖風格在兩種投影中共用，不再另外建立 Cesium renderer。城市標記依重要度分為大、中、小三級：大城市先出現，中型城市與小城市必須逐步放大後才顯示，避免世界視角擁擠；城市資料版本 `2026.11.16` 會在載入時統一 155 座國家城市與 106 座全球城市，應用版本為 `2026.11.16-css-layout-1`。進入城市後若縮小至 zoom 5.8 以下，會自動退出城市詳情並顯示附近城市；本地城市回到洲別視圖，全球城市回到世界視圖，繼續縮小可依既有層級回到更大範圍。每座城市至少有三個結構化景點與一個機場資料，並保留精確機場目錄、缺漏資料才使用備援座標。景點定位服務更新座標時會同步更新地圖 marker，城市地標的根 marker 固定為 30×30 像素，維持 MapLibre 的絕對定位；文字標籤隔離為不參與版面流動的浮動元素，不會因文字長度、marker 順序或窄畫面改變地理錨點。地圖標籤使用底圖提供的 Noto Sans glyph，避免載入不存在字型造成 404。無直飛城市會以橘色分段航線顯示桃園至轉機樞紐再到目的地。底圖提供 OpenFreeMap 向量地圖、簡約樣式與 Esri World Imagery 衛星影像，依服務條款保留圖面 attribution；圖資需要網路，瀏覽器需支援 WebGL。
 
-Firebase 使用 compat SDK 初始化 Authentication 與 Analytics；Google 登入優先使用 Popup，若瀏覽器阻擋 Popup 或等待逾時會自動改用 Redirect，Analytics 不可用時會安全降級，不會阻止登入、註冊或地圖功能。
+Firebase 使用 compat SDK 初始化 Authentication 與 Analytics；Google 登入使用 Popup 彈出 Google 帳戶驗證視窗；若 Firebase SDK 或網域設定錯誤，帳戶選單會顯示錯誤提示。Analytics 不可用時會安全降級，不會阻止登入或地圖功能。
 
 ## 專案規格文件
 
@@ -60,12 +60,18 @@ Firebase 初始化與 Web SDK 設定位於 [`src/js/firebase.js`](./src/js/fireb
 
 ### 登入功能
 
-頁面右上角的帳戶選單提供 Google 登入，以及電子郵件／密碼註冊與登入。註冊後系統會寄出 Firebase 電子郵件驗證信；未驗證的電子郵件帳戶不可登入。驗證信使用 Firebase Console 的 Authentication 電子郵件範本設定。
+頁面右上角的帳戶選單只提供 Google 登入。按下「使用 Google 帳戶登入」會直接開啟 Google 帳戶驗證視窗，不需要在網站輸入電子郵件或密碼。
 
 ### Firebase Console 必要設定
 
 1. 確認 Web App 的 Firebase 設定與 `src/js/firebase.js` 中 `firebaseConfig` 相符。
-2. 在 **Authentication → Sign-in method** 啟用 **Google** 與 **Email/Password**。
-3. 在 **Authentication → Settings → Authorized domains** 加入正式網站網域；本機測試使用 `localhost`。
-4. 在 Firebase Authentication 的電子郵件範本中確認寄件者、主旨、應用程式名稱和驗證連結設定。
+2. 在 **Authentication → Sign-in method** 啟用 **Google**。如登入回報 `auth/operation-not-allowed`，請在此頁確認 Google 提供者已啟用。
+3. 在 **Authentication → Settings → Authorized domains** 加入 `trilobitexz.github.io`（GitHub Pages 的自訂專案網址只需加入主機名稱，不要加 `https://` 或 `/DT-Action-App/`）。本機測試使用 `localhost`。
+4. 確認 Google 登入提供者的支援電子郵件與 OAuth 設定已完成。
 5. 你提供的應用程式資訊顯示「連結的 Firebase 託管網站：dt-action-app」，請在 Firebase Console → Hosting 查看該網站狀態與實際網址。只有已建立並完成部署的 Hosting 網站才可開啟；預設網址通常為 `https://dt-action-app.web.app` 或 `https://dt-action-app.firebaseapp.com`，請以 Hosting 頁面顯示為準。若尚未建立 Hosting 網站，請先在 Console 的 Hosting 流程建立並部署。
+
+## 登入與 Firestore 雲端同步
+
+Firebase Authentication 前端登入使用 Google（不含 LINE，也不顯示電子郵件／密碼登入表單）。Firestore Standard 預設資料庫建立於 `asia-east1`。登入後，城市收藏、比較清單、最近瀏覽、預算與行程會同步至 `users/{uid}/appData/{dataId}`；每位使用者只能讀寫自己的資料，未登入與跨帳戶存取會被 Firestore 規則拒絕。資料仍會保留在本機，網路／規則問題時會在帳戶選單顯示同步狀態。
+
+Firestore 安全規則位於 [`firestore.rules`](./firestore.rules)，僅允許指定應用資料文件與受限 JSON 字串大小。規則已部署至 Firebase；正式公開使用前仍建議進行安全規則與資料同步測試。Hosting 使用專案根目錄作為靜態網站來源，但會排除課程文件、規格、設定與規則檔案，避免發布非網站內容。

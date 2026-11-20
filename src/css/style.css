@@ -2402,3 +2402,7 @@ body {
   .auth-avatar { width: 26px; height: 26px; }
   .auth-menu-panel { right: -0.2rem; }
 }
+.cloud-sync-status { margin: -0.4rem 0 0.7rem; color: #718078; font-size: 0.7rem; line-height: 1.4; }
+.cloud-sync-status[data-state="pending"] { color: #956b2e; }
+.cloud-sync-status[data-state="success"] { color: #16745e; }
+.cloud-sync-status[data-state="error"] { color: #b42318; }

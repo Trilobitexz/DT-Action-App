@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="src/css/style.css?v=30">
+  <link rel="stylesheet" href="src/css/style.css?v=31">
 
 </head>
 <body>
@@ -41,25 +41,15 @@
           <div class="auth-menu" id="auth-menu">
             <button class="btn-auth auth-menu-trigger" id="auth-menu-trigger" type="button" aria-expanded="false" aria-controls="auth-menu-panel">
               <span class="auth-avatar" id="auth-avatar" aria-hidden="true">👤</span>
-              <span id="auth-menu-label">登入 / 註冊</span>
+              <span id="auth-menu-label">登入</span>
               <span class="auth-menu-chevron" aria-hidden="true">⌄</span>
             </button>
             <div class="auth-menu-panel" id="auth-menu-panel" hidden>
               <div class="auth-menu-account" id="google-user-status" role="status">尚未登入</div>
+              <p class="cloud-sync-status" id="cloud-sync-status" role="status" aria-live="polite">登入後可將收藏、比較、預算與行程同步到雲端。</p>
               <div class="auth-panel-divider" aria-hidden="true"></div>
-              <button class="btn-auth auth-google-button" id="btn-google-sign-in" type="button"><span class="google-g" aria-hidden="true">G</span>使用 Google 繼續</button>
-              <form class="auth-email-form" id="email-auth-form">
-                <label for="auth-email">電子郵件</label>
-                <input id="auth-email" name="email" type="email" autocomplete="email" placeholder="name@example.com" required>
-                <label for="auth-password">密碼 <span>至少 6 個字元</span></label>
-                <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="6" placeholder="輸入密碼" required>
-                <p class="auth-feedback" id="auth-feedback" role="status" aria-live="polite"></p>
-                <div class="auth-email-actions">
-                  <button class="auth-email-submit" id="btn-email-sign-in" type="submit">電子郵件登入</button>
-                  <button class="auth-email-register" id="btn-email-register" type="button">建立帳戶</button>
-                </div>
-              </form>
-              <button class="auth-resend" id="btn-resend-verification" type="button" hidden>重新寄送驗證信</button>
+              <button class="btn-auth auth-google-button" id="btn-google-sign-in" type="button"><span class="google-g" aria-hidden="true">G</span>使用 Google 帳戶登入</button>
+              <p class="auth-feedback" id="auth-feedback" role="status" aria-live="polite"></p>
               <button class="auth-logout" id="btn-google-sign-out" type="button" hidden>登出</button>
             </div>
           </div>
@@ -314,7 +304,7 @@
       window.mapLibreReady.catch(error => console.error(error));
     </script>
     <script src="src/js/map/geoContinents.js"></script>
-    <script src="src/js/map/mapManager.js?v=30"></script>
+    <script src="src/js/map/mapManager.js?v=31"></script>
 
     <!-- 載入資料庫與各洲資料模組 -->
     <script src="src/data/travelData.js"></script>
@@ -334,12 +324,13 @@
 
     <!-- 載入視圖模組 -->
     <script src="src/js/modules/continentView.js"></script>
-    <script src="src/js/modules/countryView.js?v=30"></script>
+    <script src="src/js/modules/countryView.js?v=31"></script>
     <script src="src/js/modules/globalCitiesView.js"></script>
     <script src="src/js/modules/plannerView.js"></script>
-    <script src="src/js/firebase.js?v=30" defer></script>
+    <script src="src/js/firebase.js?v=31" defer></script>
     <script src="src/js/app.js?v=30"></script>
     <script src="src/js/pwa.js"></script>
   </div>
 </body>
 </html>
+
