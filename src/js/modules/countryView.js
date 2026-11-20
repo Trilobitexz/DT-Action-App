@@ -144,7 +144,7 @@ window.CountryView = {
     const cityDescription = document.getElementById("city-description-text");
     if (cityDescription) cityDescription.innerText = currentCity.description || "目前沒有可核實的城市介紹。";
     const cityHeading = document.querySelector("#view-country .city-tabs-card h3");
-    if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：城市資訊與景點資料`;
+    if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：${currentCity.destinationType === "island" ? "目的地資訊" : "城市資訊"}與景點資料`;
     const detail = document.getElementById("city-detail-facts");
     if (detail) {
       detail.innerHTML = `
@@ -161,7 +161,7 @@ window.CountryView = {
         ["城市介紹", currentCity.description ? 1 : 0, currentCity.description ? "已收錄" : "待補資料"],
         ["景點", Math.min(facts.length, 5) / 5, `${facts.length} 筆已編目資料`],
         ["機場", airports.length ? 1 : 0, airports.length ? `${airports.length} 筆已編目資料` : "尚無已確認資料"],
-        ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, "城市中心座標"]
+        ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, currentCity.coordinateSource ? "GeoNames 地名參考點" : "尚未交叉核對"]
       ];
       chart.innerHTML = `<p class="city-data-completeness-label">資料完整度（不代表旅遊評分）</p>` + metrics.map(([name, completeness, hint]) => `
         <div class="insight-metric" title="${hint}">
@@ -284,6 +284,51 @@ window.CountryView = {
           }
         }).catch(error => console.warn("景點百科載入失敗：", error));
       });
+      window.SpotService.fetchNearbyPlaces(currentCity).then(places => {
+        if (!isCurrentCity() || !Array.isArray(places)) return;
+        const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+        const knownNames = new Set(spots.map(spot => normalizeName(spot.name)));
+        const verifiedPlaces = places.filter(place => {
+          const name = normalizeName(place.name);
+          if (!name || knownNames.has(name)) return false;
+          knownNames.add(name);
+          return true;
+        });
+        if (!verifiedPlaces.length) return;
+        spotsContainer.querySelector(".spot-data-empty")?.remove();
+        const sourceNote = document.createElement("p");
+        sourceNote.className = "spot-source-attribution";
+        sourceNote.textContent = "地圖周邊地點來自 OpenStreetMap contributors；資料以來源連結查看與校正。";
+        spotsContainer.appendChild(sourceNote);
+        verifiedPlaces.forEach((place, offset) => {
+          const index = spots.length + offset;
+          const card = document.createElement("article");
+          card.className = "spot-item spot-item-open-map";
+          card.dataset.cityId = currentCity.id;
+          card.dataset.spotIndex = String(index);
+          const copy = document.createElement("div");
+          copy.className = "spot-main";
+          const title = document.createElement("h5");
+          title.textContent = `#${index + 1} ${place.name}`;
+          const category = document.createElement("span");
+          category.className = "spot-badge";
+          category.textContent = place.category || "景點";
+          title.append(" ", category);
+          const note = document.createElement("div");
+          note.className = "spot-note";
+          const fetchedDate = place.fetchedAt ? new Date(place.fetchedAt).toLocaleDateString("zh-TW") : "";
+          note.textContent = `${place.note} · 約 ${place.distanceKm.toFixed(1)} 公里${fetchedDate ? ` · 查詢於 ${fetchedDate}` : ""}`;
+          copy.append(title, note);
+          const source = document.createElement("a");
+          source.href = place.sourceUrl;
+          source.target = "_blank";
+          source.rel = "noopener noreferrer";
+          source.className = "spot-source-link";
+          source.textContent = "查看 OpenStreetMap 資料";
+          card.append(copy, source);
+          spotsContainer.appendChild(card);
+        });
+      }).catch(error => console.warn("OpenStreetMap 周邊景點載入失敗：", error));
     }
   },
 

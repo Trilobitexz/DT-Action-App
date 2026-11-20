@@ -4,6 +4,7 @@ window.SpotService = {
   openTripMapApiKey: "",
   requestTimeoutMs: 10000,
   requestQueue: [],
+  nearbyPlaceRequests: {},
   activeRequests: 0,
   scheduledRequests: 0,
   maxConcurrentRequests: 3,
@@ -199,20 +200,74 @@ window.SpotService = {
     return null;
   },
 
-  fetchOpenStreetMap: async function (spotName, cityName) {
-    const cleanName = spotName.split("(")[0].trim();
-    const query = encodeURIComponent(cityName ? `${cleanName}, ${cityName}` : cleanName);
-    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&q=${query}`;
-    const data = await this.requestJson(url);
-    const place = data[0];
-    if (!place) throw new Error("OpenStreetMap 查無地點");
-    return {
-      latitude: Number(place.lat),
-      longitude: Number(place.lon),
-      address: place.display_name,
-      category: place.type || place.class || "place",
-      pageUrl: `https://www.openstreetmap.org/?mlat=${encodeURIComponent(place.lat)}&mlon=${encodeURIComponent(place.lon)}#map=18/${encodeURIComponent(place.lat)}/${encodeURIComponent(place.lon)}`
-    };
+  fetchNearbyPlaces: async function (city, { radius = 10000, limit = 20 } = {}) {
+    if (!Number.isFinite(city?.lat) || !Number.isFinite(city?.lng)) return [];
+    const cacheKey = `journey-atlas-osm-places-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
+    const cacheTtl = 7 * 24 * 60 * 60 * 1000;
+    try {
+      const saved = JSON.parse(localStorage.getItem(cacheKey) || "null");
+      if (saved?.fetchedAt && Date.now() - saved.fetchedAt < cacheTtl && Array.isArray(saved.places)) return saved.places;
+    } catch (error) {
+      console.warn("OpenStreetMap 快取無法讀取：", error);
+    }
+    if (this.nearbyPlaceRequests[cacheKey]) return this.nearbyPlaceRequests[cacheKey];
+
+    const query = `[out:json][timeout:20];(node["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park"](around:${radius},${city.lat},${city.lng});way["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park"](around:${radius},${city.lat},${city.lng});relation["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park"](around:${radius},${city.lat},${city.lng});node["name"]["historic"~"monument|memorial|castle|archaeological_site"](around:${radius},${city.lat},${city.lng});way["name"]["historic"~"monument|memorial|castle|archaeological_site"](around:${radius},${city.lat},${city.lng});node["name"]["amenity"~"museum|arts_centre"](around:${radius},${city.lat},${city.lng});way["name"]["amenity"~"museum|arts_centre"](around:${radius},${city.lat},${city.lng}););out center tags;`;
+    this.nearbyPlaceRequests[cacheKey] = (async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs * 2);
+      try {
+        const response = await fetch("https://overpass-api.de/api/interpreter", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "Accept": "application/json" },
+          body: `data=${encodeURIComponent(query)}`,
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error(`OpenStreetMap 地點服務回應異常 (${response.status})`);
+        const data = await response.json();
+        const fetchedAt = Date.now();
+        const places = (data.elements || []).map(element => {
+          const tags = element.tags || {};
+          const lat = Number(element.lat ?? element.center?.lat);
+          const lng = Number(element.lon ?? element.center?.lon);
+          const name = tags["name:zh"] || tags.name || tags["name:en"];
+          if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          const kind = tags.tourism || tags.historic || tags.amenity || "place";
+          const categories = {
+            attraction: "景點", museum: "博物館", gallery: "美術館／畫廊", viewpoint: "觀景點",
+            zoo: "動物園", theme_park: "主題樂園", monument: "紀念碑", memorial: "紀念地",
+            castle: "城堡", archaeological_site: "考古遺址", arts_centre: "藝術中心"
+          };
+          return {
+            name, category: categories[kind] || "景點", lat, lng,
+            note: "OpenStreetMap 已編目地點",
+            sourceId: "openstreetmap", sourceLabel: "OpenStreetMap contributors",
+            sourceUrl: `https://www.openstreetmap.org/${element.type}/${element.id}`,
+            osmId: `${element.type}/${element.id}`,
+            fetchedAt,
+            sourceDatasetAt: data.osm3s?.timestamp_osm_base || null,
+            distanceKm: this.distanceKm(city.lat, city.lng, lat, lng)
+          };
+        }).filter(Boolean)
+          .filter(place => place.distanceKm <= radius / 1000)
+          .sort((a, b) => a.distanceKm - b.distanceKm)
+          .filter((place, index, list) => {
+            const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+            return list.findIndex(candidate => normalizeName(candidate.name) === normalizeName(place.name)) === index;
+          })
+          .slice(0, limit);
+        try { localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt, places })); }
+        catch (error) { console.warn("OpenStreetMap 地點快取無法寫入：", error); }
+        return places;
+      } catch (error) {
+        console.warn(`無法載入 ${city.name || "此城市"} 的 OpenStreetMap 地點：`, error);
+        return [];
+      } finally {
+        clearTimeout(timeoutId);
+        delete this.nearbyPlaceRequests[cacheKey];
+      }
+    })();
+    return this.nearbyPlaceRequests[cacheKey];
   },
 
   fetchSpotDetail: async function(spotName, cityName = "", cityCoordinates = null) {
@@ -256,38 +311,24 @@ window.SpotService = {
       || results.find(item => item?.sourceId === "wikivoyage")
       || results.find(item => item?.sourceId === "wikipedia")
       || results.find(item => item?.sourceId === "wikidata");
-    const [commons, rawMapData] = await Promise.all([
+    const [commons, nearbyPlaces] = await Promise.all([
       this.fetchCommonsImage(spotName, cityName).catch(error => {
         console.warn("Wikimedia Commons 圖片查詢失敗：", error);
         return null;
       }),
-      this.fetchOpenStreetMap(spotName, cityName).catch(error => {
-        if (!/查無/.test(error.message || "")) {
-          console.warn("OpenStreetMap 地點服務暫時無法使用：", error);
-        }
-        return null;
-      })
+      cityCoordinates ? this.fetchNearbyPlaces(cityCoordinates).catch(() => []) : Promise.resolve([])
     ]);
-    const mapData = rawMapData && Number.isFinite(cityCoordinates?.lat) && Number.isFinite(cityCoordinates?.lng)
-      && Number.isFinite(rawMapData.latitude) && Number.isFinite(rawMapData.longitude)
-      && this.distanceKm(cityCoordinates.lat, cityCoordinates.lng, rawMapData.latitude, rawMapData.longitude) <= 150
-      ? rawMapData
-      : rawMapData && !cityCoordinates
-        ? rawMapData
-        : null;
-    if (rawMapData && !mapData) {
-      console.warn(`OpenStreetMap 回傳的「${spotName}」位置與${cityName}距離過遠，已忽略該座標。`);
-    }
-    const directoryLocation = Number.isFinite(cityCoordinates?.lat) && Number.isFinite(cityCoordinates?.lng)
-      ? {
-        latitude: cityCoordinates.lat,
-        longitude: cityCoordinates.lng,
-        address: `${cityName}（城市目錄座標）`,
-        category: "city",
-        pageUrl: `https://www.openstreetmap.org/?mlat=${encodeURIComponent(cityCoordinates.lat)}&mlon=${encodeURIComponent(cityCoordinates.lng)}#map=12/${encodeURIComponent(cityCoordinates.lat)}/${encodeURIComponent(cityCoordinates.lng)}`
-      }
+    const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+    const mapData = nearbyPlaces.find(place => normalizeName(place.name) === normalizeName(spotName)) || null;
+    const resultLocation = result?.location
+      && Number.isFinite(cityCoordinates?.lat) && Number.isFinite(cityCoordinates?.lng)
+      && Number.isFinite(result.location.latitude) && Number.isFinite(result.location.longitude)
+      && result.location.latitude >= -90 && result.location.latitude <= 90
+      && result.location.longitude >= -180 && result.location.longitude <= 180
+      && this.distanceKm(cityCoordinates.lat, cityCoordinates.lng, result.location.latitude, result.location.longitude) <= 25
+      ? result.location
       : null;
-    if (!result && !commons && !mapData && !directoryLocation) return null;
+    if (!result && !commons && !mapData) return null;
 
     if (result) {
       result.extract = result.extract.length > 140 ? `${result.extract.substring(0, 140)}...` : result.extract;
@@ -297,15 +338,17 @@ window.SpotService = {
     }
     const enriched = {
       ...(result || { title: spotName, extract: "", thumbnail: commons?.thumbnail || null, pageUrl: null, sourceId: "commons", sourceLabel: "Wikimedia Commons" }),
-      location: result?.location || mapData || directoryLocation,
+      location: resultLocation || (mapData ? {
+        latitude: mapData.lat, longitude: mapData.lng, category: mapData.category,
+        pageUrl: mapData.sourceUrl, sourceLabel: mapData.sourceLabel
+      } : null),
       sources: [
         ...results.filter(Boolean).map(item => ({ label: item.sourceLabel, url: item.pageUrl })),
         ...(commons ? [{ label: "Wikimedia Commons 圖片", url: commons.pageUrl }] : []),
-        ...(result?.location?.pageUrl && result.location !== mapData
-          ? [{ label: `${result.sourceLabel} 座標`, url: result.location.pageUrl }]
+        ...(resultLocation?.pageUrl
+          ? [{ label: `${result.sourceLabel} 座標`, url: resultLocation.pageUrl }]
           : []),
-        ...(mapData ? [{ label: "OpenStreetMap 地點", url: mapData.pageUrl }] : []),
-        ...(!mapData && directoryLocation ? [{ label: "城市目錄座標", url: directoryLocation.pageUrl }] : [])
+        ...(mapData ? [{ label: "OpenStreetMap 地點", url: mapData.sourceUrl }] : [])
       ]
     };
     this.cache[cacheKey] = enriched;

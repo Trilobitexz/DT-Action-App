@@ -371,7 +371,36 @@ class MapManager {
         .then(detail => this.updateSpotDetail(city.id, index, detail))
         .catch(error => console.warn(`無法定位「${spot.name}」：`, error));
     });
-    this.geojson.spots = { type: "FeatureCollection", features: [{ type: "Feature", id: `${city.id}-center`, properties: { kind: "center", cityId: city.id, label: `${city.name} 市中心` }, geometry: { type: "Point", coordinates: [city.lng, city.lat] } }, ...spots] };
+    window.SpotService?.fetchNearbyPlaces(city).then(places => {
+      if (this.currentCityContext?.id !== city.id || !Array.isArray(places)) return;
+      const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+      const knownNames = new Set(sourceSpots.map(spot => normalizeName(spot.name)));
+      let nextIndex = sourceSpots.length;
+      places.forEach(spot => {
+        const name = normalizeName(spot.name);
+        if (!name || knownNames.has(name)) return;
+        knownNames.add(name);
+        const index = nextIndex++;
+        const feature = this.feature(`${city.id}-osm-${spot.osmId}`, [spot.lng, spot.lat], {
+          kind: "spot", cityId: city.id, index, name: spot.name,
+          label: `${index + 1}. ${spot.name}`, category: spot.category || "景點",
+          rating: "—", note: spot.note, sourceId: spot.sourceId, sourceUrl: spot.sourceUrl,
+          sourceLabel: spot.sourceLabel, approximate: false
+        });
+        this.citySpotMarkers.set(`${city.id}:${index}`, { feature, city, spot, index });
+        this.geojson.spots.features.push(feature);
+      });
+      this.syncSource("spots");
+      this.renderCityContextDomMarkers();
+      this.updateMarkersVisibility();
+      const spotCountLabel = document.querySelector("#map-context-info .map-context-spot-count");
+      if (spotCountLabel) {
+        const count = this.geojson.spots.features.filter(feature => feature.properties?.kind === "spot").length;
+        spotCountLabel.textContent = `🔴 地圖景點 ${count} 個`;
+      }
+    }).catch(error => console.warn(`無法載入 ${city.name} 的開放地圖景點：`, error));
+    const centerLabel = city.destinationType === "island" ? `${city.name} 島嶼地名點` : `${city.name} 地名參考點`;
+    this.geojson.spots = { type: "FeatureCollection", features: [{ type: "Feature", id: `${city.id}-center`, properties: { kind: "center", cityId: city.id, label: centerLabel }, geometry: { type: "Point", coordinates: [city.lng, city.lat] } }, ...spots] };
     this.geojson.airports = { type: "FeatureCollection", features: this.getAirportData(city).filter(a => Number.isFinite(a.lat) && Number.isFinite(a.lng)).map((a, i) => this.feature(`${city.id}-airport-${i}`, [a.lng, a.lat], { kind: "airport", name: `${a.name} (${a.code})`, label: `✈ ${a.code}` })) };
     this.syncSource("spots"); this.syncSource("airports"); this.geojson.routes = this.emptyCollection(); this.syncSource("routes");
     this.renderCityContextDomMarkers();
@@ -406,8 +435,12 @@ class MapManager {
       this.cityContextDomMarkers.set(key, marker);
     };
     const city = this.currentCityContext;
-    addMarker(`${city.id}-center`, [city.lng, city.lat], "map-city-center-marker", `<span class="city-center-pin">●</span>`, `${city.name} 市中心`, () => {
-      new window.maplibregl.Popup({ maxWidth: "260px" }).setLngLat([city.lng, city.lat]).setHTML(`<strong>${this.escapePopupText(city.name)} 市中心</strong><p>城市探索中心位置。</p>`).addTo(this.map);
+    const placeLabel = city.destinationType === "island" ? "島嶼地名參考點" : "地名參考點";
+    const coordinateSource = city.coordinateSource?.sourceUrl
+      ? `<a href="${this.escapePopupText(city.coordinateSource.sourceUrl)}" target="_blank" rel="noopener noreferrer">GeoNames 來源資料</a>`
+      : "座標來源尚未交叉核對";
+    addMarker(`${city.id}-center`, [city.lng, city.lat], "map-city-center-marker", `<span class="city-center-pin">●</span>`, `${city.name} ${placeLabel}`, () => {
+      new window.maplibregl.Popup({ maxWidth: "260px" }).setLngLat([city.lng, city.lat]).setHTML(`<strong>${this.escapePopupText(city.name)} ${placeLabel}</strong><p>${coordinateSource}</p>`).addTo(this.map);
     });
     this.geojson.spots.features.filter(feature => feature.properties.kind === "spot").forEach(feature => {
       const properties = feature.properties;
@@ -445,7 +478,8 @@ class MapManager {
   escapePopupText(value) { return String(value || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   createSpotPopup(city, spot, index, detail = null) {
     const rating = spot.ratingSource ? `★ ${spot.rating} · ${spot.ratingSource}` : "評分資料未提供";
-    return `<div class="map-spot-popup"><strong>#${index + 1} ${this.escapePopupText(detail?.title || spot.name)}</strong><span>${this.escapePopupText(spot.category || "景點")} · ${this.escapePopupText(rating)}</span><p>${this.escapePopupText(detail?.extract || spot.note || "尚無補充說明")}</p><button type="button" data-map-spot-index="${index}">查看景點詳細資訊</button></div>`;
+    const sourceLink = spot.sourceUrl ? `<a href="${this.escapePopupText(spot.sourceUrl)}" target="_blank" rel="noopener noreferrer">${this.escapePopupText(spot.sourceLabel || "資料來源")}</a>` : "";
+    return `<div class="map-spot-popup"><strong>#${index + 1} ${this.escapePopupText(detail?.title || spot.name)}</strong><span>${this.escapePopupText(spot.category || "景點")} · ${this.escapePopupText(rating)}</span><p>${this.escapePopupText(detail?.extract || spot.note || "尚無補充說明")}</p>${sourceLink}<button type="button" data-map-spot-index="${index}">查看景點詳細資訊</button></div>`;
   }
   openSpotPopup(feature) {
     const p = feature.properties || {}, entry = this.citySpotMarkers.get(`${p.cityId}:${p.index}`); if (!entry) return;

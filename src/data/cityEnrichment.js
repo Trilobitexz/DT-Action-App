@@ -160,7 +160,7 @@
   });
 
   const cityDataVersion = "2026.11.20";
-  const releaseVersion = "2026.11.20-city-catalog-1";
+  const releaseVersion = "2026.11.20-city-geonames-osm-1";
   const localCitiesById = new Map(
     window.TRAVEL_DATA.countries.flatMap(country => country.cities || []).map(city => [city.id, city])
   );
@@ -179,6 +179,20 @@
   };
   const normalizeCity = city => {
     const localCity = localCitiesById.get(city.id);
+    const geonamesRecord = window.CITY_GEONAMES?.[city.id];
+    if (geonamesRecord && Number.isFinite(geonamesRecord.lat) && Number.isFinite(geonamesRecord.lng)) {
+      city.lat = geonamesRecord.lat;
+      city.lng = geonamesRecord.lng;
+      city.geonameId = geonamesRecord.geonameId;
+      city.coordinateSource = {
+        provider: window.CITY_GEONAMES_SOURCE.provider,
+        geonameId: geonamesRecord.geonameId,
+        featureCode: geonamesRecord.featureCode,
+        checkedAt: window.CITY_GEONAMES_SOURCE.snapshotDate,
+        sourceUrl: geonamesRecord.sourceUrl,
+        matchDistanceKm: geonamesRecord.matchDistanceKm
+      };
+    }
     const sourceSpots = localCity?.spots?.length
       ? localCity.spots
       : city.spots?.length
@@ -200,8 +214,10 @@
       : city.airports?.length
         ? city.airports
         : airportCatalog[city.name] || [];
+    city.destinationType = geonamesRecord?.featureClass === "T" && geonamesRecord?.featureCode === "ISL" ? "island" : "city";
     city.dataVersion = cityDataVersion;
     city.dataStatus = {
+      coordinates: city.coordinateSource ? "cross-checked" : "unverified",
       spots: city.spots.length ? "listed" : "unavailable",
       airport: city.airports.length ? "listed" : "unavailable"
     };
@@ -235,6 +251,7 @@
   window.TRAVEL_DATA.releaseVersion = releaseVersion;
   uniqueGlobalCities.forEach(city => {
     city.dataStatus = {
+      coordinates: city.coordinateSource ? "cross-checked" : "unverified",
       spots: city.spots.length ? "listed" : "unavailable",
       airport: city.airports.length ? "listed" : "unavailable"
     };

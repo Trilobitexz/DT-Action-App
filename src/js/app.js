@@ -68,7 +68,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         const hasDirect = state.globalCityId
           ? window.CountryView?.getGlobalCityProfile(city)?.hasDirect === true
           : window.TRAVEL_DATA.countries.find(country => country.id === state.selectedCountryId)?.directFlight === true;
-        mapContextInfo.innerHTML = `<strong>📍 ${city.name} 城市地圖</strong><span>🔴 精選景點 ${spotCount} 個</span><span>✈ 機場 ${airportCount} 個</span><span>${hasDirect ? "🛫 台灣可直飛" : "🔁 台灣出發需轉機，地圖已顯示參考路線"}</span><small>資料版本：${window.TRAVEL_DATA.releaseVersion || window.TRAVEL_DATA.cityDataVersion || "內建資料"}<br>縮小至城市外圍後會自動回到附近城市，再縮小可返回洲別視圖。</small><div class="city-map-key" aria-label="地圖圖例"><span><i>1</i>推薦景點編號與下方清單一致</span><span>🔵 市中心</span><span>✈ 機場</span><span>點擊標記看景點資訊</span></div>`;
+        const mapTitle = city.destinationType === "island" ? "目的地地圖" : "城市地圖";
+        mapContextInfo.innerHTML = `<strong>📍 ${city.name} ${mapTitle}</strong><span class="map-context-spot-count">🔴 地圖景點 ${spotCount} 個</span><span>✈ 機場 ${airportCount} 個</span><span>${hasDirect ? "🛫 台灣可直飛" : "🔁 台灣出發需轉機，地圖已顯示參考路線"}</span><small>資料版本：${window.TRAVEL_DATA.releaseVersion || window.TRAVEL_DATA.cityDataVersion || "內建資料"}<br>座標參考：<a href="https://www.geonames.org/export/" target="_blank" rel="noopener noreferrer">GeoNames（CC BY 4.0）</a>；景點來自 OpenStreetMap contributors 並附單筆來源。<br>縮小至城市外圍後會自動回到附近城市，再縮小可返回洲別視圖。</small><div class="city-map-key" aria-label="地圖圖例"><span><i>1</i>地圖編號與下方清單一致</span><span>🔵 地名參考點</span><span>✈ 機場</span><span>點擊標記看景點資訊</span></div>`;
       }
     }
   };
