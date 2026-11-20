@@ -37,11 +37,19 @@
   sdkReady.then(function () {
     var firebase = window.firebase;
     var app = firebase.initializeApp(firebaseConfig);
+<<<<<<< HEAD
     var auth = firebase.auth();
     var db = firebase.firestore();
     var provider = new firebase.auth.GoogleAuthProvider();
     window.firebaseApp = app;
     window.firebaseAuth = auth;
+=======
+    var auth = firebase.auth();
+    var db = firebase.firestore();
+    var provider = new firebase.auth.GoogleAuthProvider();
+    window.firebaseApp = app;
+    window.firebaseAuth = auth;
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
     window.firebaseFirestore = db;
 
     var analyticsReady = firebase.analytics.isSupported()
@@ -59,7 +67,11 @@
       });
     };
 
+<<<<<<< HEAD
     var cloudSyncReadyUid = null;
+=======
+    var cloudSyncReadyUid = null;
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
     var cloudSyncGeneration = 0;
     var cloudWriteTimers = new Map();
     var cloudOwnerStorageKey = "journey-atlas-cloud-owner";
@@ -116,9 +128,15 @@
       keys.forEach(function (key) { localStorage.removeItem(key); });
     }
 
+<<<<<<< HEAD
     async function syncUserData(user) {
       var uid = user.uid;
       var runId = ++cloudSyncGeneration;
+=======
+    async function syncUserData(user) {
+      var uid = user.uid;
+      var runId = ++cloudSyncGeneration;
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
       cloudSyncReadyUid = null;
       setCloudSyncStatus("正在同步個人資料…", "pending");
       var previousOwner = localStorage.getItem(cloudOwnerStorageKey);
@@ -126,8 +144,13 @@
       if (previousOwner && previousOwner !== uid) clearCloudManagedLocalData();
 
       var collectionRef = db.collection("users").doc(uid).collection("appData");
+<<<<<<< HEAD
       var snapshot = await collectionRef.get();
       if (runId !== cloudSyncGeneration || !auth.currentUser || auth.currentUser.uid !== uid) return;
+=======
+      var snapshot = await collectionRef.get();
+      if (runId !== cloudSyncGeneration || !auth.currentUser || auth.currentUser.uid !== uid) return;
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
       var remoteByKey = new Map();
       snapshot.forEach(function (doc) {
         var key = storageKeyForDataId(doc.id);
@@ -163,7 +186,11 @@
         if (localEdit) delete meta[key];
       });
 
+<<<<<<< HEAD
       await Promise.all(uploads);
+=======
+      await Promise.all(uploads);
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
       if (runId === cloudSyncGeneration && auth.currentUser && auth.currentUser.uid === uid) {
         localStorage.setItem(cloudOwnerStorageKey, uid);
         writeCloudMeta(uid, meta);
@@ -221,12 +248,15 @@
       status: document.getElementById("google-user-status"),
       google: document.getElementById("btn-google-sign-in"),
       signOut: document.getElementById("btn-google-sign-out"),
+<<<<<<< HEAD
+=======
       form: document.getElementById("email-auth-form"),
       email: document.getElementById("auth-email"),
       password: document.getElementById("auth-password"),
       emailSignIn: document.getElementById("btn-email-sign-in"),
       register: document.getElementById("btn-email-register"),
       resend: document.getElementById("btn-resend-verification"),
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
       feedback: document.getElementById("auth-feedback")
     };
 
@@ -239,6 +269,13 @@
       console.error("Firebase Authentication 錯誤：", error);
       if (error.code === "auth/popup-closed-by-user") return feedback("登入視窗已關閉。", "error");
       var messages = {
+<<<<<<< HEAD
+        "auth/popup-blocked": "登入視窗遭封鎖，請允許彈出視窗。",
+        "auth/unauthorized-domain": "此網域尚未加入 Firebase 授權網域。",
+        "auth/operation-not-supported-in-this-environment": "目前預覽環境不支援 Google 登入，請使用 HTTPS 網站開啟。",
+        "auth/operation-not-allowed": "Firebase 尚未啟用此登入方式，請檢查 Authentication 的 Google 提供者設定。",
+        "auth/network-request-failed": "網路連線失敗，請稍後再試。",
+=======
         "auth/invalid-email": "請輸入有效的電子郵件地址。",
         "auth/weak-password": "密碼至少需要 6 個字元。",
         "auth/email-already-in-use": "此電子郵件已註冊，請直接登入。",
@@ -248,10 +285,13 @@
         "auth/operation-not-supported-in-this-environment": "目前預覽環境不支援 Google 登入，請使用 HTTPS 網站開啟。",
         "auth/operation-not-allowed": "Firebase 尚未啟用此登入方式，請檢查 Authentication 的 Google 提供者設定。",
         "auth/network-request-failed": "網路連線失敗，請稍後再試。",
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
         "permission-denied": "雲端資料權限未設定完成，請稍後再試。"
       };
       feedback(messages[error.code] || "登入失敗，請稍後再試。", "error");
     }
+<<<<<<< HEAD
+=======
     function shouldUseRedirect(error) {
       return ["auth/popup-blocked", "auth/popup-closed-by-user", "auth/cancelled-popup-request", "auth/internal-error", "auth/web-storage-unsupported"].indexOf(error?.code) >= 0;
     }
@@ -259,12 +299,20 @@
       feedback("正在切換至 Google 登入頁面…", "success");
       return auth.signInWithRedirect(provider).catch(fail);
     }
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
     function openMenu(open) {
       el.panel.hidden = !open;
       el.trigger.setAttribute("aria-expanded", String(open));
     }
     function renderUser(user) {
       var signedIn = !!user;
+<<<<<<< HEAD
+      el.label.textContent = signedIn ? "我的帳戶" : "登入 / 註冊";
+      el.status.textContent = !signedIn ? "使用 Google 帳戶登入並同步個人資料" : "已登入：" + (user.displayName || user.email || "使用者");
+      el.status.title = signedIn && user.email ? user.email : "";
+      el.google.hidden = signedIn;
+      el.signOut.hidden = !signedIn;
+=======
       var needsVerification = signedIn && user.providerData.some(function (item) { return item.providerId === "password"; }) && !user.emailVerified;
       el.label.textContent = signedIn ? "我的帳戶" : "登入 / 註冊";
       el.status.textContent = !signedIn ? "登入即可使用個人帳戶" : needsVerification ? "請先驗證：" + user.email : "已登入：" + (user.displayName || user.email || "使用者");
@@ -273,6 +321,7 @@
       el.form.hidden = signedIn;
       el.signOut.hidden = !signedIn || needsVerification;
       el.resend.hidden = !needsVerification;
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
       el.avatar.replaceChildren();
       if (signedIn && user.photoURL) {
         var image = document.createElement("img"); image.src = user.photoURL; image.alt = ""; el.avatar.appendChild(image);
@@ -282,6 +331,15 @@
     document.addEventListener("click", function (event) { if (!el.menu.contains(event.target)) openMenu(false); });
     document.addEventListener("keydown", function (event) { if (event.key === "Escape" && !el.panel.hidden) { openMenu(false); el.trigger.focus(); } });
     el.google.addEventListener("click", function () {
+<<<<<<< HEAD
+      el.google.disabled = true;
+      feedback("正在開啟 Google 帳戶驗證視窗…", "success");
+      auth.signInWithPopup(provider)
+        .then(function () { window.trackFirebaseEvent("google_sign_in"); openMenu(false); })
+        .catch(fail)
+        .finally(function () { el.google.disabled = false; });
+    });
+=======
       el.google.disabled = true; feedback("");
       var popupTimeout = new Promise(function (_, reject) {
         window.setTimeout(function () {
@@ -321,10 +379,24 @@
       el.resend.disabled = true;
       auth.currentUser.sendEmailVerification().then(function () { feedback("驗證信已重新寄出，請檢查信箱。", "success"); }).catch(fail).finally(function () { el.resend.disabled = false; });
     });
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
     el.signOut.addEventListener("click", function () {
       el.signOut.disabled = true;
       auth.signOut().then(function () { window.trackFirebaseEvent("sign_out"); feedback(""); }).catch(fail).finally(function () { el.signOut.disabled = false; });
     });
+<<<<<<< HEAD
+    auth.onAuthStateChanged(function (user) {
+      renderUser(user);
+      if (user) syncUserData(user).catch(function (error) {
+        console.error("Firestore 雲端同步失敗：", error);
+        setCloudSyncStatus("雲端資料庫尚未就緒或規則尚未發布；資料仍會保存在本機。", "error");
+      });
+      else { cloudSyncGeneration++; cloudSyncReadyUid = null; setCloudSyncStatus("登入後可將收藏、比較、預算與行程同步到雲端。", ""); }
+    }, fail);
+    window.trackFirebaseEvent("journey_app_open");
+  }).catch(showBootError);
+})();
+=======
     auth.getRedirectResult().catch(function (error) {
       if (error?.code && error.code !== "auth/no-auth-event") fail(error);
     });
@@ -340,3 +412,4 @@
   }).catch(showBootError);
 })();
 
+>>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
