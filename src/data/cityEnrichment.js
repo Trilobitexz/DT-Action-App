@@ -1,51 +1,6 @@
-// 合併城市目錄與國家城市資料，去重並保留現有景點與機場記錄。
+// 合併城市目錄，並只保留具來源連結與座標的景點／機場資料。
 (function () {
   const spot = (name, category, tag, note) => ({ name, category, tag, note });
-
-  const additionalSpots = {
-    kyoto: spot("嵐山竹林與渡月橋", "自然景觀", "四季推薦", "沿著桂川散步，感受竹林、古寺與山景交織的京都風情。"),
-    nara: spot("春日大社", "文化古蹟", "古都巡禮", "沿著石燈籠參拜鹿群環繞的古老神社。"),
-    bangkok: spot("大皇宮與玉佛寺", "文化古蹟", "必訪名勝", "欣賞泰國王室建築與金碧輝煌的寺院群。"),
-    "chiang-mai": spot("帕邢寺", "文化古蹟", "古城巡禮", "在清邁古城欣賞蘭納風格寺院與金色佛塔。"),
-    pattaya: spot("真理寺", "宗教建築", "海岸地標", "欣賞全木雕工藝與泰國灣海岸景色。"),
-    busan: spot("甘川文化村", "藝術街區", "熱門打卡", "漫步山城彩色屋舍與巷弄藝術作品。"),
-    incheon: spot("松島中央公園", "城市休閒", "現代景觀", "搭乘水上計程車，欣賞松島國際都市天際線。"),
-    paris: spot("蒙馬特與聖心堂", "藝術街區", "浪漫漫遊", "登上白色聖心堂眺望巴黎，探索畫家廣場與坡道街巷。"),
-    nice: spot("城堡山公園", "城市景觀", "全景推薦", "登高俯瞰尼斯灣、老城屋頂與蔚藍海岸。"),
-    lyon: spot("里昂壁畫", "藝術街區", "城市探索", "沿著索恩河與市區尋找巨幅城市壁畫。"),
-    marseille: spot("聖母加德大教堂", "宗教建築", "城市全景", "登上山丘欣賞港灣與地中海群島全景。"),
-    reykjavik: spot("哈爾格林姆教堂", "城市地標", "建築名勝", "參觀冰島代表性現代教堂並登塔欣賞市景。"),
-    vik: spot("塞里雅蘭瀑布", "自然地質", "瀑布景觀", "沿步道走到瀑布後方，欣賞南岸經典水幕。"),
-    akureyri: spot("胡薩維克觀鯨", "自然生態", "海上體驗", "從北部港口出發，尋找座頭鯨與海鳥蹤跡。"),
-    london: spot("倫敦塔與塔橋", "歷史古蹟", "河岸地標", "沿泰晤士河參觀王室城堡與經典吊橋。"),
-    edinburgh: spot("亞瑟王座", "自然景觀", "城市全景", "健行登上火山丘陵，俯瞰愛丁堡城堡與海岸。"),
-    manchester: spot("科學與工業博物館", "文化藝術", "親子推薦", "從蒸汽機與鐵路展覽認識工業革命歷史。"),
-    oxford: spot("博德利圖書館", "文化藝術", "大學古蹟", "欣賞歷史悠久的大學圖書館與石造建築群。"),
-    "san-francisco": spot("九曲花街", "城市街區", "經典打卡", "沿著海德街欣賞花木簇擁的陡坡街景。"),
-    seattle: spot("奇胡利玻璃藝術園", "文化藝術", "室內景點", "欣賞色彩繽紛的大型玻璃雕塑與太空針塔景觀。"),
-    "las-vegas": spot("紅岩峽谷", "自然景觀", "近郊探索", "在賭城近郊欣賞紅色砂岩峽谷與沙漠步道。"),
-    sydney: spot("皇家植物園與麥覺理夫人座椅", "城市自然", "港灣全景", "沿港灣綠地散步，拍攝歌劇院與海港大橋。"),
-    brisbane: spot("布里斯本市政廳鐘樓", "城市地標", "市中心漫遊", "參觀市政廳與鐘樓，探索皇后街購物區。"),
-    "gold-coast": spot("華納兄弟電影世界", "主題樂園", "親子熱門", "體驗電影主題遊樂設施與季節限定遊行。"),
-    perth: spot("羅特尼斯島", "海島自然", "近郊必訪", "搭船探索白沙海灣與可愛短尾矮袋鼠。"),
-    queenstown: spot("皇后鎮天空纜車", "城市景觀", "全景推薦", "登上鮑勃峰俯瞰瓦卡蒂普湖與南阿爾卑斯山。"),
-    wellington: spot("威塔洞穴工作室", "電影文化", "創意體驗", "認識電影模型、特效與紐西蘭影視製作。"),
-    christchurch: spot("雅芳河 punting 撐篙船", "城市休閒", "慢活體驗", "乘船穿過市中心河道，欣賞花園城市風景。"),
-    rotorua: spot("蒂普亞毛利文化村", "在地文化", "文化體驗", "認識毛利工藝、歌舞與地熱景觀。")
-  };
-
-  window.TRAVEL_DATA.countries.forEach(country => {
-    country.cities.forEach(city => {
-      const suggestedSpot = additionalSpots[city.id];
-      const alreadyListed = suggestedSpot && city.spots?.some(item =>
-        String(item.name || "").normalize("NFKC").trim().toLocaleLowerCase()
-          === suggestedSpot.name.normalize("NFKC").trim().toLocaleLowerCase()
-      );
-      if (suggestedSpot && !alreadyListed && Array.isArray(city.spots) && city.spots.length < 5) {
-        city.spots.push(suggestedSpot);
-      }
-    });
-  });
 
   const newCountries = [
     {
@@ -159,27 +114,15 @@
     }
   });
 
-  const cityDataVersion = "2026.11.20";
-  const releaseVersion = "2026.11.20-city-geonames-osm-1";
+  const cityDataVersion = "2026.11.20-200";
+  const releaseVersion = "2026.11.20-city-catalog-200-osm-2";
   const localCitiesById = new Map(
     window.TRAVEL_DATA.countries.flatMap(country => country.cities || []).map(city => [city.id, city])
   );
-  const airportCatalog = {
-    "東京": [{ name: "成田國際機場", code: "NRT", lat: 35.772, lng: 140.392 }, { name: "羽田機場", code: "HND", lat: 35.549, lng: 139.779 }],
-    "大阪": [{ name: "關西國際機場", code: "KIX", lat: 34.434, lng: 135.244 }],
-    "首爾": [{ name: "仁川國際機場", code: "ICN", lat: 37.46, lng: 126.441 }, { name: "金浦機場", code: "GMP", lat: 37.558, lng: 126.791 }],
-    "曼谷": [{ name: "蘇凡納布國際機場", code: "BKK", lat: 13.69, lng: 100.75 }],
-    "新加坡": [{ name: "樟宜機場", code: "SIN", lat: 1.364, lng: 103.991 }],
-    "巴黎": [{ name: "戴高樂機場", code: "CDG", lat: 49.009, lng: 2.548 }, { name: "奧利機場", code: "ORY", lat: 48.726, lng: 2.365 }],
-    "倫敦": [{ name: "希斯洛機場", code: "LHR", lat: 51.47, lng: -0.454 }],
-    "雪梨": [{ name: "雪梨機場", code: "SYD", lat: -33.946, lng: 151.177 }],
-    "洛杉磯": [{ name: "洛杉磯國際機場", code: "LAX", lat: 33.942, lng: -118.408 }],
-    "紐約": [{ name: "甘迺迪國際機場", code: "JFK", lat: 40.6413, lng: -73.7781 }, { name: "紐華克自由國際機場", code: "EWR", lat: 40.6895, lng: -74.1745 }, { name: "拉瓜迪亞機場", code: "LGA", lat: 40.7769, lng: -73.874 }],
-    "舊金山": [{ name: "舊金山國際機場", code: "SFO", lat: 37.621, lng: -122.379 }]
-  };
   const normalizeCity = city => {
     const localCity = localCitiesById.get(city.id);
     const geonamesRecord = window.CITY_GEONAMES?.[city.id];
+    city.countryCode ||= geonamesRecord?.countryCode || localCity?.countryCode || "";
     if (geonamesRecord && Number.isFinite(geonamesRecord.lat) && Number.isFinite(geonamesRecord.lng)) {
       city.lat = geonamesRecord.lat;
       city.lng = geonamesRecord.lng;
@@ -200,6 +143,15 @@
         : (city.attractions || []).map(name => typeof name === "string" ? { name } : name);
     const seenSpotNames = new Set();
     city.spots = sourceSpots.filter(spot => {
+      // Do not publish legacy editorial entries as verified attractions unless
+      // they carry both a source URL and a real, mapable coordinate.
+      const candidate = typeof spot === "string" ? null : spot;
+      const latitude = Number(candidate?.lat);
+      const longitude = Number(candidate?.lng);
+      const sourceUrl = candidate?.sourceUrl || candidate?.pageUrl || candidate?.url;
+      const hasLocation = Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
+        && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
+      if (!hasLocation || !/^https?:\/\//i.test(String(sourceUrl || ""))) return false;
       const name = String(spot?.name || spot || "").normalize("NFKC").trim().toLocaleLowerCase();
       if (!name || seenSpotNames.has(name)) return false;
       seenSpotNames.add(name);
@@ -209,16 +161,22 @@
       if (!normalizedSpot.ratingSource) delete normalizedSpot.rating;
       return normalizedSpot;
     });
-    city.airports = localCity?.airports?.length
+    const airportCandidates = localCity?.airports?.length
       ? localCity.airports
       : city.airports?.length
         ? city.airports
-        : airportCatalog[city.name] || [];
+        : [];
+    city.airports = airportCandidates.filter(airport => Number.isFinite(Number(airport.lat))
+      && Number.isFinite(Number(airport.lng))
+      && /^https?:\/\//i.test(String(airport.sourceUrl || "")));
+    ["description", "climate", "culture", "history"].forEach(field => {
+      if (!city[`${field}Source`]) delete city[field];
+    });
     city.destinationType = geonamesRecord?.featureClass === "T" && geonamesRecord?.featureCode === "ISL" ? "island" : "city";
     city.dataVersion = cityDataVersion;
     city.dataStatus = {
-      coordinates: city.coordinateSource ? "cross-checked" : "unverified",
-      spots: city.spots.length ? "listed" : "unavailable",
+      coordinates: city.coordinateSource ? "source-linked" : "unverified",
+      spots: city.spots.length ? "listed" : "live-source-query",
       airport: city.airports.length ? "listed" : "unavailable"
     };
     city.attractions = city.spots.map(spot => spot.name);
@@ -259,8 +217,8 @@
   window.GLOBAL_CITIES = window.TRAVEL_DATA.globalCities;
   const byName = [...uniqueGlobalCities].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
   const byCompleteness = [...uniqueGlobalCities].sort((a, b) => {
-    const score = city => Number(Boolean(city.description)) + Number(Boolean(city.climate)) + Number(Boolean(city.culture))
-      + Number(Boolean(city.history)) + Math.min(city.spots.length, 5) + Math.min(city.airports.length, 2);
+    const score = city => Number(Boolean(city.coordinateSource)) + Math.min(city.spots.length, 5)
+      + Math.min(city.airports.length, 2);
     return score(b) - score(a) || a.name.localeCompare(b.name, "zh-Hant");
   });
   window.TRAVEL_DATA.globalCityLists = {

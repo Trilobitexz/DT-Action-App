@@ -1,19 +1,7 @@
 // 畫面 3：國家與城市層級視圖模組 (第 1 部分：基本資料與即時匯率)
 window.CountryView = {
   getGlobalCityProfile: function(city) {
-    const profiles = {
-      "日本": { hasDirect: true, flightTime: "約 3 ~ 4 小時", airlines: ["中華航空", "長榮航空", "星宇航空"], budget: "中等", rating: "$$-$$$" },
-      "韓國": { hasDirect: true, flightTime: "約 2.5 ~ 3 小時", airlines: ["中華航空", "長榮航空", "台灣虎航"], budget: "親民", rating: "$$" },
-      "泰國": { hasDirect: true, flightTime: "約 3.5 ~ 4 小時", airlines: ["中華航空", "長榮航空", "泰國航空"], budget: "親民", rating: "$$" },
-      "新加坡": { hasDirect: true, flightTime: "約 4.5 小時", airlines: ["中華航空", "長榮航空", "酷航"], budget: "中等", rating: "$$-$$$" },
-      "越南": { hasDirect: true, flightTime: "約 3 ~ 3.5 小時", airlines: ["中華航空", "越捷航空", "星宇航空"], budget: "親民", rating: "$$" },
-      "中國": { hasDirect: true, flightTime: "依城市約 2 ~ 4 小時", airlines: ["中華航空", "長榮航空"], budget: "中等", rating: "$$-$$$" },
-      "香港": { hasDirect: true, flightTime: "約 2 小時", airlines: ["中華航空", "長榮航空", "國泰航空"], budget: "中等", rating: "$$-$$$" },
-      "美國": { hasDirect: true, flightTime: "約 13 ~ 15 小時", airlines: ["中華航空", "長榮航空", "星宇航空"], budget: "中高", rating: "$$$" },
-      "加拿大": { hasDirect: true, flightTime: "約 11 ~ 13 小時", airlines: ["中華航空", "長榮航空"], budget: "中高", rating: "$$$" },
-      "澳洲": { hasDirect: true, flightTime: "約 9 ~ 10 小時", airlines: ["中華航空", "長榮航空", "澳洲航空"], budget: "中高", rating: "$$$" }
-    };
-    return profiles[city.countryName] || { hasDirect: false, flightTime: "依季節與航線而異", airlines: [], budget: "依旅行風格而異", rating: "$$-$$$" };
+    return { hasDirect: null, flightTime: "尚無可核實資料", airlines: [], budget: "尚無可核實資料", rating: "—" };
   },
 
   render: function(state) {
@@ -24,8 +12,8 @@ window.CountryView = {
     const country = globalCity ? {
       id: `global-${globalCity.id}`, name: globalCity.countryName, englishName: globalCity.countryName,
       flag: globalCity.flag, currency: "請查詢當地官方資訊", visa: "請依護照與最新官方規定確認",
-      flightInfo: { hasDirect: globalProfile.hasDirect, departureFrom: "桃園 TPE", flightTime: globalProfile.flightTime, airlines: globalProfile.airlines, tips: globalProfile.hasDirect ? "航班會依季節與航空公司調整，出發前請確認最新班表。" : "目前常見需要轉機，航班與簽證請於出發前向官方確認。" },
-      priceLevel: { tier: globalProfile.budget, rating: globalProfile.rating, dailyBudgetTwd: globalProfile.budget === "親民" ? "約 NT$1,800–3,200／日" : "約 NT$2,800–5,500／日", dining: globalProfile.budget === "親民" ? "約 NT$500–1,000／日" : "約 NT$800–1,800／日", transit: "約 NT$150–450／日", hotel: globalProfile.budget === "親民" ? "約 NT$1,200–3,000／晚" : "約 NT$2,000–6,000／晚" },
+      flightInfo: { hasDirect: globalProfile.hasDirect, departureFrom: "", flightTime: globalProfile.flightTime, airlines: globalProfile.airlines, tips: "航線、班表及航空公司尚未從可追溯來源核實，請查閱航空公司即時資料。" },
+      priceLevel: { tier: globalProfile.budget, rating: globalProfile.rating, dailyBudgetTwd: "", dining: "", transit: "", hotel: "", verified: false },
       cities: [{
         ...globalCity,
         spots: (Array.isArray(globalCity.spots) ? globalCity.spots : []).map(spot => typeof spot === "string"
@@ -42,12 +30,6 @@ window.CountryView = {
     // 基本資訊標題
     document.getElementById("detail-country-flag").innerText = country.flag;
     document.getElementById("detail-country-name").innerText = `${country.name} (${country.englishName})`;
-    const backButton = document.getElementById("btn-detail-back");
-    if (backButton) {
-      backButton.textContent = globalCity ? "← 返回全球城市榜單" : "← 返回大洲選單";
-      backButton.onclick = () => window.appNavigate(globalCity ? "world" : "continent", globalCity ? {} : { continentId: state.selectedContinentId });
-    }
-    
     // 即時匯率動態拉取
     const visaEl = document.getElementById("detail-currency-visa");
     visaEl.innerHTML = `幣別：${country.currency} ｜ 簽證：${country.visa} <span id="live-rate-tag" style="color:var(--primary); font-size:0.8rem; margin-left:6px;">(匯率載入中...)</span>`;
@@ -86,13 +68,15 @@ window.CountryView = {
     const flightEl = document.getElementById("detail-flight-content");
     flightEl.innerHTML = `
       <div class="data-status-row" style="margin-bottom: 0.75rem;">
-        ${country.flightInfo.hasDirect 
-          ? '<span class="badge-tag badge-direct" style="font-size:0.85rem;">✅ 台灣出發支援直飛</span>' 
-          : '<span class="badge-tag badge-transit" style="font-size:0.85rem;">⚠️ 台灣無直飛（需轉機 1-2 次）</span>'}
-        <span class="data-source-badge">資料狀態：規劃參考</span>
+        ${country.flightInfo.hasDirect === true
+          ? '<span class="badge-tag badge-direct" style="font-size:0.85rem;">✅ 台灣出發支援直飛</span>'
+          : country.flightInfo.hasDirect === false
+            ? '<span class="badge-tag badge-transit" style="font-size:0.85rem;">⚠️ 台灣出發需轉機</span>'
+            : '<span class="data-source-badge">航班資料尚未核實</span>'}
+        <span class="data-source-badge">依官方即時班表確認</span>
       </div>
-      <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>出發與航程：</strong>${country.flightInfo.departureFrom} ｜ ${country.flightInfo.flightTime}</p>
-      <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>執飛航空公司：</strong>${country.flightInfo.airlines.join("、")}</p>
+      <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>出發與航程：</strong>${country.flightInfo.hasDirect === null ? "尚無可核實資料" : `${country.flightInfo.departureFrom} ｜ ${country.flightInfo.flightTime}`}</p>
+      <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>執飛航空公司：</strong>${country.flightInfo.airlines.length ? country.flightInfo.airlines.join("、") : "尚無可核實資料"}</p>
       <p style="font-size: 0.85rem; color: var(--text-muted); background: #f8fafc; padding: 0.5rem; border-radius: 6px; margin: 0.5rem 0;">💡 貼心提醒：${country.flightInfo.tips}</p>
       <div style="display:flex; gap:0.5rem; margin-top:0.75rem; flex-wrap:wrap;">
         <a href="${flightSearch?.googleFlightsUrl}" target="_blank" rel="noopener noreferrer" class="btn-card-action" style="text-decoration:none; display:inline-block; text-align:center; padding:6px 12px; font-size:0.8rem; width:auto;">
@@ -108,6 +92,10 @@ window.CountryView = {
   // 畫面 3：物價資訊卡片
   renderPriceInfo: function(country) {
     const priceEl = document.getElementById("detail-price-content");
+    if (country.priceLevel.verified === false) {
+      priceEl.innerHTML = `<div class="data-status-row" style="margin-bottom:0.75rem;"><span class="data-source-badge">物價資料尚未核實</span></div><p>目前沒有可追溯來源的住宿、交通與餐飲價格；此頁不以通用估算代替城市實際物價。</p>`;
+      return;
+    }
     priceEl.innerHTML = `
       <div class="data-status-row" style="margin-bottom: 0.75rem;">
         <span class="badge-tag" style="background:#e0f2fe; color:#0369a1; font-size:0.85rem;">物價指數：${country.priceLevel.tier} (${country.priceLevel.rating})</span>
@@ -124,6 +112,15 @@ window.CountryView = {
   renderCityAndSpots: function(country, state) {
     const tabList = document.getElementById("city-tab-list");
     const spotsContainer = document.getElementById("city-spots-list");
+    const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[character]);
+    const safeHttpUrl = value => {
+      try {
+        const url = new URL(value);
+        return ["https:", "http:"].includes(url.protocol) ? url.href : "";
+      } catch (error) { return ""; }
+    };
 
     tabList.setAttribute("role", "tablist");
     tabList.setAttribute("aria-label", "選擇城市");
@@ -140,17 +137,22 @@ window.CountryView = {
 
     const currentCity = country.cities.find(ci => ci.id === state.selectedCityId) || country.cities[0];
     if (!currentCity) return;
+    spotsContainer.onclick = event => {
+      const button = event.target.closest("[data-map-focus-spot]");
+      if (!button || button.disabled) return;
+      window.mapManager?.focusSpot(button.dataset.cityId, Number(button.dataset.spotIndex));
+    };
 
     const cityDescription = document.getElementById("city-description-text");
-    if (cityDescription) cityDescription.innerText = currentCity.description || "目前沒有可核實的城市介紹。";
+    if (cityDescription) cityDescription.innerText = currentCity.descriptionSource?.text || "尚未取得與城市位置相符的可核實介紹。";
     const cityHeading = document.querySelector("#view-country .city-tabs-card h3");
     if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：${currentCity.destinationType === "island" ? "目的地資訊" : "城市資訊"}與景點資料`;
     const detail = document.getElementById("city-detail-facts");
     if (detail) {
       detail.innerHTML = `
-        <div><strong>🌤️ 氣候</strong><p>${currentCity.climate || "尚無已核實的氣候摘要。"}</p></div>
-        <div><strong>🎭 人文</strong><p>${currentCity.culture || "尚無已核實的人文資料。"}</p></div>
-        <div><strong>📜 歷史</strong><p>${currentCity.history || "尚無已核實的歷史資料。"}</p></div>
+        <div><strong>🌤️ 氣候</strong><p>${currentCity.climateSource ? currentCity.climate : "尚無附來源的城市氣候資料。"}</p></div>
+        <div><strong>🎭 人文</strong><p>${currentCity.cultureSource ? currentCity.culture : "尚無附來源的人文資料。"}</p></div>
+        <div><strong>📜 歷史</strong><p>${currentCity.historySource ? currentCity.history : "尚無附來源的歷史資料。"}</p></div>
       `;
     }
     const chart = document.getElementById("city-insight-chart");
@@ -158,14 +160,14 @@ window.CountryView = {
       const facts = Array.isArray(currentCity.spots) ? currentCity.spots : [];
       const airports = Array.isArray(currentCity.airports) ? currentCity.airports : [];
       const metrics = [
-        ["城市介紹", currentCity.description ? 1 : 0, currentCity.description ? "已收錄" : "待補資料"],
-        ["景點", Math.min(facts.length, 5) / 5, `${facts.length} 筆已編目資料`],
+        ["城市介紹", currentCity.descriptionSource?.text ? 1 : 0, currentCity.descriptionSource?.text ? "附來源" : "待取得可核實資料"],
+        ["景點", Math.min(facts.length, 5) / 5, `${facts.length} 筆有座標與來源的資料`],
         ["機場", airports.length ? 1 : 0, airports.length ? `${airports.length} 筆已編目資料` : "尚無已確認資料"],
-        ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, currentCity.coordinateSource ? "GeoNames 地名參考點" : "尚未交叉核對"]
+        ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, currentCity.coordinateSource?.provider || "尚未核實"]
       ];
       chart.innerHTML = `<p class="city-data-completeness-label">資料完整度（不代表旅遊評分）</p>` + metrics.map(([name, completeness, hint]) => `
-        <div class="insight-metric" title="${hint}">
-          <div><strong>${name}</strong><span>${hint}</span></div>
+        <div class="insight-metric" data-insight="${name === "景點" ? "spots" : ""}" title="${hint}">
+          <div><strong>${name}</strong><span>${hint}</span>${name === "座標" && currentCity.coordinateSource?.sourceUrl ? `<a href="${currentCity.coordinateSource.sourceUrl}" target="_blank" rel="noopener noreferrer">查看來源</a>` : ""}</div>
           <div class="insight-track"><i style="width:${completeness * 100}%"></i></div>
         </div>
       `).join("");
@@ -180,21 +182,23 @@ window.CountryView = {
           <div class="spot-main" style="flex:1;">
             <h5>
               <span style="color:var(--primary); font-weight:800;">#${idx + 1}</span>
-              ${spot.name}
-              <span class="spot-badge">${spot.tag}</span>
-              <span class="spot-badge" style="background:#f1f5f9; color:#475569;">${spot.category}</span>
+              ${escapeHtml(spot.name)}
+              ${spot.tag ? `<span class="spot-badge">${escapeHtml(spot.tag)}</span>` : ""}
+              <span class="spot-badge" style="background:#f1f5f9; color:#475569;">${escapeHtml(spot.category || "景點")}</span>
             </h5>
-            <div class="spot-note" id="spot-note-${idx}">${spot.note}</div>
+            <div class="spot-note" id="spot-note-${idx}">${escapeHtml(spot.note || "")}</div>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.4rem;">
             <div class="spot-score">${spot.ratingSource ? `★ ${spot.rating} · ${spot.ratingSource}` : "評分資料未提供"}</div>
-            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name + ' ' + currentCity.name)}" target="_self" style="font-size:0.75rem; color:var(--primary); text-decoration:none; display:inline-flex; align-items:center; gap:2px; background:#eff6ff; padding:2px 6px; border-radius:4px; font-weight:500;">
-              📍 地圖導航
-            </a>
+            <button type="button" class="spot-map-focus" data-map-focus-spot data-city-id="${currentCity.id}" data-spot-index="${idx}" ${Number.isFinite(spot.lat) && Number.isFinite(spot.lng) ? "" : "disabled"}>🗺️ 在地圖查看</button>
+            ${safeHttpUrl(spot.sourceUrl) ? `<a href="${safeHttpUrl(spot.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="spot-source-link">查看來源資料</a>` : ""}
+            ${safeHttpUrl(spot.website) ? `<a href="${safeHttpUrl(spot.website)}" target="_blank" rel="noopener noreferrer" class="spot-source-link">官方網站／資訊</a>` : ""}
+            ${safeHttpUrl(spot.wikipediaUrl) ? `<a href="${safeHttpUrl(spot.wikipediaUrl)}" target="_blank" rel="noopener noreferrer" class="spot-source-link">Wikipedia${spot.wikipedia ? `（${escapeHtml(spot.wikipedia)}）` : ""}</a>` : ""}
+            ${spot.wikidataId ? `<a href="https://www.wikidata.org/wiki/${encodeURIComponent(spot.wikidataId)}" target="_blank" rel="noopener noreferrer" class="spot-source-link">Wikidata</a>` : ""}
           </div>
         </div>
       </div>
-    `).join("") : `<p class="spot-data-empty">目前沒有可核實的景點資料；城市中心仍可用於地圖探索。</p>`;
+    `).join("") : `<p class="spot-data-empty">景點清單尚待有來源且附座標的地點資料；不使用未核實的推薦文字或評分。</p>`;
 
     // 非同步結果只有在使用者仍停留於同一城市時才更新頁面。
     const renderedCountryId = country.id;
@@ -203,9 +207,10 @@ window.CountryView = {
       const activeCountryId = state.globalCityId ? `global-${state.globalCityId}` : state.selectedCountryId;
       return activeCountryId === renderedCountryId && state.selectedCityId === renderedCityId;
     };
-    if (!currentCity.description && cityDescription && window.SpotService?.fetchCitySummary) {
-      cityDescription.textContent = "正在查詢有來源的城市介紹…";
-      window.SpotService.fetchCitySummary(currentCity.name, country.name).then(summary => {
+    if (!cityDescription?.textContent?.includes("正在向 OpenStreetMap") && cityDescription && window.SpotService?.fetchCitySummary
+      && Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng)) {
+      cityDescription.textContent = "正在查詢與城市座標相符的百科介紹…";
+      window.SpotService.fetchCitySummary(currentCity.englishName || currentCity.name, currentCity.countryName || country.name, currentCity).then(summary => {
         if (!summary?.extract || !isCurrentCity()) return;
         cityDescription.textContent = summary.extract;
         if (summary.pageUrl) {
@@ -223,6 +228,7 @@ window.CountryView = {
 
     if (window.SpotService) {
       spots.forEach((spot, idx) => {
+        if (Number.isFinite(spot.lat) && Number.isFinite(spot.lng) && spot.sourceUrl) return;
         window.SpotService.fetchSpotDetail(spot.name, currentCity.name, currentCity).then(wiki => {
           if (!wiki || !isCurrentCity()) return;
           const thumbEl = document.getElementById(`spot-thumb-${idx}`);
@@ -294,11 +300,55 @@ window.CountryView = {
           knownNames.add(name);
           return true;
         });
-        if (!verifiedPlaces.length) return;
+        if (verifiedPlaces.length) {
+          const liveRecords = verifiedPlaces.map(place => ({
+            name: place.name,
+            category: place.category || "景點",
+            tag: place.sourceLabel || "公開資料編目",
+            note: [place.description || `${place.sourceLabel || "公開地圖／知識資料"} 已編目地點；尚無描述資料。`, place.address ? `地址：${place.address}` : "", place.openingHours ? `開放時間：${place.openingHours}` : "", place.fee ? `收費標記：${place.fee}` : "", place.wheelchair ? `無障礙標記：${place.wheelchair}` : "", place.heritage ? `文化遺產標記：${place.heritage}` : "", place.startDate ? `建檔年代標記：${place.startDate}` : "", place.phone ? `電話：${place.phone}` : ""].filter(Boolean).join(" · "),
+            lat: place.lat,
+            lng: place.lng,
+            sourceId: place.sourceId,
+            sourceLabel: place.sourceLabel,
+            sourceUrl: place.sourceUrl,
+            osmId: place.osmId,
+            openingHours: place.openingHours,
+            address: place.address,
+            website: place.website,
+            description: place.description,
+            fee: place.fee,
+            wheelchair: place.wheelchair,
+            heritage: place.heritage,
+            startDate: place.startDate,
+            phone: place.phone,
+            wikipedia: place.wikipedia,
+            wikipediaUrl: place.wikipediaUrl,
+            wikidataId: place.wikidataId
+          }));
+          currentCity.spots = [...spots, ...liveRecords];
+          currentCity.attractions = currentCity.spots.map(spot => spot.name);
+          currentCity.dataStatus = { ...(currentCity.dataStatus || {}), spots: "source-linked" };
+          const storedCity = window.TRAVEL_DATA.globalCities.find(city => city.id === renderedCityId)
+            || window.TRAVEL_DATA.countries.flatMap(item => item.cities || []).find(city => city.id === renderedCityId);
+          if (storedCity) {
+            storedCity.spots = currentCity.spots;
+            storedCity.attractions = currentCity.attractions;
+            storedCity.dataStatus = currentCity.dataStatus;
+          }
+          window.PlannerView?.renderCityTools(currentCity, state);
+        }
+        if (!verifiedPlaces.length) {
+          if (!spots.length) {
+            const empty = spotsContainer.querySelector(".spot-data-empty");
+            if (empty) empty.textContent = "OpenStreetMap 與 Wikidata 目前都沒有回傳符合條件的有座標地點；來源服務失敗或當地尚未編目時，不會以推測內容代替。";
+          }
+          return;
+        }
         spotsContainer.querySelector(".spot-data-empty")?.remove();
         const sourceNote = document.createElement("p");
         sourceNote.className = "spot-source-attribution";
-        sourceNote.textContent = "地圖周邊地點來自 OpenStreetMap contributors；資料以來源連結查看與校正。";
+        const sourceLabels = [...new Set(verifiedPlaces.map(place => place.sourceLabel).filter(Boolean))];
+        sourceNote.textContent = `周邊地點來源：${sourceLabels.join("、") || "公開地圖資料"}；${places[0]?.sourceDatasetAt ? `圖資時間：${places[0].sourceDatasetAt}。` : ""}各筆來源連結可查看與校正。`;
         spotsContainer.appendChild(sourceNote);
         verifiedPlaces.forEach((place, offset) => {
           const index = spots.length + offset;
@@ -317,17 +367,82 @@ window.CountryView = {
           const note = document.createElement("div");
           note.className = "spot-note";
           const fetchedDate = place.fetchedAt ? new Date(place.fetchedAt).toLocaleDateString("zh-TW") : "";
-          note.textContent = `${place.note} · 約 ${place.distanceKm.toFixed(1)} 公里${fetchedDate ? ` · 查詢於 ${fetchedDate}` : ""}`;
+          note.textContent = [
+            place.description || `${place.sourceLabel || "公開地圖／知識資料"} 已編目地點；尚無描述資料。`,
+            place.address ? `地址：${place.address}` : "",
+            place.openingHours ? `開放時間：${place.openingHours}` : "",
+            place.fee ? `收費標記：${place.fee}` : "",
+            place.wheelchair ? `無障礙標記：${place.wheelchair}` : "",
+            place.heritage ? `文化遺產標記：${place.heritage}` : "",
+            place.startDate ? `建檔年代標記：${place.startDate}` : "",
+            place.phone ? `電話：${place.phone}` : "",
+            `距城市中心約 ${place.distanceKm.toFixed(1)} 公里`,
+            fetchedDate ? `資料查詢於 ${fetchedDate}` : ""
+          ].filter(Boolean).join(" · ");
           copy.append(title, note);
+          const focus = document.createElement("button");
+          focus.type = "button";
+          focus.className = "spot-map-focus";
+          focus.dataset.mapFocusSpot = "";
+          focus.dataset.cityId = currentCity.id;
+          focus.dataset.spotIndex = String(index);
+          focus.textContent = "🗺️ 在地圖查看";
+          focus.disabled = true;
+          const actions = document.createElement("div");
+          actions.className = "spot-item-actions";
+          actions.appendChild(focus);
           const source = document.createElement("a");
           source.href = place.sourceUrl;
           source.target = "_blank";
           source.rel = "noopener noreferrer";
           source.className = "spot-source-link";
-          source.textContent = "查看 OpenStreetMap 資料";
-          card.append(copy, source);
+          source.textContent = `查看${place.sourceLabel || "來源"}資料`;
+          actions.appendChild(source);
+          if (place.website) {
+            try {
+              const website = new URL(place.website);
+              if (["https:", "http:"].includes(website.protocol)) {
+                const websiteLink = document.createElement("a");
+                websiteLink.href = website.href;
+                websiteLink.target = "_blank";
+                websiteLink.rel = "noopener noreferrer";
+                websiteLink.className = "spot-source-link";
+                websiteLink.textContent = "官方網站／資訊";
+                actions.appendChild(websiteLink);
+              }
+            } catch (error) {
+              // 忽略無效的地圖來源網址。
+            }
+          }
+          if (place.wikipediaUrl) {
+            const encyclopediaLink = document.createElement("a");
+            encyclopediaLink.href = place.wikipediaUrl;
+            encyclopediaLink.target = "_blank";
+            encyclopediaLink.rel = "noopener noreferrer";
+            encyclopediaLink.className = "spot-source-link";
+            encyclopediaLink.textContent = `Wikipedia${place.wikipedia ? `（${place.wikipedia}）` : ""}`;
+            actions.appendChild(encyclopediaLink);
+          }
+          if (place.wikidataId) {
+            const wikidataLink = document.createElement("a");
+            wikidataLink.href = `https://www.wikidata.org/wiki/${encodeURIComponent(place.wikidataId)}`;
+            wikidataLink.target = "_blank";
+            wikidataLink.rel = "noopener noreferrer";
+            wikidataLink.className = "spot-source-link";
+            wikidataLink.textContent = `Wikidata ${place.wikidataId}`;
+            actions.appendChild(wikidataLink);
+          }
+          card.append(copy, actions);
           spotsContainer.appendChild(card);
+          if (window.mapManager?.citySpotMarkers?.get(`${currentCity.id}:${index}`)?.feature) focus.disabled = false;
         });
+        const insight = chart?.querySelector('[data-insight="spots"]');
+        if (insight) {
+          const label = insight.querySelector("div > span");
+          const progress = insight.querySelector(".insight-track > i");
+          if (label) label.textContent = `${spots.length + verifiedPlaces.length} 筆有座標與來源的資料`;
+          if (progress) progress.style.width = `${Math.min(spots.length + verifiedPlaces.length, 5) * 20}%`;
+        }
       }).catch(error => console.warn("OpenStreetMap 周邊景點載入失敗：", error));
     }
   },

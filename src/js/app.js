@@ -39,7 +39,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
   const updateMapContextControls = viewName => {
     const backButton = document.getElementById("btn-map-back");
-    const worldButton = document.getElementById("btn-map-world");
     const isWorld = viewName === "world";
     if (backButton) {
       backButton.hidden = isWorld;
@@ -54,7 +53,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       };
     }
-    if (worldButton) worldButton.hidden = isWorld;
     if (mapContextInfo) {
       const city = state.globalCityId
         ? getGlobalCity(state.globalCityId)
@@ -68,7 +66,19 @@ document.addEventListener("DOMContentLoaded", async () => {
           ? window.CountryView?.getGlobalCityProfile(city)?.hasDirect === true
           : window.TRAVEL_DATA.countries.find(country => country.id === state.selectedCountryId)?.directFlight === true;
         const mapTitle = city.destinationType === "island" ? "目的地地圖" : "城市地圖";
-        mapContextInfo.innerHTML = `<strong>📍 ${city.name} ${mapTitle}</strong><span class="map-context-spot-count">🔴 景點位置載入中…</span><span>✈ 機場 ${airportCount} 個</span><span>${hasDirect ? "🛫 台灣可直飛" : "🔁 台灣出發需轉機，地圖已顯示參考路線"}</span><small>資料版本：${window.TRAVEL_DATA.releaseVersion || window.TRAVEL_DATA.cityDataVersion || "內建資料"}<br>座標參考：<a href="https://www.geonames.org/export/" target="_blank" rel="noopener noreferrer">GeoNames（CC BY 4.0）</a>；景點位置來自 OpenStreetMap、Wikipedia 或 Wikidata，標記詳情會附來源連結。<br>縮小至城市外圍後會自動回到附近城市，再縮小可返回洲別視圖。</small><div class="city-map-key" aria-label="地圖圖例"><span><i>1</i>地圖編號與下方清單一致</span><span>🔵 地名參考點</span><span>✈ 機場</span><span>點擊標記看景點資訊</span></div>`;
+        mapContextInfo.innerHTML = `
+          <strong>📍 ${city.name} ${mapTitle}</strong>
+          <span class="map-context-spot-count">🔴 景點位置載入中…</span>
+          <label class="city-map-filter" for="map-spot-category-filter">
+            <span>景點類型</span>
+            <select id="map-spot-category-filter" aria-label="依類型篩選地圖景點">
+              <option value="all">全部</option>
+            </select>
+          </label>
+          <span>✈ 機場 ${airportCount} 個</span>
+          <span>${hasDirect ? "🛫 台灣可直飛" : "🔁 台灣出發需轉機，地圖已顯示參考路線"}</span>
+          <small>資料版本：${window.TRAVEL_DATA.releaseVersion || window.TRAVEL_DATA.cityDataVersion || "內建資料"}<br>座標參考：<a href="https://www.geonames.org/export/" target="_blank" rel="noopener noreferrer">GeoNames（CC BY 4.0）</a>；景點位置來自 OpenStreetMap、Wikipedia 或 Wikidata，標記詳情會附來源連結。<br>縮小至城市外圍後會自動回到附近城市，再縮小可返回洲別視圖。</small>
+          <div class="city-map-key" aria-label="地圖圖例"><span><i>1</i>地圖編號與下方清單一致</span><span>🔵 地名參考點</span><span>✈ 機場</span><span>點擊標記看景點資訊</span></div>`;
       }
     }
   };
@@ -129,7 +139,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
   mapManager.init();
-  document.getElementById("btn-map-world")?.addEventListener("click", () => navigateTo("world"));
+  mapContextInfo?.addEventListener("change", event => {
+    if (event.target?.id === "map-spot-category-filter") {
+      mapManager.filterCitySpots(event.target.value);
+    }
+  });
   document.getElementById("btn-map-back")?.addEventListener("click", () => {
     if (state.currentView === "country") {
       if (state.selectedContinentId) navigateTo("continent", { continentId: state.selectedContinentId });
@@ -282,7 +296,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const city = state.globalCityId
         ? getGlobalCity(state.globalCityId)
         : window.TRAVEL_DATA.countries.find(country => country.id === state.selectedCountryId)?.cities.find(item => item.id === state.selectedCityId);
-      if (city) mapManager.showCityContext(city);
+      if (city) showCityOnMap(city, state.selectedCountryId, true);
       return;
     }
     mapManager.flyToWorld();
@@ -297,6 +311,52 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // 主導航邏輯 (整合 AppStore 狀態與 MapManager 視角記憶機制)
+  function showCityOnMap(city, countryId, animate = true) {
+    const country = window.TRAVEL_DATA.countries.find(item => item.id === countryId);
+    const profile = city?.countryName ? window.CountryView?.getGlobalCityProfile(city) : null;
+    const hasDirect = profile ? profile.hasDirect : country?.directFlight;
+    const showContext = () => {
+      mapManager.renderCityMarkers();
+      mapManager.renderGlobalCityDomMarkers();
+      mapManager.showCityContext(city, { animate });
+      mapManager.clearFlightRoute();
+      if (hasDirect === true || hasDirect === false) mapManager.showFlightRoute(city, hasDirect);
+    };
+    if (Number.isFinite(city?.lat) && Number.isFinite(city?.lng)) {
+      showContext();
+      return;
+    }
+
+    mapManager.clearCitySpots();
+    mapManager.clearFlightRoute();
+    mapManager.restoreOverviewMarkers();
+    const description = document.getElementById("city-description-text");
+    if (description) description.textContent = "正在向 OpenStreetMap 核實城市位置；確認後會載入該地已編目的景點。";
+    window.SpotService?.resolveCityLocation(city).then(location => {
+      const activeCityId = state.globalCityId || state.selectedCityId;
+      if (!location || state.currentView !== "country" || activeCityId !== city.id) {
+        if (!location && activeCityId === city.id && description) description.textContent = "目前無法從 OpenStreetMap 核實這座城市的位置，景點地圖尚未載入。";
+        return;
+      }
+      city.lat = location.lat;
+      city.lng = location.lng;
+      city.coordinateSource = {
+        provider: location.provider,
+        sourceUrl: location.sourceUrl,
+        checkedAt: new Date(location.fetchedAt).toISOString(),
+        displayName: location.displayName
+      };
+      city.dataStatus = { ...(city.dataStatus || {}), coordinates: "source-linked" };
+      window.CountryView.render(state);
+      showContext();
+    }).catch(error => {
+      console.warn(`無法核實 ${city.name} 的城市位置：`, error);
+      if ((state.globalCityId || state.selectedCityId) === city.id && description) {
+        description.textContent = "目前無法核實城市位置，請稍後重試；未核實的景點不會顯示在地圖上。";
+      }
+    });
+  }
+
   function navigateTo(viewName, params = {}) {
     closeDrawers();
     const skipMapRecord = params.skipMapRecord === true;
@@ -406,11 +466,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const country = window.TRAVEL_DATA.countries.find(item => item.id === state.selectedCountryId);
       const city = globalCity || country?.cities.find(item => item.id === state.selectedCityId);
       if (city) {
-        mapManager.showCityContext(city, { animate: shouldAnimateMap });
-        const hasDirect = globalCity
-          ? window.CountryView?.getGlobalCityProfile(globalCity)?.hasDirect === true
-          : country?.directFlight === true;
-        mapManager.showFlightRoute(city, hasDirect);
+        showCityOnMap(city, country?.id || null, shouldAnimateMap);
       }
     }
 
@@ -513,11 +569,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const country = localCountry;
     const city = globalCity || country?.cities.find(item => item.id === cityId);
     if (city) {
-      mapManager.showCityContext(city, { animate: true });
-      const hasDirect = globalCity
-        ? window.CountryView?.getGlobalCityProfile(globalCity)?.hasDirect === true
-        : country?.directFlight === true;
-      mapManager.showFlightRoute(city, hasDirect);
+      showCityOnMap(city, country?.id || null, true);
     }
     viewWorld.classList.remove("active");
     viewContinent.classList.remove("active");

@@ -13,7 +13,7 @@ window.GlobalCitiesView = {
       target.innerHTML = visible.map(city => `
         <button type="button" class="global-city-card" onclick="window.appNavigate('global-city', { cityId: '${city.id}' })">
           <span class="global-city-flag">${city.flag}</span>
-          <span class="global-city-copy"><strong>${city.name}</strong><small>${city.englishName} · ${city.countryName}</small></span>
+          <span class="global-city-copy"><strong>${city.name}</strong><small>${city.englishName} · ${city.countryName} · ${city.coordinateSource ? "座標有來源" : "開啟時核實位置"}</small></span>
           <span class="global-city-arrow">↗</span>
         </button>
       `).join("") || `<p class="global-city-empty">找不到符合「${search?.value || ""}」的城市。</p>`;

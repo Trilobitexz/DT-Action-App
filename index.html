@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="src/css/style.css?v=32">
+  <link rel="stylesheet" href="src/css/style.css?v=33">
 
 </head>
 <body>
@@ -105,9 +105,7 @@
                   <button type="button" class="map-projection-option active" id="btn-map-2d" aria-pressed="true" aria-label="使用 2D 平面地圖" title="切換到 2D 平面地圖"><span aria-hidden="true">▦</span><strong>2D</strong><small>平面</small></button>
                   <button type="button" class="map-projection-option" id="btn-map-3d" aria-pressed="false" aria-label="使用 3D 地球" title="切換到 3D 地球"><span aria-hidden="true">◉</span><strong>3D</strong><small>地球</small></button>
                 </div>
-                <button type="button" class="map-btn map-tilt-btn" id="btn-tilt-toggle" aria-label="切換地圖傾斜視角" aria-pressed="false" title="切換傾斜視角">3D 傾斜</button>
                 <button type="button" class="map-btn map-context-action" id="btn-map-back" title="返回上一層地圖" aria-label="返回上一層地圖">← 返回上一層</button>
-                <button type="button" class="map-btn map-context-action" id="btn-map-world" title="返回世界大地圖" aria-label="返回世界大地圖">🌍 世界地圖</button>
               </div>
             </div>
           </div>
@@ -144,13 +142,10 @@
       </div>
       <section id="recent-destinations-panel" class="recent-destinations-panel" aria-labelledby="recent-destinations-heading"></section>
       <section class="recommendation-panel" aria-labelledby="recommendation-heading">
-        <div class="recommendation-heading"><div><span class="section-kicker">NEED A LITTLE DIRECTION?</span><h2 id="recommendation-heading">想要一些方向？讓偏好成為探索起點。</h2><p>如果你已經有旅行風格或預算想法，可以用簡單條件找幾座城市，再回到地圖繼續探索。</p></div></div>
+        <div class="recommendation-heading"><div><span class="section-kicker">SOURCE-BASED EXPLORATION</span><h2 id="recommendation-heading">依已編目地點分類探索</h2><p>只整理有來源與座標的地點；不依城市名稱推測特色、價格或航班。</p></div></div>
         <form id="recommendation-form" class="recommendation-form">
-          <label>旅行風格<select name="style"><option value="culture">歷史文化</option><option value="food">美食探索</option><option value="nature">自然風景</option><option value="shopping">購物都會</option><option value="relax">海島放鬆</option></select></label>
-          <label>預算取向<select name="budget"><option value="low">小資親民</option><option value="medium">舒適平衡</option><option value="high">享受升級</option></select></label>
-          <label>旅行天數<select name="days"><option value="3">3 天</option><option value="5" selected>5 天</option><option value="7">7 天</option></select></label>
-          <label>接受轉機<select name="direct"><option value="yes">希望直飛</option><option value="no">可以轉機</option></select></label>
-          <button type="submit" class="primary-action">依偏好找靈感 →</button>
+          <label>地點類別<select name="style"><option value="culture">文化與歷史地點</option><option value="nature">自然與戶外地點</option></select></label>
+          <button type="submit" class="primary-action">查看已載入資料 →</button>
         </form>
         <div id="recommendation-results" class="recommendation-results" aria-live="polite"></div>
       </section>
@@ -226,9 +221,6 @@
             <p id="detail-currency-visa" style="font-size:0.9rem; color:var(--text-muted);">幣別資訊與簽證要求</p>
           </div>
         </div>
-        <button class="btn-reset" id="btn-detail-back" onclick="window.appNavigate('continent', { continentId: window.appState.selectedContinentId })">
-          ← 返回大洲選單
-        </button>
       </div>
 
       <!-- 核心卡片：航班直飛情報 + 當地物價水平 -->
@@ -250,11 +242,11 @@
         </div>
       </div>
 
-      <!-- 城市分頁切換、即時天氣與熱門景點清單 (V2 優化) -->
+      <!-- 城市分頁切換、即時天氣與來源連結景點目錄 -->
       <div class="city-tabs-card">
         <div style="margin-bottom: 1rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.75rem;">
           <div>
-            <h3 style="font-size:1.2rem; font-weight:700;">🏙️ 城市切換與熱門景點清單</h3>
+            <h3 style="font-size:1.2rem; font-weight:700;">🏙️ 城市資訊與已編目景點</h3>
             <p id="city-description-text" style="font-size:0.9rem; color:var(--text-muted); margin-top:0.25rem;">城市特色與風貌介紹</p>
           </div>
           <div id="city-weather-widget" class="weather-badge" style="display:none;"></div>
@@ -304,7 +296,7 @@
       window.mapLibreReady.catch(error => console.error(error));
     </script>
     <script src="src/js/map/geoContinents.js"></script>
-    <script src="src/js/map/mapManager.js?v=33"></script>
+    <script src="src/js/map/mapManager.js?v=35"></script>
 
     <!-- 載入資料庫與各洲資料模組 -->
     <script src="src/data/travelData.js"></script>
@@ -312,25 +304,26 @@
     <script src="src/data/countries/europe.js"></script>
     <script src="src/data/countries/others.js"></script>
     <script src="src/data/globalCities.js"></script>
+    <script src="src/data/cityCatalogExpansion.js?v=1"></script>
     <script src="src/data/cityGeonames.js?v=1"></script>
-    <script src="src/data/cityEnrichment.js?v=32"></script>
+    <script src="src/data/cityEnrichment.js?v=33"></script>
     <!-- 載入資料層與即時 API 服務 (階段二) -->
     <script src="src/js/services/currencyService.js"></script>
     <script src="src/js/services/weatherService.js"></script>
     <script src="src/js/services/flightService.js"></script>
-    <script src="src/js/services/spotService.js?v=37"></script>
+    <script src="src/js/services/spotService.js?v=40"></script>
     <!-- 載入狀態管理 Store (階段三) -->
     <script src="src/js/store/appStore.js"></script>
 
 
     <!-- 載入視圖模組 -->
     <script src="src/js/modules/continentView.js"></script>
-    <script src="src/js/modules/countryView.js?v=31"></script>
+    <script src="src/js/modules/countryView.js?v=33"></script>
     <script src="src/js/modules/globalCitiesView.js"></script>
     <script src="src/js/modules/plannerView.js"></script>
     <script src="src/js/firebase-ai-config.js?v=1"></script>
     <script src="src/js/firebase.js?v=32" defer></script>
-    <script src="src/js/app.js?v=31"></script>
+    <script src="src/js/app.js?v=32"></script>
     <script src="src/js/pwa.js"></script>
   </div>
 </body>

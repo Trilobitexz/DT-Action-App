@@ -5,12 +5,16 @@ window.SpotService = {
   requestTimeoutMs: 10000,
   requestQueue: [],
   nearbyPlaceRequests: {},
+  cityLocationRequests: {},
+  spotDetailRequests: {},
   activeRequests: 0,
   scheduledRequests: 0,
   maxConcurrentRequests: 3,
   requestIntervalMs: 250,
   nextRequestAt: 0,
   maxCacheEntries: 120,
+  nominatimTail: Promise.resolve(),
+  nextNominatimAt: 0,
 
   requestJson: function (url) {
     return new Promise((resolve, reject) => {
@@ -177,8 +181,10 @@ window.SpotService = {
     };
   },
 
-  fetchCitySummary: async function (cityName, countryName = "") {
-    const cacheKey = `city-summary|${cityName}|${countryName}`;
+  fetchCitySummary: async function (cityName, countryName = "", cityCoordinates = null) {
+    const coordinateKey = Number.isFinite(cityCoordinates?.lat) && Number.isFinite(cityCoordinates?.lng)
+      ? `${cityCoordinates.lat.toFixed(3)},${cityCoordinates.lng.toFixed(3)}` : "unlocated";
+    const cacheKey = `city-summary|${cityName}|${countryName}|${coordinateKey}`;
     if (this.cache[cacheKey]) return this.cache[cacheKey];
     const sources = [
       {
@@ -197,7 +203,11 @@ window.SpotService = {
     for (const source of sources) {
       try {
         const result = await source.fetch();
-        if (result?.extract) {
+        const location = result?.location;
+        const verifiedLocation = Number.isFinite(cityCoordinates?.lat) && Number.isFinite(cityCoordinates?.lng)
+          && Number.isFinite(location?.latitude) && Number.isFinite(location?.longitude)
+          && this.distanceKm(cityCoordinates.lat, cityCoordinates.lng, location.latitude, location.longitude) <= 35;
+        if (result?.extract && verifiedLocation) {
           const summary = {
             extract: result.extract,
             sourceLabel: source.label,
@@ -216,22 +226,86 @@ window.SpotService = {
     return null;
   },
 
-  fetchNearbyPlaces: async function (city, { radius = 10000, limit = 20 } = {}) {
+  resolveCityLocation: function (city) {
+    if (Number.isFinite(city?.lat) && Number.isFinite(city?.lng)) {
+      return Promise.resolve({ lat: city.lat, lng: city.lng, sourceUrl: city.coordinateSource?.sourceUrl || null, provider: city.coordinateSource?.provider || null });
+    }
+    if (!city?.englishName || !city?.countryName || !city?.countryCode) return Promise.resolve(null);
+    const cacheKey = `journey-atlas-city-location-v2-${city.id}`;
+    if (this.cityLocationRequests[cacheKey]) return this.cityLocationRequests[cacheKey];
+    const cacheTtl = 180 * 24 * 60 * 60 * 1000;
+    try {
+      localStorage.removeItem(cacheKey.replace("-v2-", "-v1-"));
+      const saved = JSON.parse(localStorage.getItem(cacheKey) || "null");
+      if (saved?.fetchedAt && Date.now() - saved.fetchedAt < cacheTtl
+        && Number.isFinite(saved.lat) && saved.lat >= -90 && saved.lat <= 90
+        && Number.isFinite(saved.lng) && saved.lng >= -180 && saved.lng <= 180
+        && saved.provider === "OpenStreetMap Nominatim"
+        && /^https:\/\/www\.openstreetmap\.org\/(node|way|relation)\/\d+$/.test(saved.sourceUrl || "")) return Promise.resolve(saved);
+    } catch (error) {
+      console.warn("城市座標快取無法讀取：", error);
+    }
+    const url = "https://nominatim.openstreetmap.org/search?" + new URLSearchParams({
+      q: `${city.englishName}, ${city.countryName}`,
+      countrycodes: city.countryCode.toLowerCase(),
+      format: "jsonv2", limit: "5", addressdetails: "1", extratags: "1"
+    }).toString();
+    const request = async () => {
+      const waitMs = Math.max(0, this.nextNominatimAt - Date.now());
+      if (waitMs) await new Promise(resolve => window.setTimeout(resolve, waitMs));
+      this.nextNominatimAt = Date.now() + 1100;
+      const results = await this.requestJson(url);
+      const normalize = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+        .normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+      const wanted = normalize(city.englishName);
+      const match = (results || []).find(item => {
+        if (item.address?.country_code && item.address.country_code.toUpperCase() !== city.countryCode) return false;
+        const names = [item.name, item.address?.city, item.address?.town, item.address?.municipality,
+          item.address?.county, ...(String(item.display_name || "").split(","))].map(normalize);
+        return names.includes(wanted);
+      });
+      const lat = Number(match?.lat);
+      const lng = Number(match?.lon);
+      if (!match || !Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+      const osmType = ({ node: "node", way: "way", relation: "relation" })[String(match.osm_type || "").toLowerCase()];
+      if (!osmType || !/^\d+$/.test(String(match.osm_id || ""))) return null;
+      const sourceUrl = `https://www.openstreetmap.org/${osmType}/${match.osm_id}`;
+      return { lat, lng, sourceUrl, provider: "OpenStreetMap Nominatim", displayName: match.display_name || city.englishName, fetchedAt: Date.now() };
+    };
+    const pending = this.nominatimTail.then(request, request);
+    this.nominatimTail = pending.catch(() => null);
+    this.cityLocationRequests[cacheKey] = pending.then(location => {
+      if (location) {
+        try { localStorage.setItem(cacheKey, JSON.stringify(location)); }
+        catch (error) { console.warn("城市座標快取無法寫入：", error); }
+      }
+      return location;
+    }).finally(() => {
+      delete this.cityLocationRequests[cacheKey];
+    });
+    return this.cityLocationRequests[cacheKey];
+  },
+
+  fetchNearbyPlaces: async function (city, { radius = 20000, limit = 250 } = {}) {
     if (!Number.isFinite(city?.lat) || !Number.isFinite(city?.lng)) return [];
-    const cacheKey = `journey-atlas-osm-places-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
+    const cacheKey = `journey-atlas-verified-places-v4-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
     const cacheTtl = 7 * 24 * 60 * 60 * 1000;
     try {
+      const legacyCacheKey = `journey-atlas-osm-places-v3-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
+      localStorage.removeItem(legacyCacheKey);
+      localStorage.removeItem(legacyCacheKey.replace("-v3-", "-v2-"));
       const saved = JSON.parse(localStorage.getItem(cacheKey) || "null");
-      if (saved?.fetchedAt && Date.now() - saved.fetchedAt < cacheTtl && Array.isArray(saved.places)) return saved.places;
+      const savedTtl = saved?.places?.length
+        && (saved.places.length >= Math.min(12, limit) || saved.wikidataChecked === true)
+        ? cacheTtl : 60 * 60 * 1000;
+      if (saved?.fetchedAt && Date.now() - saved.fetchedAt < savedTtl && Array.isArray(saved.places)) return saved.places;
     } catch (error) {
       console.warn("OpenStreetMap 快取無法讀取：", error);
     }
     if (this.nearbyPlaceRequests[cacheKey]) return this.nearbyPlaceRequests[cacheKey];
 
-    const query = `[out:json][timeout:20];(node["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park"](around:${radius},${city.lat},${city.lng});way["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park"](around:${radius},${city.lat},${city.lng});relation["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park"](around:${radius},${city.lat},${city.lng});node["name"]["historic"~"monument|memorial|castle|archaeological_site"](around:${radius},${city.lat},${city.lng});way["name"]["historic"~"monument|memorial|castle|archaeological_site"](around:${radius},${city.lat},${city.lng});node["name"]["amenity"~"museum|arts_centre"](around:${radius},${city.lat},${city.lng});way["name"]["amenity"~"museum|arts_centre"](around:${radius},${city.lat},${city.lng}););out center tags;`;
+    const query = `[out:json][timeout:25];(node["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});way["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});relation["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});node["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});way["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});relation["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});node["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});way["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});relation["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});node["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});way["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});relation["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});node["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng});way["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng});relation["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng}););out center tags;`;
     this.nearbyPlaceRequests[cacheKey] = (async () => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs * 2);
       try {
         let data = null;
         let requestError = null;
@@ -239,6 +313,8 @@ window.SpotService = {
           "https://overpass-api.de/api/interpreter",
           "https://overpass.kumi.systems/api/interpreter"
         ]) {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
           try {
             const response = await fetch(endpoint, {
               method: "POST",
@@ -251,26 +327,51 @@ window.SpotService = {
             break;
           } catch (error) {
             requestError = error;
-            if (controller.signal.aborted) break;
+          } finally {
+            clearTimeout(timeoutId);
           }
         }
-        if (!data) throw requestError || new Error("OpenStreetMap 地點服務沒有回傳資料");
+        if (!data) {
+          console.warn(`OpenStreetMap 查詢 ${city.name || "此城市"} 失敗，改查 Wikidata：`, requestError);
+          data = { elements: [] };
+        }
         const fetchedAt = Date.now();
-        const places = (data.elements || []).map(element => {
+        const osmPlaces = (data.elements || []).map(element => {
           const tags = element.tags || {};
           const lat = Number(element.lat ?? element.center?.lat);
           const lng = Number(element.lon ?? element.center?.lon);
           const name = tags["name:zh"] || tags.name || tags["name:en"];
           if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-          const kind = tags.tourism || tags.historic || tags.amenity || "place";
+          const kind = tags.tourism || tags.historic || tags.amenity || tags.leisure || tags.natural || "place";
           const categories = {
             attraction: "景點", museum: "博物館", gallery: "美術館／畫廊", viewpoint: "觀景點",
-            zoo: "動物園", theme_park: "主題樂園", monument: "紀念碑", memorial: "紀念地",
-            castle: "城堡", archaeological_site: "考古遺址", arts_centre: "藝術中心"
+            zoo: "動物園", theme_park: "主題樂園", aquarium: "水族館", artwork: "公共藝術",
+            water_park: "水上樂園", monument: "紀念碑", memorial: "紀念地", castle: "城堡",
+            archaeological_site: "考古遺址", fort: "堡壘／城牆", arts_centre: "藝術中心", place_of_worship: "宗教建築",
+            park: "公園", garden: "花園", nature_reserve: "自然保護區", beach: "海灘", waterfall: "瀑布",
+            cave: "洞穴", spring: "泉水", peak: "山峰", camp_site: "露營地", picnic_site: "野餐區"
           };
+          const description = tags["description:zh"] || tags["description:en"] || tags.description
+            || tags["short_description:zh"] || tags["short_description:en"] || tags.short_description || "";
+          const wikipedia = tags.wikipedia || "";
+          const wikipediaParts = wikipedia.split(":");
+          const wikipediaUrl = wikipediaParts.length > 1
+            ? `https://${encodeURIComponent(wikipediaParts[0])}.wikipedia.org/wiki/${encodeURIComponent(wikipediaParts.slice(1).join(" ")).replace(/%20/g, "_")}`
+            : "";
           return {
             name, category: categories[kind] || "景點", lat, lng,
-            note: "OpenStreetMap 已編目地點",
+            note: description || "OpenStreetMap 已編目地點；尚無描述資料。",
+            description,
+            address: [tags["addr:full"], [tags["addr:street"], tags["addr:housenumber"], tags["addr:city"]].filter(Boolean).join(" ")].find(Boolean) || "",
+            openingHours: tags.opening_hours || "",
+            website: tags.website || tags["contact:website"] || "",
+            phone: tags.phone || tags["contact:phone"] || "",
+            fee: tags.fee || "",
+            wheelchair: tags.wheelchair || "",
+            heritage: tags.heritage || "",
+            startDate: tags.start_date || tags["start_date:estimated"] || "",
+            wikipedia, wikipediaUrl,
+            wikidataId: tags.wikidata || "",
             sourceId: "openstreetmap", sourceLabel: "OpenStreetMap contributors",
             sourceUrl: `https://www.openstreetmap.org/${element.type}/${element.id}`,
             osmId: `${element.type}/${element.id}`,
@@ -283,26 +384,110 @@ window.SpotService = {
           .sort((a, b) => a.distanceKm - b.distanceKm)
           .filter((place, index, list) => {
             const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
-            return list.findIndex(candidate => normalizeName(candidate.name) === normalizeName(place.name)) === index;
+            return list.findIndex(candidate => normalizeName(candidate.name) === normalizeName(place.name)
+              && this.distanceKm(candidate.lat, candidate.lng, place.lat, place.lng) <= 0.35) === index;
           })
           .slice(0, limit);
-        try { localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt, places })); }
+        let places = osmPlaces;
+        let wikidataChecked = false;
+        if (places.length < Math.min(12, limit)) {
+          let wikidataPlaces = [];
+          try {
+            wikidataPlaces = await this.fetchWikidataNearbyPlaces(city, { radius, limit });
+            wikidataChecked = true;
+          } catch (error) {
+            console.warn(`Wikidata 附近地點查詢失敗（${city.name || "此城市"}）：`, error);
+          }
+          const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+            .normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+          places = [...osmPlaces];
+          wikidataPlaces.forEach(place => {
+            const normalizedName = normalizeName(place.name);
+            const duplicate = places.some(candidate => normalizeName(candidate.name) === normalizedName
+              && this.distanceKm(candidate.lat, candidate.lng, place.lat, place.lng) <= 0.35);
+            if (normalizedName && !duplicate && places.length < limit) places.push(place);
+          });
+        }
+        try { localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt, places, wikidataChecked })); }
         catch (error) { console.warn("OpenStreetMap 地點快取無法寫入：", error); }
         return places;
       } catch (error) {
         console.warn(`無法載入 ${city.name || "此城市"} 的 OpenStreetMap 地點：`, error);
         return [];
       } finally {
-        clearTimeout(timeoutId);
         delete this.nearbyPlaceRequests[cacheKey];
       }
     })();
     return this.nearbyPlaceRequests[cacheKey];
   },
 
-  fetchSpotDetail: async function(spotName, cityName = "", cityCoordinates = null) {
+  fetchWikidataNearbyPlaces: async function (city, { radius = 20000, limit = 250 } = {}) {
+    if (!Number.isFinite(city?.lat) || !Number.isFinite(city?.lng)) return [];
+    const radiusKm = Math.max(1, Math.min(50, radius / 1000));
+    const query = `SELECT DISTINCT ?place ?placeLabel ?placeDescription ?coordinate ?distance ?article WHERE {
+      SERVICE wikibase:around {
+        ?place wdt:P625 ?coordinate.
+        bd:serviceParam wikibase:center "Point(${city.lng} ${city.lat})"^^geo:wktLiteral.
+        bd:serviceParam wikibase:radius "${radiusKm}".
+        bd:serviceParam wikibase:distance ?distance.
+      }
+      VALUES ?type { wd:Q570116 wd:Q33506 wd:Q22698 wd:Q839954 wd:Q43501 wd:Q167346 wd:Q179049 wd:Q23413 wd:Q189366 wd:Q40080 }
+      ?place wdt:P31/wdt:P279* ?type.
+      OPTIONAL { ?article schema:about ?place; schema:isPartOf <https://en.wikipedia.org/>. }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
+    }
+    ORDER BY ?distance
+    LIMIT ${Math.max(1, Math.min(250, limit))}`;
+    const url = `https://query.wikidata.org/sparql?${new URLSearchParams({ query, format: "json" }).toString()}`;
+    const result = await this.requestJson(url);
+    const fetchedAt = Date.now();
+    return (result.results?.bindings || []).map(binding => {
+      const point = /^Point\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*\)$/i.exec(binding.coordinate?.value || "");
+      const lat = point ? Number(point[2]) : NaN;
+      const lng = point ? Number(point[1]) : NaN;
+      const wikidataId = String(binding.place?.value || "").split("/").pop();
+      const name = binding.placeLabel?.value || "";
+      if (!/^Q\d+$/.test(wikidataId) || !name || !Number.isFinite(lat) || !Number.isFinite(lng)
+        || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+      const distanceKm = this.distanceKm(city.lat, city.lng, lat, lng);
+      if (distanceKm > radiusKm) return null;
+      const articleUrl = /^https:\/\/[a-z-]+\.wikipedia\.org\/wiki\//i.test(binding.article?.value || "")
+        ? binding.article.value : "";
+      const description = binding.placeDescription?.value || "";
+      return {
+        name,
+        category: "有座標的文化與觀光地點",
+        lat,
+        lng,
+        note: description || "Wikidata 有座標條目；尚無描述資料。",
+        description,
+        wikipediaUrl: articleUrl,
+        wikidataId,
+        sourceId: "wikidata",
+        sourceLabel: "Wikidata 有座標條目",
+        sourceUrl: `https://www.wikidata.org/wiki/${wikidataId}`,
+        fetchedAt,
+        distanceKm
+      };
+    }).filter(Boolean)
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, limit);
+  },
+
+  fetchSpotDetail: function(spotName, cityName = "", cityCoordinates = null) {
     const cacheKey = `${spotName}|${cityName}`;
-    if (this.cache[cacheKey]) return this.cache[cacheKey];
+    if (this.cache[cacheKey]) return Promise.resolve(this.cache[cacheKey]);
+    if (this.spotDetailRequests[cacheKey]) return this.spotDetailRequests[cacheKey];
+    const request = this.loadSpotDetail(spotName, cityName, cityCoordinates, cacheKey);
+    this.spotDetailRequests[cacheKey] = request;
+    request.then(
+      () => { delete this.spotDetailRequests[cacheKey]; },
+      () => { delete this.spotDetailRequests[cacheKey]; }
+    );
+    return request;
+  },
+
+  loadSpotDetail: async function(spotName, cityName, cityCoordinates, cacheKey) {
 
     const sources = [
       {
@@ -350,7 +535,7 @@ window.SpotService = {
     ]);
     const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
     const mapData = nearbyPlaces.find(place => normalizeName(place.name) === normalizeName(spotName)) || null;
-    const locationPriority = ["opentripmap", "wikipedia", "wikivoyage", "wikidata"];
+      const locationPriority = ["opentripmap", "wikipedia", "wikivoyage", "wikidata"];
     const resultLocation = locationPriority
       .flatMap(sourceId => results
         .filter(item => item?.sourceId === sourceId && item.location)
@@ -376,6 +561,7 @@ window.SpotService = {
         latitude: mapData.lat, longitude: mapData.lng, category: mapData.category,
         pageUrl: mapData.sourceUrl, sourceLabel: mapData.sourceLabel
       } : null),
+      nearbyPlace: mapData,
       sources: [
         ...results.filter(Boolean).map(item => ({ label: item.sourceLabel, url: item.pageUrl })),
         ...(commons ? [{ label: "Wikimedia Commons 圖片", url: commons.pageUrl }] : []),

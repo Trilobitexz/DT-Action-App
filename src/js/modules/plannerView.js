@@ -215,65 +215,24 @@ window.PlannerView = {
     const result = document.getElementById("recommendation-results");
     if (!result) return;
     const style = formData?.get("style") || "culture";
-    const budget = formData?.get("budget") || "medium";
-    const days = Number(formData?.get("days") || 5);
-    const direct = formData?.get("direct") === "yes";
     const styleLabel = {
       culture: "文化與歷史",
-      food: "美食與在地味",
-      nature: "自然與風景",
-      shopping: "購物與都會",
-      relax: "休閒與度假"
+      nature: "自然與風景"
     }[style] || "城市探索";
-    const budgetLabel = {
-      low: "親民",
-      medium: "均衡",
-      high: "高享受"
-    }[budget] || "均衡";
-
-    const score = city => {
-      let value = city.culture ? 44 : 30;
-      const text = `${city.name} ${city.countryName || ""} ${city.description || ""}`.toLowerCase();
-      if (style === "food" && /大阪|曼谷|東京|新加坡|香港|bangkok|osaka|tokyo|singapore/.test(text)) value += 30;
-      if (style === "nature" && /峇里|雪梨|奧克蘭|開普敦|honolulu|bali|sydney/.test(text)) value += 30;
-      if (style === "shopping" && /東京|大阪|首爾|杜拜|巴黎|tokyo|seoul|dubai|paris/.test(text)) value += 30;
-      if (style === "relax" && /峇里|普吉|檀香山|santorini|bali|phuket|honolulu/.test(text)) value += 30;
-      if (style === "culture" && city.history) value += 24;
-      if (budget === "low" && /曼谷|清邁|河內|暹粒|bangkok|chiang|hanoi|siem/.test(text)) value += 20;
-      if (budget === "high" && /巴黎|倫敦|東京|雪梨|paris|london|tokyo|sydney/.test(text)) value += 15;
-      if (direct && city.countryName && /日本|韓國|泰國|新加坡|越南|香港/.test(city.countryName)) value += 8;
-      if (days >= 7) value += 8;
-      if (days <= 3) value += 4;
-      return value;
-    };
-
-    const getFitTag = (value) => {
-      if (value >= 83) return "高適配";
-      if (value >= 72) return "適配良好";
-      return "可考慮";
-    };
-
-    const recommendations = this.allCities().map(city => {
-      const value = score(city);
-      const reasons = [];
-      const text = `${city.name} ${city.countryName || ""} ${city.description || ""}`.toLowerCase();
-      if (style === "culture" && city.history) reasons.push("文化行程佳");
-      if (style === "food" && /大阪|曼谷|東京|新加坡|香港|bangkok|osaka|tokyo|singapore/.test(text)) reasons.push("美食熱點");
-      if (style === "nature" && /峇里|雪梨|奧克蘭|開普敦|honolulu|bali|sydney/.test(text)) reasons.push("自然景觀強");
-      if (style === "shopping" && /東京|大阪|首爾|杜拜|巴黎|tokyo|seoul|dubai|paris/.test(text)) reasons.push("購物機能強");
-      if (style === "relax" && /峇里|普吉|檀香山|santorini|bali|phuket|honolulu/.test(text)) reasons.push("度假氛圍強");
-      if (budget === "low" && /曼谷|清邁|河內|暹粒|bangkok|chiang|hanoi|siem/.test(text)) reasons.push("小資友善");
-      if (budget === "high" && /巴黎|倫敦|東京|雪梨|paris|london|tokyo|sydney/.test(text)) reasons.push("高質旅遊");
-      if (direct && city.countryName && /日本|韓國|泰國|新加坡|越南|香港/.test(city.countryName)) reasons.push("直飛便利");
-      if (days >= 7) reasons.push("深度旅行適合");
-      return { city, value: Math.min(Math.max(value, 45), 99), fit: getFitTag(value), reasons: reasons.slice(0, 2) };
-    }).sort((a, b) => b.value - a.value).slice(0, 3);
+    const categoryPattern = style === "culture"
+      ? /博物館|美術館|藝術|古蹟|紀念|城堡|宗教|遺址|歷史|文化|藝術中心/
+      : style === "nature" ? /公園|花園|自然|海灘|瀑布|洞穴|泉|山峰|保護區/ : null;
+    const recommendations = categoryPattern ? this.allCities().map(city => ({
+      city,
+      spots: (city.spots || []).filter(spot => Number.isFinite(spot.lat) && Number.isFinite(spot.lng)
+        && /^https?:\/\//i.test(String(spot.sourceUrl || "")) && categoryPattern.test(String(spot.category || "")))
+    })).filter(item => item.spots.length).sort((a, b) => b.spots.length - a.spots.length).slice(0, 3) : [];
 
     if (!recommendations.length) {
       result.innerHTML = `
         <div class="recommendation-empty-state">
-          <strong>目前沒有符合條件的推薦</strong>
-          <span>請放寬預算或改變旅行風格，讓系統重新計算更適合你的旅程。</span>
+          <strong>目前沒有足夠來源資料可作這類推薦</strong>
+          <span>開啟城市載入有座標的圖資後，才會依實際編目分類列出探索方向。</span>
         </div>
       `;
       return;
@@ -281,24 +240,24 @@ window.PlannerView = {
 
     result.innerHTML = `
       <div class="recommendation-result-heading">
-        <strong>為你挑出的 ${days} 日旅行候選</strong>
-        <span>${direct ? "依直飛便利度與旅行風格" : "依旅遊適配度與旅程節奏"}</span>
+        <strong>有 ${styleLabel} 來源地點的城市</strong>
+        <span>依已編目地點數列出，不代表旅遊評分</span>
       </div>
-      <div class="recommendation-result-list">${recommendations.map(({ city, value, fit, reasons }) => `
+      <div class="recommendation-result-list">${recommendations.map(({ city, spots }) => `
         <button type="button" class="recommendation-result-card" data-city-id="${city.id || ""}">
-          <span class="recommendation-score">${Math.min(value, 99)}<small>/100</small></span>
+          <span class="recommendation-score">${spots.length}<small>筆</small></span>
           <span>
             <strong>${city.flag || "🌍"} ${city.name}</strong>
             <small>${city.englishName || ""} · ${city.countryName || ""}</small>
-            <small class="recommendation-reason">${fit} · ${reasons.join(" · ") || "適合依你的天數深入探索"}</small>
+            <small class="recommendation-reason">${spots.map(spot => escapePlannerText(spot.category)).join(" · ")}</small>
           </span>
           <span class="recommendation-meta">
-            <em>${budgetLabel}</em>
+            <em>有來源座標</em>
             <b>查看 →</b>
           </span>
         </button>
       `).join("")}</div>
-      <small class="planner-disclaimer">推薦以「${styleLabel}」與「${budgetLabel}預算」為主軸，並附帶直飛/轉機與旅遊節奏的判斷；實際航班、簽證與價格請以官方最新資料為準。</small>
+      <small class="planner-disclaimer">此清單只依來源連結、座標及地點分類整理；尚無可核實的航班與價格資料，不參與排序。</small>
     `;
     result.querySelectorAll("[data-city-id]").forEach(button => {
       button.addEventListener("click", () => {
@@ -344,15 +303,15 @@ window.PlannerView = {
       quickStatus.textContent = cities.length ? `已選 ${cities.length}/4 座城市，點擊查看` : "回到頁面查看已選城市";
     }
     panel.innerHTML = `
-      <div class="comparison-heading"><div><span class="section-kicker">COMPARE YOUR SHORTLIST</span><h2>城市比較</h2><p>最多選 4 座城市，快速找到最適合你的下一站。</p></div><span class="destination-count">${cities.length}/4 已選</span></div>
+      <div class="comparison-heading"><div><span class="section-kicker">COMPARE SOURCE DATA</span><h2>城市資料比較</h2><p>最多比較 4 座城市；缺少來源的欄位會標明尚未核實。</p></div><span class="destination-count">${cities.length}/4 已選</span></div>
       <div class="comparison-actions">${cities.map(city => `<button type="button" class="compare-chip" data-remove="${city.id}">${city.flag || "🌍"} ${city.name} ×</button>`).join("")}</div>
       ${cities.length < 2 ? `<p class="comparison-empty">先在城市詳情頁按「加入比較」，至少選兩座城市就會出現比較表。</p>` : `
         <div class="comparison-table-wrap"><table class="comparison-table"><thead><tr><th>比較面向</th>${cities.map(city => `<th>${city.flag || "🌍"} ${city.name}</th>`).join("")}</tr></thead><tbody>
           <tr><th>國家／地區</th>${cities.map(city => `<td>${city.countryName || "—"}</td>`).join("")}</tr>
-          <tr><th>氣候</th>${cities.map(city => `<td>${city.climate || "四季各有特色"}</td>`).join("")}</tr>
-          <tr><th>文化與歷史</th>${cities.map(city => `<td>${city.history ? "高" : "中"}</td>`).join("")}</tr>
-          <tr><th>資料完整度</th>${cities.map(city => `<td><span class="comparison-status">● 已整理</span></td>`).join("")}</tr>
-          <tr><th>規劃建議</th>${cities.map(city => `<td>${city.description || "適合探索城市特色"}</td>`).join("")}</tr>
+          <tr><th>氣候</th>${cities.map(city => `<td>${city.climateSource ? escapePlannerText(city.climate) : "尚無核實資料"}</td>`).join("")}</tr>
+          <tr><th>文化與歷史</th>${cities.map(city => `<td>${city.historySource ? escapePlannerText(city.history) : "尚無核實資料"}</td>`).join("")}</tr>
+          <tr><th>來源資料</th>${cities.map(city => `<td>${city.coordinateSource ? "座標有來源" : "位置待核實"} · ${(city.spots || []).filter(spot => spot.sourceUrl && Number.isFinite(spot.lat) && Number.isFinite(spot.lng)).length} 筆景點</td>`).join("")}</tr>
+          <tr><th>規劃建議</th>${cities.map(city => `<td>${city.descriptionSource?.text ? escapePlannerText(city.descriptionSource.text) : "尚無來源資料"}</td>`).join("")}</tr>
         </tbody></table></div>
       `}
     `;
@@ -378,7 +337,7 @@ window.PlannerView = {
           <label>餐飲 <input type="number" min="0" step="500" data-budget="food" value="${budget.food}"></label>
           <label>景點／購物 <input type="number" min="0" step="500" data-budget="activity" value="${budget.activity}"></label>
         </div><div id="budget-chart" class="budget-chart"></div><p id="budget-total" class="tool-total"></p><small class="planner-disclaimer">金額為台幣估算，依 5 天旅程預設，可自行調整。</small></section>
-        <section class="itinerary-tool"><h5>🗓️ 行程規劃</h5><p class="itinerary-help">可自行安排景點，或使用 AI 依旅遊偏好規劃每日路線。</p><div class="ai-itinerary-controls"><label for="itinerary-ai-preferences">旅行偏好 <span>選填</span></label><input id="itinerary-ai-preferences" type="text" maxlength="160" placeholder="例如：在地美食、博物館、親子、慢遊"><button type="button" class="tool-outline-btn ai-itinerary-button" id="btn-ai-itinerary">✨ AI 產生行程</button><p class="ai-itinerary-status" id="ai-itinerary-status" role="status" aria-live="polite"></p><small class="planner-disclaimer">AI 會依本站景點資料安排行程；營業時間、交通與費用請以官方資訊為準。</small></div><div class="itinerary-days" role="group" aria-label="選擇旅行天數">${[3, 5, 7].map(days => `<button type="button" data-days="${days}" class="${days === 5 ? "active" : ""}">${days} 天</button>`).join("")}</div><div class="itinerary-customizer"><label>景點 <select id="itinerary-spot-select" aria-label="選擇景點">${spots.map((spot, index) => `<option value="${index}">${spot.name}</option>`).join("")}</select></label><label>加入第 <select id="itinerary-day-select" aria-label="選擇加入天數">${Array.from({ length: 7 }, (_, index) => `<option value="${index}">Day ${index + 1}</option>`).join("")}</select></label><button type="button" class="tool-outline-btn" id="btn-add-itinerary-spot">加入</button></div><label class="itinerary-mode-control">交通方式<select id="itinerary-travel-mode" aria-label="選擇交通方式"><option value="transit">大眾運輸</option><option value="walking">步行</option><option value="driving">開車</option></select><small id="itinerary-mode-recommendation"></small></label><div class="itinerary-actions"><button type="button" class="tool-outline-btn" id="btn-copy-itinerary">複製行程</button><button type="button" class="tool-outline-btn" id="btn-print-itinerary">列印行程</button></div><div id="itinerary-result" class="itinerary-result"></div></section>
+        <section class="itinerary-tool"><h5>🗓️ 行程規劃</h5><p class="itinerary-help">可自行安排景點，或使用 AI 依旅遊偏好規劃每日路線。</p><div class="ai-itinerary-controls"><label for="itinerary-ai-preferences">旅行偏好 <span>選填</span></label><input id="itinerary-ai-preferences" type="text" maxlength="160" placeholder="例如：在地美食、博物館、親子、慢遊"><button type="button" class="tool-outline-btn ai-itinerary-button" id="btn-ai-itinerary">✨ AI 產生行程</button><p class="ai-itinerary-status" id="ai-itinerary-status" role="status" aria-live="polite"></p><small class="planner-disclaimer">AI 會依本站景點資料安排行程；營業時間、交通與費用請以官方資訊為準。</small></div><div class="itinerary-days" role="group" aria-label="選擇旅行天數">${[3, 5, 7].map(days => `<button type="button" data-days="${days}" class="${days === 5 ? "active" : ""}">${days} 天</button>`).join("")}</div><div class="itinerary-customizer"><label>景點 <select id="itinerary-spot-select" aria-label="選擇景點">${spots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}</option>`).join("")}</select></label><label>加入第 <select id="itinerary-day-select" aria-label="選擇加入天數">${Array.from({ length: 7 }, (_, index) => `<option value="${index}">Day ${index + 1}</option>`).join("")}</select></label><button type="button" class="tool-outline-btn" id="btn-add-itinerary-spot">加入</button></div><label class="itinerary-mode-control">交通方式<select id="itinerary-travel-mode" aria-label="選擇交通方式"><option value="transit">大眾運輸</option><option value="walking">步行</option><option value="driving">開車</option></select><small id="itinerary-mode-recommendation"></small></label><div class="itinerary-actions"><button type="button" class="tool-outline-btn" id="btn-copy-itinerary">複製行程</button><button type="button" class="tool-outline-btn" id="btn-print-itinerary">列印行程</button></div><div id="itinerary-result" class="itinerary-result"></div></section>
       </div>
     `;
     host.querySelector("#btn-favorite-city").addEventListener("click", event => {
@@ -509,10 +468,10 @@ window.PlannerView = {
             const duration = Number(spot.visitHours) || 2;
             const travel = order === 0 ? "住宿／市區出發" : this.estimateTravelTime(orderedSpots[order - 1].spot, spot, mode);
             const routeUrl = this.routeUrl(orderedSpots[order - 1]?.spot?.name || city.name, spot.name, mode, city.name);
-            return `<div class="itinerary-slot itinerary-spot-card" draggable="true" data-spot-index="${index}" data-day-index="${dayIndex}" tabindex="0" aria-label="${spot.name}，可拖曳調整順序">
-              <span class="itinerary-drag-handle" aria-hidden="true">⠿</span><div class="itinerary-stop-details"><strong>${order + 1}. ${spot.name} <span class="itinerary-drag-hint">拖曳排序</span></strong>
-              <small class="itinerary-transport">🚉 ${travel} · ${this.travelModes[mode]}${order ? ` <a href="${routeUrl}" target="_blank" rel="noopener noreferrer">查看路線</a>` : ""}</small>
-              <small>⏱ 建議停留 ${duration} 小時</small><small class="itinerary-opening">🕒 ${opening}　📅 ${closed}</small>
+            return `<div class="itinerary-slot itinerary-spot-card" draggable="true" data-spot-index="${index}" data-day-index="${dayIndex}" tabindex="0" aria-label="${escapePlannerText(spot.name)}，可拖曳調整順序">
+              <span class="itinerary-drag-handle" aria-hidden="true">⠿</span><div class="itinerary-stop-details"><strong>${order + 1}. ${escapePlannerText(spot.name)} <span class="itinerary-drag-hint">拖曳排序</span></strong>
+              <small class="itinerary-transport">🚉 ${escapePlannerText(travel)} · ${this.travelModes[mode]}${order ? ` <a href="${routeUrl}" target="_blank" rel="noopener noreferrer">查看路線</a>` : ""}</small>
+              <small>⏱ 建議停留 ${duration} 小時</small><small class="itinerary-opening">🕒 ${escapePlannerText(opening)}　📅 ${escapePlannerText(closed)}</small>
               ${!spot.openingHours || !spot.closedDays ? `<small class="itinerary-data-warning">營業／休館資訊未驗證，出發前請查官方公告。</small>` : ""}</div>
             </div>`;
           }).join("") : `<p class="itinerary-empty-day">尚未安排景點，可從上方加入。</p>`}
