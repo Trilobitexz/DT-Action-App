@@ -47,7 +47,7 @@ Firebase 使用 compat SDK 初始化 Authentication 與 Analytics；Google 登�
 - 城市、航班與物價部分為專案整理或規劃參考資料，不代表即時航班、即時價格或官方簽證結果。
 - 天氣、匯率與景點補充資料依賴外部服務；服務無法使用時，介面會保留內建資料並標示目前狀態。
 - 景點圖片、百科摘要、地址與座標可能來自不同公開資料來源，更新時間與完整度可能不同。
-- 城市目錄目前保存在前端資料檔；城市座標查詢和周邊景點結果在瀏覽器快取，尚未同步到 Firestore 公開城市目錄。Firestore 現有規則只涵蓋登入使用者的個人資料，不允許公開城市文件讀取。
+- 前端館藏會優先讀取 Firestore 公開目錄 `cities/{cityId}` 與 `cities/{cityId}/spots/{spotId}`；訪客可讀取，瀏覽器不提供一般寫入權限。執行 `npm run seed:city-catalog` 可透過 Firebase Admin Application Default Credentials 將現有館藏匯入後台。
 - GeoNames 城市地名資料以 CC BY 4.0 授權；資料來源與地名 ID 保留於城市目錄，地圖頁會顯示來源連結。
 - OpenStreetMap Nominatim 僅在使用者開啟尚未有座標的城市時查詢，每個瀏覽器序列化請求並至少間隔 1.1 秒，座標快取 180 天；使用量需遵守 [Nominatim 使用政策](https://operations.osmfoundation.org/policies/nominatim/)。
 - 景點補充使用 Wikidata Query Service 的地理查詢；項目保留 Wikidata 頁面連結，Wikidata 與 OpenStreetMap 都沒有資料時不會以推測景點補齊。

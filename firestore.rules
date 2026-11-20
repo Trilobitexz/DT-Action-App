@@ -36,6 +36,18 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
     }
 
+    match /cities/{cityId} {
+      // 公開城市目錄：任何訪客可讀取後台景點資料。
+      // 實際寫入只允許透過 Firebase Admin / 管理端工作流程執行。
+      allow read: if true;
+      allow write: if false;
+
+      match /spots/{spotId} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
     match /users/{userId}/appData/{dataId} {
       // The app fetches this user's whole appData collection. Firestore rules
       // are not filters, so list authorization must depend on the owning path,

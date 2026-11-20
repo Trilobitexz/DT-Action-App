@@ -313,6 +313,43 @@ window.CountryView = {
           }
         }).catch(error => console.warn("景點百科載入失敗：", error));
       });
+      window.CityCatalogService?.fetchCity(currentCity.id).then(published => {
+        if (!isCurrentCity() || !published?.spots?.length) return;
+        const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+          .normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+        const existing = new Map(spots.map((spot, index) => [normalizeName(spot.name), index]));
+        const merged = [...spots];
+        published.spots.forEach(publishedSpot => {
+          const name = normalizeName(publishedSpot.name);
+          if (!name) return;
+          if (existing.has(name)) {
+            const index = existing.get(name);
+            merged[index] = { ...merged[index], ...publishedSpot };
+            return;
+          }
+          existing.set(name, merged.length);
+          merged.push(publishedSpot);
+        });
+        if (published.city?.description && !currentCity.descriptionSource?.text) {
+          currentCity.descriptionSource = {
+            text: published.city.description,
+            pageUrl: published.city.sourceUrl || null,
+            sourceLabel: published.city.sourceLabel || "後台城市目錄"
+          };
+        }
+        currentCity.spots = merged;
+        currentCity.attractions = merged.map(spot => spot.name);
+        currentCity.dataStatus = { ...(currentCity.dataStatus || {}), spots: "published-database" };
+        const storedCity = window.TRAVEL_DATA.globalCities.find(city => city.id === renderedCityId)
+          || window.TRAVEL_DATA.countries.flatMap(item => item.cities || []).find(city => city.id === renderedCityId);
+        if (storedCity) {
+          storedCity.spots = merged;
+          storedCity.attractions = currentCity.attractions;
+          storedCity.dataStatus = currentCity.dataStatus;
+        }
+        window.CountryView.render(state);
+      }).catch(error => console.warn("後台城市目錄載入失敗：", error));
+
       window.SpotService.fetchNearbyPlaces(currentCity).then(places => {
         if (!isCurrentCity() || !Array.isArray(places)) return;
         const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
