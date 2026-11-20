@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 {
   "hosting": {
     "public": ".",
@@ -37,42 +36,3 @@
     "indexes": "firestore.indexes.json"
   }
 }
-=======
-{
-  "hosting": {
-    "public": ".",
-    "ignore": [
-      "firebase.json",
-      ".firebaserc",
-      "firestore.rules",
-      "firestore.indexes.json",
-      "package.json",
-      "README.md",
-      "DESIGN_SPEC.md",
-      "pdf_content.txt",
-      "*.pdf",
-      "node_modules/**",
-      ".git/**",
-      "**/.*"
-    ]
-  },
-  "auth": {
-    "providers": {
-      "emailPassword": true,
-      "googleSignIn": {
-        "oAuthBrandDisplayName": "DT-Action-App",
-        "supportEmail": "hungchen941027@gmail.com",
-        "authorizedRedirectUris": [
-          "https://dt-action-app.firebaseapp.com/__/auth/handler",
-          "https://dt-action-app.web.app/__/auth/handler",
-          "http://localhost"
-        ]
-      }
-    }
-  },
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  }
-}
->>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b

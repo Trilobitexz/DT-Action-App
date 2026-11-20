@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 {
   "name": "dt-action-app",
   "private": true,
@@ -7,13 +6,3 @@
     "firebase": "^11.0.2"
   }
 }
-=======
-{
-  "name": "dt-action-app",
-  "private": true,
-  "description": "旅途指南 Journey Atlas",
-  "dependencies": {
-    "firebase": "^11.0.2"
-  }
-}
->>>>>>> cf5137dd57171f5148813b42fc6f67fab85edb0b
