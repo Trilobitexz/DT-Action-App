@@ -1454,6 +1454,17 @@ to { stroke-dashoffset: -40; }
 .budget-bar b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #d99a7e, var(--primary)); }
 .budget-bar strong { color: #5b6567; font-size: 0.67rem; text-align: right; }
 .tool-total { margin-top: 0.55rem; color: var(--primary); font-size: 0.82rem; font-weight: 800; }
+.ai-itinerary-controls { display: grid; gap: 0.35rem; margin: 0.7rem 0; padding: 0.65rem; border: 1px solid #eadfcf; border-radius: 9px; background: #fffaf1; }
+.ai-itinerary-controls label { display: flex; gap: 0.4rem; color: #49595e; font-size: 0.7rem; font-weight: 700; }
+.ai-itinerary-controls label span { color: #8b9698; font-weight: 400; }
+.ai-itinerary-controls input { min-height: 34px; padding: 0.45rem 0.6rem; border: 1px solid #e2d9d0; border-radius: 7px; background: #fff; color: #263944; font: inherit; font-size: 0.72rem; }
+.ai-itinerary-controls input:focus { border-color: var(--primary); outline: 3px solid rgba(186, 89, 60, 0.12); }
+.ai-itinerary-button { justify-self: start; min-height: 34px; }
+.ai-itinerary-status { min-height: 1.2em; margin: 0; color: #52636b; font-size: 0.7rem; line-height: 1.45; }
+.ai-itinerary-status[data-state="pending"] { color: #8a5b1a; }
+.ai-itinerary-status[data-state="success"] { color: #16745e; }
+.ai-itinerary-status[data-state="error"] { color: #b42318; }
+.ai-itinerary-controls .planner-disclaimer { line-height: 1.45; }
 .itinerary-days { display: flex; gap: 0.35rem; }
 .itinerary-days button { padding: 0.35rem 0.7rem; border: 1px solid #e2d9d0; border-radius: 7px; background: #fff; color: #5f6b6d; cursor: pointer; font-size: 0.72rem; }
 .itinerary-days button.active { border-color: var(--primary); background: var(--primary); color: #fff; }

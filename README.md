@@ -75,3 +75,10 @@ Firebase 初始化與 Web SDK 設定位於 [`src/js/firebase.js`](./src/js/fireb
 Firebase Authentication 前端登入使用 Google（不含 LINE，也不顯示電子郵件／密碼登入表單）。Firestore Standard 預設資料庫建立於 `asia-east1`。登入後，城市收藏、比較清單、最近瀏覽、預算與行程會同步至 `users/{uid}/appData/{dataId}`；每位使用者只能讀寫自己的資料，未登入與跨帳戶存取會被 Firestore 規則拒絕。資料仍會保留在本機，網路／規則問題時會在帳戶選單顯示同步狀態。
 
 Firestore 安全規則位於 [`firestore.rules`](./firestore.rules)，僅允許指定應用資料文件與受限 JSON 字串大小。規則已部署至 Firebase；正式公開使用前仍建議進行安全規則與資料同步測試。Hosting 使用專案根目錄作為靜態網站來源，但會排除課程文件、規格、設定與規則檔案，避免發布非網站內容。
+
+
+## AI 旅程規劃
+
+城市規劃工具新增 AI 行程規劃，可依旅行天數、交通方式與旅客偏好，從本站已知景點中安排每日順序；結果可拖曳調整，沿用既有行程保存與登入後的 Firestore 同步。模型使用 Firebase AI Logic（Gemini Developer API）與 Gemini 3.8 Flash，輸出以結構化 JSON 驗證，避免模型捏造本站以外的景點索引。
+
+首次使用前，請在 Firebase Console 的 App Check → Apps 為 Web App 設定 reCAPTCHA Enterprise，並將網站金鑰填入 src/js/firebase-ai-config.js 的 appCheckSiteKey。金鑰是公開的網站識別碼，可放在前端；不要放入 reCAPTCHA secret key 或 App Check debug token。確認 App Check → APIs → Firebase AI Logic 已啟用 enforcement，並確認 GitHub Pages 網域已列入 reCAPTCHA Enterprise key 的允許網域。

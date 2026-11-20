@@ -1,4 +1,4 @@
-const CACHE_NAME = "journey-atlas-shell-v32";
+const CACHE_NAME = "journey-atlas-shell-v33";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -14,6 +14,7 @@ const APP_SHELL = [
   "./src/js/modules/globalCitiesView.js",
   "./src/js/modules/plannerView.js",
   "./src/js/firebase.js",
+  "./src/js/firebase-ai-config.js",
   "./src/js/services/currencyService.js",
   "./src/js/services/flightService.js",
   "./src/js/services/spotService.js",
