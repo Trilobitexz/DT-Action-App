@@ -37,6 +37,20 @@ window.PlannerView = {
     this.renderRecentDestinations();
   },
 
+  refreshCloudData: function () {
+    this.compareIds = readStoredArray("journey-atlas-compare");
+    this.favoriteIds = readStoredArray("journey-atlas-favorites");
+    this.renderComparison();
+    this.renderRecentDestinations();
+    const favoriteButton = document.getElementById("btn-favorite-city");
+    const favoriteKey = favoriteButton?.dataset.favoriteKey;
+    if (favoriteButton && favoriteKey) {
+      const selected = this.isFavorite(favoriteKey);
+      favoriteButton.textContent = selected ? "★ 已收藏城市" : "☆ 收藏城市";
+      favoriteButton.setAttribute("aria-pressed", String(selected));
+    }
+  },
+
   getRecentDestinations: function () {
     const recent = readStoredArray(this.recentStorageKey);
     return recent.filter(item => item && typeof item.id === "string" && ["global", "local"].includes(item.type));
@@ -47,7 +61,9 @@ window.PlannerView = {
     const recent = this.getRecentDestinations().filter(item => !(item.id === city.id && item.type === type));
     recent.unshift({ id: city.id, type, countryId, viewedAt: Date.now() });
     try {
-      localStorage.setItem(this.recentStorageKey, JSON.stringify(recent.slice(0, 5)));
+      const value = JSON.stringify(recent.slice(0, 5));
+      localStorage.setItem(this.recentStorageKey, value);
+      window.FirebaseCloudData?.saveLocal(this.recentStorageKey, value);
     } catch (error) {
       console.warn("無法儲存最近瀏覽城市。", error);
     }
@@ -78,7 +94,7 @@ window.PlannerView = {
       `).join("")}</div>
     `;
     panel.querySelector("#btn-clear-recent").addEventListener("click", () => {
-      try { localStorage.removeItem(this.recentStorageKey); } catch (error) { console.warn("無法清除最近瀏覽紀錄。", error); }
+      try { localStorage.removeItem(this.recentStorageKey); window.FirebaseCloudData?.removeLocal(this.recentStorageKey); } catch (error) { console.warn("無法清除最近瀏覽紀錄。", error); }
       this.renderRecentDestinations();
     });
     panel.querySelectorAll("[data-recent-id]").forEach(button => button.addEventListener("click", () => {
@@ -95,7 +111,9 @@ window.PlannerView = {
     if (index >= 0) this.favoriteIds.splice(index, 1);
     else this.favoriteIds.push(key);
     try {
-      localStorage.setItem("journey-atlas-favorites", JSON.stringify(this.favoriteIds));
+      const value = JSON.stringify(this.favoriteIds);
+      localStorage.setItem("journey-atlas-favorites", value);
+      window.FirebaseCloudData?.saveLocal("journey-atlas-favorites", value);
     } catch (error) {
       console.warn("無法儲存收藏項目，將在本次頁面工作階段保留。", error);
     }
@@ -225,7 +243,9 @@ window.PlannerView = {
     else if (this.compareIds.length < 4) this.compareIds.push(key);
     else return;
     try {
-      localStorage.setItem("journey-atlas-compare", JSON.stringify(this.compareIds));
+      const value = JSON.stringify(this.compareIds);
+      localStorage.setItem("journey-atlas-compare", value);
+      window.FirebaseCloudData?.saveLocal("journey-atlas-compare", value);
     } catch (error) {
       console.warn("無法儲存城市比較清單，將在本次頁面工作階段保留。", error);
     }
@@ -273,7 +293,7 @@ window.PlannerView = {
     const budget = this.readBudget(city);
     const spots = city.spots || [];
     host.innerHTML = `
-      <div class="city-tool-heading"><div><span class="section-kicker">PLAN WITH CONFIDENCE</span><h4>把靈感變成可執行計畫</h4></div><div class="city-tool-actions"><button type="button" class="tool-outline-btn" id="btn-favorite-city" aria-pressed="${this.isFavorite(`city:${city.id}`)}">${this.isFavorite(`city:${city.id}`) ? "★ 已收藏城市" : "☆ 收藏城市"}</button><button type="button" class="tool-outline-btn" id="btn-compare-city" aria-pressed="${selected}">${selected ? "✓ 已加入比較" : "＋ 加入城市比較"}</button></div></div>
+      <div class="city-tool-heading"><div><span class="section-kicker">PLAN WITH CONFIDENCE</span><h4>把靈感變成可執行計畫</h4></div><div class="city-tool-actions"><button type="button" class="tool-outline-btn" id="btn-favorite-city" data-favorite-key="city:${city.id}" aria-pressed="${this.isFavorite(`city:${city.id}`)}">${this.isFavorite(`city:${city.id}`) ? "★ 已收藏城市" : "☆ 收藏城市"}</button><button type="button" class="tool-outline-btn" id="btn-compare-city" aria-pressed="${selected}">${selected ? "✓ 已加入比較" : "＋ 加入城市比較"}</button></div></div>
       <div class="planner-tool-grid">
         <section class="budget-tool"><h5>💰 旅行預算估算</h5><div class="budget-inputs">
           <label>住宿 <input type="number" min="0" step="500" data-budget="hotel" value="${budget.hotel}"></label>
@@ -331,7 +351,10 @@ window.PlannerView = {
     const budget = {};
     host.querySelectorAll("[data-budget]").forEach(item => { budget[item.dataset.budget] = Math.max(0, Number(item.value) || 0); });
     try {
-      localStorage.setItem(`journey-atlas-budget-${city.id}`, JSON.stringify(budget));
+      const key = `journey-atlas-budget-${city.id}`;
+      const value = JSON.stringify(budget);
+      localStorage.setItem(key, value);
+      window.FirebaseCloudData?.saveLocal(key, value);
     } catch (error) {
       console.warn("無法儲存旅行預算，將在本次頁面工作階段保留。", error);
     }
@@ -481,7 +504,9 @@ window.PlannerView = {
     const stored = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     stored[city.id] = { ...(stored[city.id] || {}), [days]: itinerary };
     try {
-      localStorage.setItem(this.itineraryStorageKey, JSON.stringify(stored));
+      const value = JSON.stringify(stored);
+      localStorage.setItem(this.itineraryStorageKey, value);
+      window.FirebaseCloudData?.saveLocal(this.itineraryStorageKey, value);
     } catch (error) {
       console.warn("儲存自訂行程失敗：", error);
     }
@@ -522,3 +547,4 @@ window.PlannerView = {
     printWindow.print();
   }
 };
+

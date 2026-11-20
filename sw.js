@@ -1,4 +1,4 @@
-const CACHE_NAME = "journey-atlas-shell-v30";
+const CACHE_NAME = "journey-atlas-shell-v31";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -71,3 +71,4 @@ self.addEventListener("fetch", event => {
     }
   })());
 });
+

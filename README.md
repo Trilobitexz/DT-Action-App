@@ -65,7 +65,13 @@ Firebase 初始化與 Web SDK 設定位於 [`src/js/firebase.js`](./src/js/fireb
 ### Firebase Console 必要設定
 
 1. 確認 Web App 的 Firebase 設定與 `src/js/firebase.js` 中 `firebaseConfig` 相符。
-2. 在 **Authentication → Sign-in method** 啟用 **Google** 與 **Email/Password**。
+2. 在 **Authentication → Sign-in method** 啟用 **Google** 與 **Email/Password**。Google 提供者尚未能由本機 Hosting 設定推知是否已啟用；如登入回報 `auth/operation-not-allowed`，需在此頁啟用 Google。
 3. 在 **Authentication → Settings → Authorized domains** 加入正式網站網域；本機測試使用 `localhost`。
 4. 在 Firebase Authentication 的電子郵件範本中確認寄件者、主旨、應用程式名稱和驗證連結設定。
 5. 你提供的應用程式資訊顯示「連結的 Firebase 託管網站：dt-action-app」，請在 Firebase Console → Hosting 查看該網站狀態與實際網址。只有已建立並完成部署的 Hosting 網站才可開啟；預設網址通常為 `https://dt-action-app.web.app` 或 `https://dt-action-app.firebaseapp.com`，請以 Hosting 頁面顯示為準。若尚未建立 Hosting 網站，請先在 Console 的 Hosting 流程建立並部署。
+
+## 登入與 Firestore 雲端同步
+
+Firebase Authentication 已啟用 Google 與電子郵件／密碼註冊登入（不含 LINE）。Firestore Standard 預設資料庫建立於 `asia-east1`。登入後，城市收藏、比較清單、最近瀏覽、預算與行程會同步至 `users/{uid}/appData/{dataId}`；每位使用者只能讀寫自己的資料，未登入與跨帳戶存取會被 Firestore 規則拒絕。資料仍會保留在本機，網路／規則問題時會在帳戶選單顯示同步狀態。
+
+Firestore 安全規則位於 [`firestore.rules`](./firestore.rules)，僅允許指定應用資料文件與受限 JSON 字串大小。規則已部署至 Firebase；正式公開使用前仍建議進行安全規則與資料同步測試。Hosting 使用專案根目錄作為靜態網站來源，但會排除課程文件、規格、設定與規則檔案，避免發布非網站內容。
