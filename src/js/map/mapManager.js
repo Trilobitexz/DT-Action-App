@@ -18,6 +18,7 @@ class MapManager {
     this.currentCityContext = null;
     this.cityContextExitZoom = 5.8;
     this.cityContextExitPending = false;
+    this.cityContextZoomOutPending = false;
     this.visibleCityUpdateFrame = null;
     this.invalidateSizeTimer = null;
     this.layerInstallScheduled = false;
@@ -72,6 +73,13 @@ class MapManager {
       renderWorldCopies: true, attributionControl: false,
       canvasContextAttributes: { antialias: false, preserveDrawingBuffer: false }, fadeDuration: 0
     });
+    this.lastMapZoom = this.map.getZoom();
+    this.cityContextZoomDirection = "in";
+    this.map.on("zoom", () => {
+      const zoom = this.map.getZoom();
+      this.cityContextZoomDirection = zoom < this.lastMapZoom ? "out" : "in";
+      this.lastMapZoom = zoom;
+    });
     this.map.addControl(new window.maplibregl.AttributionControl({ compact: true }), "bottom-right");
     this.map.on("error", event => { if (event?.error) console.warn("MapLibre map/tile error:", event.error); });
     this.map.on("load", () => {
@@ -90,10 +98,10 @@ class MapManager {
       if (!this.layersReady) this.ensureLayersInstalled();
     });
     this.map.on("moveend", () => this.scheduleVisibleCityUpdate());
-    this.map.on("zoomend", () => {
+    this.map.on("zoomend", event => {
       this.updateMarkersVisibility();
       this.scheduleVisibleCityUpdate();
-      this.handleCityContextZoom();
+      this.handleCityContextZoom(event);
     });
     this.map.on("click", event => this.handleMapClick(event));
     ["continent-symbols", "city-circles", "city-symbols", "global-city-symbols", "global-city-labels"].forEach(layer => {
@@ -331,8 +339,11 @@ class MapManager {
     });
     this.scheduleVisibleCityUpdate();
   }
-  handleCityContextZoom() {
-    if (!this.currentCityContext || this.cityContextExitPending || !this.map) return;
+  handleCityContextZoom(event) {
+    const userInitiatedZoomOut = (Boolean(event?.originalEvent) && this.cityContextZoomDirection === "out")
+      || this.cityContextZoomOutPending;
+    this.cityContextZoomOutPending = false;
+    if (!userInitiatedZoomOut || !this.currentCityContext || this.cityContextExitPending || !this.map) return;
     if (this.map.getZoom() > this.cityContextExitZoom) return;
     const city = this.currentCityContext;
     this.cityContextExitPending = true;
@@ -356,7 +367,7 @@ class MapManager {
   }
   showCityContext(city, { animate = true } = {}) {
     if (!this.map || !city || !Number.isFinite(city.lat) || !Number.isFinite(city.lng)) return;
-    this.currentCityContext = city; this.cityContextExitPending = false; this.clearCitySpots();
+    this.currentCityContext = city; this.cityContextExitPending = false; this.cityContextZoomOutPending = false; this.clearCitySpots();
     const sourceSpots = this.getCitySpots(city);
     const spots = [];
     sourceSpots.forEach((spot, index) => {
@@ -393,23 +404,23 @@ class MapManager {
       this.syncSource("spots");
       this.renderCityContextDomMarkers();
       this.updateMarkersVisibility();
-      const spotCountLabel = document.querySelector("#map-context-info .map-context-spot-count");
-      if (spotCountLabel) {
-        const count = this.geojson.spots.features.filter(feature => feature.properties?.kind === "spot").length;
-        spotCountLabel.textContent = `🔴 地圖景點 ${count} 個`;
-      }
-    }).catch(error => console.warn(`無法載入 ${city.name} 的開放地圖景點：`, error));
+      this.updateCitySpotCount(city.id);
+    }).catch(error => {
+      console.warn(`無法載入 ${city.name} 的開放地圖景點：`, error);
+      this.updateCitySpotCount(city.id);
+    });
     const centerLabel = city.destinationType === "island" ? `${city.name} 島嶼地名點` : `${city.name} 地名參考點`;
     this.geojson.spots = { type: "FeatureCollection", features: [{ type: "Feature", id: `${city.id}-center`, properties: { kind: "center", cityId: city.id, label: centerLabel }, geometry: { type: "Point", coordinates: [city.lng, city.lat] } }, ...spots] };
     this.geojson.airports = { type: "FeatureCollection", features: this.getAirportData(city).filter(a => Number.isFinite(a.lat) && Number.isFinite(a.lng)).map((a, i) => this.feature(`${city.id}-airport-${i}`, [a.lng, a.lat], { kind: "airport", name: `${a.name} (${a.code})`, label: `✈ ${a.code}` })) };
     this.syncSource("spots"); this.syncSource("airports"); this.geojson.routes = this.emptyCollection(); this.syncSource("routes");
     this.renderCityContextDomMarkers();
     this.updateMarkersVisibility();
+    this.updateCitySpotCount(city.id);
     this.map.resize();
     this.fitCityContext(city, animate);
   }
   restoreOverviewMarkers() {
-    this.currentCityContext = null; this.cityContextExitPending = false; this.clearCitySpots(); this.geojson.routes = this.emptyCollection(); this.syncSource("routes"); this.updateMarkersVisibility();
+    this.currentCityContext = null; this.cityContextExitPending = false; this.cityContextZoomOutPending = false; this.clearCitySpots(); this.geojson.routes = this.emptyCollection(); this.syncSource("routes"); this.updateMarkersVisibility();
   }
   clearCitySpots() {
     this.citySpotMarkers.clear(); this.geojson.spots = this.emptyCollection(); this.geojson.airports = this.emptyCollection();
@@ -497,6 +508,8 @@ class MapManager {
       || loc.latitude < -90 || loc.latitude > 90 || loc.longitude < -180 || loc.longitude > 180
       || loc.category === "city" || this.currentCityContext?.id !== cityId) return;
     entry.spot.lat = loc.latitude; entry.spot.lng = loc.longitude;
+    if (loc.pageUrl) entry.spot.sourceUrl = loc.pageUrl;
+    if (loc.sourceLabel) entry.spot.sourceLabel = loc.sourceLabel;
     if (!entry.feature) {
       entry.feature = this.feature(`${cityId}-spot-${index}`, [loc.longitude, loc.latitude], {
         kind: "spot", cityId, index, name: entry.spot.name, label: `${index + 1}. ${entry.spot.name}`,
@@ -509,6 +522,13 @@ class MapManager {
     this.syncSource("spots");
     this.renderCityContextDomMarkers();
     this.updateMarkersVisibility();
+    this.updateCitySpotCount(cityId);
+  }
+  updateCitySpotCount(cityId) {
+    if (this.currentCityContext?.id !== cityId) return;
+    const count = this.geojson.spots.features.filter(feature => feature.properties?.kind === "spot").length;
+    const label = document.querySelector("#map-context-info .map-context-spot-count");
+    if (label) label.textContent = count ? `🔴 地圖景點 ${count} 個` : "🔴 尚無已核實座標的景點";
   }
   fitCityContext(city, animate = true) {
     if (!this.map || this.currentCityContext?.id !== city.id) return;
@@ -576,7 +596,11 @@ class MapManager {
   }
   toggleProjection() { this.setProjection(this.tiltedView ? "mercator" : "globe"); return this.tiltedView; }
   zoomIn() { this.map?.zoomIn({ duration: this.animateAllowed(true) ? 250 : 0 }); }
-  zoomOut() { this.map?.zoomOut({ duration: this.animateAllowed(true) ? 250 : 0 }); }
+  zoomOut() {
+    if (!this.map) return;
+    if (this.currentCityContext && this.map.getZoom() - 1 <= this.cityContextExitZoom) this.cityContextZoomOutPending = true;
+    this.map.zoomOut({ duration: this.animateAllowed(true) ? 250 : 0 });
+  }
   invalidateSize() { if (!this.map || this.invalidateSizeTimer !== null) return; this.invalidateSizeTimer = window.setTimeout(() => { this.invalidateSizeTimer = null; this.map?.resize(); }, 80); }
   recordCurrentView(scope) {
     if (!this.map || !window.AppStore || this.map.isMoving()) return;

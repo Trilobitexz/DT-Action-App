@@ -87,7 +87,15 @@ window.SpotService = {
       title: data.title,
       extract: data.extract || "",
       thumbnail: data.thumbnail?.source || null,
-      pageUrl: data.content_urls?.desktop?.page || null
+      pageUrl: data.content_urls?.desktop?.page || null,
+      location: Number.isFinite(Number(data.coordinates?.lat)) && Number.isFinite(Number(data.coordinates?.lon))
+        ? {
+          latitude: Number(data.coordinates.lat),
+          longitude: Number(data.coordinates.lon),
+          category: "attraction",
+          pageUrl: data.content_urls?.desktop?.page || null
+        }
+        : null
     };
   },
 
@@ -144,11 +152,13 @@ window.SpotService = {
     if (!entityId) throw new Error("Wikidata 查無景點");
 
     const entityData = await this.requestJson(
-      `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(entityId)}&props=labels|descriptions|sitelinks&languages=zh|en&format=json&origin=*`
+      `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(entityId)}&props=labels|descriptions|sitelinks|claims&languages=zh|en&format=json&origin=*`
     );
     const entity = entityData.entities?.[entityId];
     const description = entity?.descriptions?.zh?.value || entity?.descriptions?.en?.value || "";
     const wikiTitle = entity?.sitelinks?.zhwiki?.title || entity?.sitelinks?.enwiki?.title;
+    const coordinate = entity?.claims?.P625?.find(claim => claim.mainsnak?.datavalue?.value)?.mainsnak?.datavalue?.value;
+    const hasCoordinates = Number.isFinite(Number(coordinate?.latitude)) && Number.isFinite(Number(coordinate?.longitude));
     return {
       title: entity?.labels?.zh?.value || entity?.labels?.en?.value || spotName,
       extract: description,
@@ -157,7 +167,13 @@ window.SpotService = {
         ? `https://www.wikidata.org/wiki/${encodeURIComponent(entityId)}`
         : `https://www.wikidata.org/wiki/${encodeURIComponent(entityId)}`,
       sourceId: "wikidata",
-      sourceLabel: "Wikidata 結構化資料"
+      sourceLabel: "Wikidata 結構化資料",
+      location: hasCoordinates ? {
+        latitude: Number(coordinate.latitude),
+        longitude: Number(coordinate.longitude),
+        category: "attraction",
+        pageUrl: `https://www.wikidata.org/wiki/${encodeURIComponent(entityId)}`
+      } : null
     };
   },
 
@@ -217,14 +233,28 @@ window.SpotService = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs * 2);
       try {
-        const response = await fetch("https://overpass-api.de/api/interpreter", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "Accept": "application/json" },
-          body: `data=${encodeURIComponent(query)}`,
-          signal: controller.signal
-        });
-        if (!response.ok) throw new Error(`OpenStreetMap 地點服務回應異常 (${response.status})`);
-        const data = await response.json();
+        let data = null;
+        let requestError = null;
+        for (const endpoint of [
+          "https://overpass-api.de/api/interpreter",
+          "https://overpass.kumi.systems/api/interpreter"
+        ]) {
+          try {
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "Accept": "application/json" },
+              body: `data=${encodeURIComponent(query)}`,
+              signal: controller.signal
+            });
+            if (!response.ok) throw new Error(`OpenStreetMap 地點服務回應異常 (${response.status})`);
+            data = await response.json();
+            break;
+          } catch (error) {
+            requestError = error;
+            if (controller.signal.aborted) break;
+          }
+        }
+        if (!data) throw requestError || new Error("OpenStreetMap 地點服務沒有回傳資料");
         const fetchedAt = Date.now();
         const places = (data.elements || []).map(element => {
           const tags = element.tags || {};
@@ -320,14 +350,18 @@ window.SpotService = {
     ]);
     const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
     const mapData = nearbyPlaces.find(place => normalizeName(place.name) === normalizeName(spotName)) || null;
-    const resultLocation = result?.location
-      && Number.isFinite(cityCoordinates?.lat) && Number.isFinite(cityCoordinates?.lng)
-      && Number.isFinite(result.location.latitude) && Number.isFinite(result.location.longitude)
-      && result.location.latitude >= -90 && result.location.latitude <= 90
-      && result.location.longitude >= -180 && result.location.longitude <= 180
-      && this.distanceKm(cityCoordinates.lat, cityCoordinates.lng, result.location.latitude, result.location.longitude) <= 25
-      ? result.location
-      : null;
+    const locationPriority = ["opentripmap", "wikipedia", "wikivoyage", "wikidata"];
+    const resultLocation = locationPriority
+      .flatMap(sourceId => results
+        .filter(item => item?.sourceId === sourceId && item.location)
+        .map(item => ({ ...item.location, sourceId: item.sourceId, sourceLabel: item.sourceLabel })))
+      .find(location => Number.isFinite(cityCoordinates?.lat) && Number.isFinite(cityCoordinates?.lng)
+        && Number.isFinite(location.latitude) && Number.isFinite(location.longitude)
+        && location.latitude >= -90 && location.latitude <= 90
+        && location.longitude >= -180 && location.longitude <= 180
+        && location.category !== "city"
+        && this.distanceKm(cityCoordinates.lat, cityCoordinates.lng, location.latitude, location.longitude) <= 25)
+      || null;
     if (!result && !commons && !mapData) return null;
 
     if (result) {
