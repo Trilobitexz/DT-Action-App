@@ -34,7 +34,7 @@
 
 ## 2D／3D 整合地圖
 
-互動地圖使用 MapLibre GL JS 單一 WebGL 畫布，以 globe 與 Mercator 投影切換 3D 地球和平面地圖；2D／3D 使用雙按鈕投影選擇器，城市、景點、航線和底圖風格在兩種投影中共用。全球城市目錄收錄 200 座去重城市，其中 127 座已有 GeoNames 來源座標；其餘城市在使用者開啟時，透過 OpenStreetMap Nominatim 以城市名及國家載入位置並在本機快取 180 天。新增目錄記錄及 GeoNames 來源查詢連結位於 [`cityCatalogExpansion.js`](./src/data/cityCatalogExpansion.js)；地名 ID 與座標位於 [`cityGeonames.js`](./src/data/cityGeonames.js)。城市頁先顯示城市基本資料，再向 OpenStreetMap Overpass 查詢城市中心 20 公里內最多 250 個有座標的景點、博物館、古蹟、宗教建築、公園與自然地點；若結果少於 12 筆，再以 Wikidata 的座標及景點類別補充，只有具來源頁和有效座標的項目會顯示。項目會跨來源去重，並優先顯示來源標記到的描述、地址、開放時間、網站、無障礙與文化遺產欄位。景點清單與地圖共用資料，地圖提供類別篩選和「在地圖查看」；有結果時快取七天，查無結果或補查來源失敗時一小時後重查。舊有未附來源及座標的景點文案與評分不會冒充來源資料，但城市頁仍會保留城市位置、目的地類型、地圖與即時查詢入口；百科摘要可由城市文章名稱或位置相符的來源補充。物價與航班會顯示城市級即時查詢說明，不以國家平均值冒充城市價格。底圖提供 OpenFreeMap 向量地圖與 Esri World Imagery 衛星影像；圖資與按需地點查詢需要網路，瀏覽器需支援 WebGL。
+互動地圖使用 MapLibre GL JS 單一 WebGL 畫布，以 globe 與 Mercator 投影切換 3D 地球和平面地圖；2D／3D 使用雙按鈕投影選擇器，城市、景點、航線和底圖風格在兩種投影中共用。全球城市目錄收錄 200 座去重城市，其中 127 座已有 GeoNames 來源座標；其餘城市在使用者開啟時，透過 OpenStreetMap Nominatim 以城市名及國家載入位置並在本機快取 180 天。新增目錄記錄及 GeoNames 來源查詢連結位於 [`cityCatalogExpansion.js`](./src/data/cityCatalogExpansion.js)；地名 ID 與座標位於 [`cityGeonames.js`](./src/data/cityGeonames.js)。城市景點會合併本地候選、Firestore 公開目錄及 OpenStreetMap、Wikidata、Wikipedia 的附近地點，來源成功取得的資料會在瀏覽器快取 14 天。若所有來源都暫時無法提供結果，城市頁和 AI 行程仍會提供清楚標示的 Google 地圖搜尋入口；這些入口是搜尋方向，不會冒充已核實的景點。物價與航班會顯示城市級即時查詢說明，不以國家平均值冒充城市價格。底圖提供 OpenFreeMap 向量地圖與 Esri World Imagery 衛星影像；圖資與按需地點查詢需要網路，瀏覽器需支援 WebGL。
 
 Firebase 使用 compat SDK 初始化 Authentication 與 Analytics；Google 登入使用 Popup 彈出 Google 帳戶驗證視窗；若 Firebase SDK 或網域設定錯誤，帳戶選單會顯示錯誤提示。Analytics 不可用時會安全降級，不會阻止登入或地圖功能。
 
@@ -50,7 +50,7 @@ Firebase 使用 compat SDK 初始化 Authentication 與 Analytics；Google 登�
 - 前端館藏會優先讀取 Firestore 公開目錄 `cities/{cityId}` 與 `cities/{cityId}/spots/{spotId}`；訪客可讀取，瀏覽器不提供一般寫入權限。執行 `npm run seed:city-catalog` 可透過 Firebase Admin Application Default Credentials 將現有館藏匯入後台。
 - GeoNames 城市地名資料以 CC BY 4.0 授權；資料來源與地名 ID 保留於城市目錄，地圖頁會顯示來源連結。
 - OpenStreetMap Nominatim 僅在使用者開啟尚未有座標的城市時查詢，每個瀏覽器序列化請求並至少間隔 1.1 秒，座標快取 180 天；使用量需遵守 [Nominatim 使用政策](https://operations.osmfoundation.org/policies/nominatim/)。
-- 景點補充使用 Wikidata Query Service 的地理查詢；項目保留 Wikidata 頁面連結，Wikidata 與 OpenStreetMap 都沒有資料時不會以推測景點補齊。
+- 景點補充會合併 OpenStreetMap、Wikidata 與 Wikipedia 的地理資料；資料服務無回應且沒有本地景點候選時，改顯示標示清楚的地圖搜尋入口，不推測單一景點或座標。
 - 百科與圖片補充請求透過前端佇列限制併發；公開服務可能限流或暫時無法使用，缺資料時不會用近似座標代替景點位置。
 - 使用前端快取資料時，請以畫面上的來源標示及服務提供者最新資訊為準。
 - 目前專案為無建置工具的原型，正式發布前仍應補上瀏覽器操作測試、JavaScript 語法檢查與部署驗證。
@@ -72,17 +72,17 @@ Firebase 初始化與 Web SDK 設定位於 [`src/js/firebase.js`](./src/js/fireb
 2. 在 **Authentication → Sign-in method** 啟用 **Google**。如登入回報 `auth/operation-not-allowed`，請在此頁確認 Google 提供者已啟用。
 3. 在 **Authentication → Settings → Authorized domains** 加入 `trilobitexz.github.io`（GitHub Pages 的自訂專案網址只需加入主機名稱，不要加 `https://` 或 `/DT-Action-App/`）。本機測試使用 `localhost`。
 4. 確認 Google 登入提供者的支援電子郵件與 OAuth 設定已完成。
-5. 你提供的應用程式資訊顯示「連結的 Firebase 託管網站：dt-action-app」，請在 Firebase Console → Hosting 查看該網站狀態與實際網址。只有已建立並完成部署的 Hosting 網站才可開啟；預設網址通常為 `https://dt-action-app.web.app` 或 `https://dt-action-app.firebaseapp.com`，請以 Hosting 頁面顯示為準。若尚未建立 Hosting 網站，請先在 Console 的 Hosting 流程建立並部署。
+5. 本專案正式網站使用 GitHub Pages；Firebase Hosting 並非登入必要條件。
 
 ## 登入與 Firestore 雲端同步
 
-Firebase Authentication 前端登入使用 Google（不含 LINE，也不顯示電子郵件／密碼登入表單）。Firestore Standard 預設資料庫建立於 `asia-east1`。登入後，城市收藏、比較清單、最近瀏覽、預算與行程會同步至 `users/{uid}/appData/{dataId}`；每位使用者只能讀寫自己的資料，未登入與跨帳戶存取會被 Firestore 規則拒絕。資料仍會保留在本機，網路／規則問題時會在帳戶選單顯示同步狀態。
+Firebase Authentication 前端登入使用 Google（不含 LINE，也不顯示電子郵件／密碼登入表單）。本機程式預期使用 Firestore Standard；實際資料庫版本與位置請在 Firebase Console 核對。登入後，城市收藏、比較清單、最近瀏覽、預算與行程會同步至 `users/{uid}/appData/{dataId}`；部署本機規則後，每位使用者只能讀寫自己的資料。資料仍會保留在本機，網路／規則問題時會在帳戶選單顯示同步狀態。
 
-Firestore 安全規則位於 [`firestore.rules`](./firestore.rules)，僅允許指定應用資料文件與受限 JSON 字串大小。規則已部署至 Firebase；正式公開使用前仍建議進行安全規則與資料同步測試。Hosting 使用專案根目錄作為靜態網站來源，但會排除課程文件、規格、設定與規則檔案，避免發布非網站內容。
+Firestore 安全規則位於 [`firestore.rules`](./firestore.rules)，僅允許指定應用資料文件與受限 JSON 字串大小。雲端是否已部署需在 Firebase Console 核對；可依照 [`Firebase 維運與發布流程`](./FIREBASE_OPERATIONS.md) 部署 Authentication／Firestore 設定並完成發布檢查。Firebase Hosting 設定保留於 `firebase.json`，但目前網站發布由 GitHub Pages 負責。
 
 
 ## AI 旅程規劃
 
-城市規劃工具新增 AI 行程規劃，可依旅行天數、交通方式與旅客偏好，從本站已知景點中安排每日順序；結果可拖曳調整，沿用既有行程保存與登入後的 Firestore 同步。模型使用 Firebase AI Logic（Gemini Developer API）與 Gemini 3.8 Flash，輸出以結構化 JSON 驗證，避免模型捏造本站以外的景點索引。
+城市規劃工具新增 AI 行程規劃，可依旅行天數、交通方式與旅客偏好，從已載入的城市景點安排每日順序；景點不足時會查詢周邊公開資料，資料來源暫時無回應時仍會提供地圖搜尋入口。結果可拖曳調整，沿用既有行程保存與登入後的 Firestore 同步。模型使用 Firebase AI Logic（Gemini Developer API）與 Gemini 3.8 Flash，輸出以結構化 JSON 驗證，避免模型捏造清單以外的景點。
 
-首次使用前，請在 Firebase Console 的 App Check → Apps 為 Web App 設定 reCAPTCHA Enterprise，並將網站金鑰填入 src/js/firebase-ai-config.js 的 appCheckSiteKey。金鑰是公開的網站識別碼，可放在前端；不要放入 reCAPTCHA secret key 或 App Check debug token。確認 App Check → APIs → Firebase AI Logic 已啟用 enforcement，並確認 GitHub Pages 網域已列入 reCAPTCHA Enterprise key 的允許網域。
+首次使用前，請依照 [`Firebase 維運與發布流程`](./FIREBASE_OPERATIONS.md) 在 Firebase Console 註冊 App Check reCAPTCHA Enterprise Web App，並確認 GitHub Pages 網域列入允許清單。網站金鑰已放在 `src/js/firebase-ai-config.js`，屬公開識別碼；不要放入 reCAPTCHA secret key 或 App Check debug token。先確認有效 token，再於 Console 逐步啟用 Firebase AI Logic enforcement。

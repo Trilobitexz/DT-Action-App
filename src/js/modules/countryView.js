@@ -22,6 +22,7 @@ window.CountryView = {
       priceLevel: { tier: globalProfile.budget, rating: globalProfile.rating, dailyBudgetTwd: "", dining: "", transit: "", hotel: "", verified: false },
       cities: [{
         ...globalCity,
+        catalogSourceCity: globalCity,
         spots: (Array.isArray(globalCity.spots) ? globalCity.spots : []).map(spot => typeof spot === "string"
           ? { name: spot, category: "景點", rating: "—", tag: "公開目錄", note: "" }
           : spot)
@@ -170,10 +171,13 @@ window.CountryView = {
     const chart = document.getElementById("city-insight-chart");
     if (chart) {
       const facts = Array.isArray(currentCity.spots) ? currentCity.spots : [];
+      const verifiedSpotCount = facts.filter(spot => !spot.isSearchSuggestion
+        && Number.isFinite(spot.lat) && Number.isFinite(spot.lng) && spot.sourceUrl).length;
+      const searchSpotCount = facts.filter(spot => spot.isSearchSuggestion).length;
       const airports = Array.isArray(currentCity.airports) ? currentCity.airports : [];
       const metrics = [
         ["城市介紹", currentCity.descriptionSource?.text ? 1 : 0, currentCity.descriptionSource?.text ? "附來源" : "百科摘要載入中"],
-        ["景點", Math.min(facts.length, 5) / 5, `${facts.length} 筆有座標與來源的資料`],
+        ["景點", Math.min(verifiedSpotCount, 5) / 5, `${verifiedSpotCount} 筆有座標來源${searchSpotCount ? `，另有 ${searchSpotCount} 個地圖搜尋入口` : ""}`],
         ["機場", airports.length ? 1 : 0, airports.length ? `${airports.length} 筆已編目資料` : "依城市資料與即時地圖查詢"],
         ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, currentCity.coordinateSource?.provider || "城市目錄座標"]
       ];
@@ -208,6 +212,7 @@ window.CountryView = {
               ${escapeHtml(spot.name)}
               ${spot.tag ? `<span class="spot-badge">${escapeHtml(spot.tag)}</span>` : ""}
               <span class="spot-badge" style="background:#f1f5f9; color:#475569;">${escapeHtml(spot.category || "景點")}</span>
+              ${spot.isSearchSuggestion ? '<span class="spot-badge" style="background:#fff7ed;color:#9a3412;">地圖搜尋入口</span>' : ""}
             </h5>
             <div class="spot-note" id="spot-note-${idx}">${escapeHtml(spot.note || "")}</div>
           </div>
@@ -230,6 +235,20 @@ window.CountryView = {
       const activeCountryId = state.globalCityId ? `global-${state.globalCityId}` : state.selectedCountryId;
       return activeCountryId === renderedCountryId && state.selectedCityId === renderedCityId;
     };
+    const catalogCity = currentCity.catalogSourceCity || currentCity;
+    if (window.CityCatalogService?.ensureSpots && !catalogCity._spotCatalogReady) {
+      window.CityCatalogService.ensureSpots(catalogCity).then(spots => {
+        currentCity.spots = spots;
+        currentCity._spotCatalogReady = true;
+        if (isCurrentCity()) {
+          window.CountryView.render(state);
+          window.mapManager?.renderCityMarkers();
+          window.mapManager?.renderGlobalCityDomMarkers();
+        }
+      }).catch(error => {
+        console.warn(`無法整理 ${currentCity.name} 的景點資料：`, error);
+      });
+    }
     if (!cityDescription?.textContent?.includes("正在向 OpenStreetMap") && cityDescription && window.SpotService?.fetchCitySummary
       && Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng)) {
       cityDescription.textContent = "正在查詢與城市座標相符的百科介紹…";
@@ -251,6 +270,7 @@ window.CountryView = {
 
     if (window.SpotService) {
       spots.forEach((spot, idx) => {
+        if (spot.isSearchSuggestion) return;
         if (Number.isFinite(spot.lat) && Number.isFinite(spot.lng) && spot.sourceUrl) return;
         window.SpotService.fetchSpotDetail(spot.name, currentCity.name, currentCity).then(wiki => {
           if (!wiki || !isCurrentCity()) return;
