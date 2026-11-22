@@ -50,6 +50,9 @@
             && Number.isFinite(Number(value)) ? Number(value) : null;
           spots.push({
             id: doc.id,
+            index: data.index !== null && data.index !== undefined && data.index !== "" && Number.isFinite(Number(data.index)) ? Number(data.index) : null,
+            isFeatured: data.isFeatured === true,
+            featuredRank: data.featuredRank !== null && data.featuredRank !== undefined && data.featuredRank !== "" && Number.isFinite(Number(data.featuredRank)) ? Number(data.featuredRank) : null,
             name: data.name,
             englishName: data.englishName || "",
             category: data.category || "景點",
@@ -63,8 +66,14 @@
             website: data.website || "",
             openingHours: data.openingHours || "",
             address: data.address || "",
-            rating: data.rating || null,
-            ratingSource: data.ratingSource || null,
+            imageUrl: data.imageUrl || "",
+            imageSourceUrl: data.imageSourceUrl || "",
+            closedDays: data.closedDays || "",
+            visitHours: Number.isFinite(Number(data.visitHours)) && Number(data.visitHours) > 0 ? Number(data.visitHours) : null,
+            hasCoordinates: data.hasCoordinates === true || (Number.isFinite(Number(data.lat)) && Number.isFinite(Number(data.lng))),
+            hasDescription: data.hasDescription === true || Boolean(String(data.description || data.note || "").trim()),
+            rating: data.rating !== null && data.rating !== undefined && data.rating !== "" && Number.isFinite(Number(data.rating)) && Number(data.rating) >= 0 && Number(data.rating) <= 5 ? Number(data.rating) : null,
+            ratingSource: typeof data.ratingSource === "string" && data.ratingSource.trim() ? data.ratingSource.trim() : null,
             publishedAt: data.publishedAt?.toMillis ? data.publishedAt.toMillis() : null
           });
         });
@@ -184,6 +193,21 @@
           };
         }
         let spots = this.mergeSpots(city.spots || [], cloudSpots, liveSpots, city.spotCandidates || []);
+        const sourcePriority = spot => {
+          if (spot.isFeatured === true) return 0;
+          const hasSource = /^https?:\/\//i.test(String(spot.sourceUrl || spot.pageUrl || ""));
+          const hasCoordinates = Number.isFinite(spot.lat) && Number.isFinite(spot.lng);
+          if (hasSource && hasCoordinates) return 1;
+          if (hasSource) return 2;
+          return 3;
+        };
+        spots = spots.map((spot, originalOrder) => ({ spot, originalOrder })).sort((a, b) => {
+          const aRank = Number.isFinite(a.spot.featuredRank) ? a.spot.featuredRank : Number.POSITIVE_INFINITY;
+          const bRank = Number.isFinite(b.spot.featuredRank) ? b.spot.featuredRank : Number.POSITIVE_INFINITY;
+          if (Boolean(a.spot.isFeatured) !== Boolean(b.spot.isFeatured)) return a.spot.isFeatured ? -1 : 1;
+          if (aRank !== bRank) return aRank - bRank;
+          return sourcePriority(a.spot) - sourcePriority(b.spot) || a.originalOrder - b.originalOrder;
+        }).map(item => item.spot);
         if (!spots.length) spots = this.createMapSearchSuggestions(city);
         city.spots = spots;
         city._spotCatalogReady = true;

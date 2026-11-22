@@ -1,5 +1,7 @@
 // MapLibre GL JS 單一地圖引擎：Mercator 與 globe 投影共用向量圖層及互動狀態。
 class MapManager {
+  static MAX_CITY_SPOT_MARKERS = 12;
+
   constructor(containerId, options = {}) {
     this.containerId = containerId;
     this.defaultCenter = options.center || [25, 10];
@@ -18,6 +20,7 @@ class MapManager {
     this.globalCityMarkerSignature = "";
     this.overviewMarkerSignature = "";
     this.currentCityContext = null;
+    this.cityContextRequestId = 0;
     this.cityContextExitZoom = 5.8;
     this.cityContextExitPending = false;
     this.cityContextZoomOutPending = false;
@@ -114,7 +117,7 @@ class MapManager {
       this.handleCityContextZoom(event);
     });
     this.map.on("click", event => this.handleMapClick(event));
-    ["continent-symbols", "city-circles", "city-symbols", "global-city-symbols", "global-city-labels"].forEach(layer => {
+    ["continent-symbols", "global-city-symbols", "global-city-labels", "global-city-clusters", "global-city-cluster-count"].forEach(layer => {
       this.map.on("mouseenter", layer, () => { this.map.getCanvas().style.cursor = "pointer"; });
       this.map.on("mouseleave", layer, () => { this.map.getCanvas().style.cursor = ""; });
     });
@@ -151,10 +154,10 @@ class MapManager {
     this.map.addLayer({ id: "continent-symbols", type: "symbol", source: "continents", layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 13, "text-padding": 8, "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#173847", "text-halo-color": "#ffffff", "text-halo-width": 2.5 } });
     this.map.addLayer({ id: "city-circles", type: "circle", source: "cities", layout: { visibility: "none" }, paint: { "circle-radius": 5, "circle-color": "#138b80", "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 } });
     this.map.addLayer({ id: "city-symbols", type: "symbol", source: "cities", layout: { visibility: "none", "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 11, "text-offset": [0, 1.3], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#18544f", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
-    this.map.addLayer({ id: "global-city-clusters", type: "circle", source: "globalCities", filter: ["has", "point_count"], layout: { visibility: "none" }, paint: { "circle-color": "#2563eb", "circle-radius": ["step", ["get", "point_count"], 13, 10, 17, 30, 21], "circle-opacity": 0.86, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
+    this.map.addLayer({ id: "global-city-clusters", type: "circle", source: "globalCities", filter: ["has", "point_count"], layout: { visibility: "none" }, paint: { "circle-color": "#176b5b", "circle-radius": ["step", ["get", "point_count"], 14, 10, 18, 30, 23], "circle-opacity": 0.9, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
     this.map.addLayer({ id: "global-city-cluster-count", type: "symbol", source: "globalCities", filter: ["has", "point_count"], layout: { visibility: "none", "text-field": ["get", "point_count_abbreviated"], "text-size": 11 }, paint: { "text-color": "#ffffff" } });
     this.map.addLayer({ id: "global-city-symbols", type: "circle", source: "globalCities", filter: ["!", ["has", "point_count"]], layout: { visibility: "none" }, paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 5, 6, 9, 9], "circle-color": "#2563eb", "circle-opacity": 0.96, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.6 } });
-    this.map.addLayer({ id: "global-city-labels", type: "symbol", source: "globalCities", filter: ["!", ["has", "point_count"]], layout: { visibility: "none", "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": ["step", ["zoom"], 0, 3.3, 9, 5.2, 11], "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true, "text-allow-overlap": false }, paint: { "text-color": "#1e3a8a", "text-halo-color": "#ffffff", "text-halo-width": 1.6 } });
+    this.map.addLayer({ id: "global-city-labels", type: "symbol", source: "globalCities", filter: ["!", ["has", "point_count"]], layout: { visibility: "none", "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": ["step", ["zoom"], 0, 4.8, 9, 6, 11], "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true, "text-allow-overlap": false }, paint: { "text-color": "#1e3a8a", "text-halo-color": "#ffffff", "text-halo-width": 1.6 } });
     this.map.addLayer({ id: "spot-circles", type: "circle", source: "spots", filter: ["!=", ["get", "kind"], "center"], layout: { visibility: "none" }, paint: { "circle-radius": 8, "circle-color": "#d3483c", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
     this.map.addLayer({ id: "spot-labels", type: "symbol", source: "spots", filter: ["!=", ["get", "kind"], "center"], layout: { visibility: "none", "text-field": ["get", "label"], "text-size": 11, "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#7f2927", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
     this.map.addLayer({ id: "city-center", type: "circle", source: "spots", filter: ["==", ["get", "kind"], "center"], paint: { "circle-radius": 7, "circle-color": "#1689bb", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
@@ -246,31 +249,8 @@ class MapManager {
   }
   renderGlobalCityDomMarkers(force = false) {
     if (!this.map || !window.maplibregl) return;
-    const cities = this.getGlobalCityList();
-    const signature = cities.map(city => `${city.id}:${city.lat}:${city.lng}:${city.name}:${city.flag || ""}`).join("|");
-    if (!force && signature === this.globalCityMarkerSignature && this.globalCityDomMarkers.size) {
-      this.updateMarkersVisibility();
-      return;
-    }
-    this.globalCityMarkerSignature = signature;
     this.globalCityDomMarkers.forEach(marker => marker.remove());
     this.globalCityDomMarkers.clear();
-    cities.forEach(city => {
-      const lat = city.lat;
-      const lng = city.lng;
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-      const element = document.createElement("button");
-      element.type = "button";
-      element.className = `map-global-city-marker city-tier-${this.getCityTier(city)}`;
-      element.title = `${city.name} (${city.countryName || ""})`;
-      element.innerHTML = `<span class="map-global-city-dot"></span><span class="map-global-city-label">${this.escapePopupText(`${city.flag || ""} ${city.name}`.trim())}</span>`;
-      element.addEventListener("click", event => {
-        event.stopPropagation();
-        this.onGlobalCitySelect(city.id);
-      });
-      const marker = new window.maplibregl.Marker({ element, anchor: "center" }).setLngLat([lng, lat]).addTo(this.map);
-      this.globalCityDomMarkers.set(city.id, marker);
-    });
     this.updateMarkersVisibility();
   }
   getGlobalCityList() {
@@ -333,8 +313,8 @@ class MapManager {
   scheduleVisibleCityUpdate() {
     if (!this.map || this.visibleCityUpdateFrame !== null) return;
     this.visibleCityUpdateFrame = window.requestAnimationFrame(() => {
-      this.visibleCityUpdateFrame = null; if (!this.map || !this.layersReady) return;
-      ["global-city-clusters", "global-city-cluster-count", "global-city-symbols", "global-city-labels"].forEach(id => this.map.getLayer(id)?.setLayoutProperty("visibility", "none"));
+      this.visibleCityUpdateFrame = null;
+      this.updateMarkersVisibility();
     });
   }
   updateVisibleGlobalCities() { this.scheduleVisibleCityUpdate(); }
@@ -348,16 +328,14 @@ class MapManager {
   applyMarkersVisibility() {
     if (!this.map || !this.layersReady) return;
     const world = !this.currentCityContext, zoom = this.map.getZoom();
-    this.map.getLayer("continent-symbols")?.setLayoutProperty("visibility", world && zoom < 3.4 ? "visible" : "none");
+    this.map.getLayer("continent-symbols")?.setLayoutProperty("visibility", world && zoom < 2.8 ? "visible" : "none");
     ["city-circles", "city-symbols"].forEach(id => this.map.getLayer(id)?.setLayoutProperty("visibility", "none"));
-    ["global-city-symbols", "global-city-labels", "global-city-clusters", "global-city-cluster-count"].forEach(id => this.map.getLayer(id)?.setLayoutProperty("visibility", "none"));
-    this.globalCityDomMarkers.forEach(marker => {
-      const element = marker.getElement();
-      const tier = element.classList.contains("city-tier-major") ? "major" : element.classList.contains("city-tier-medium") ? "medium" : "small";
-      const minimumZoom = tier === "major" ? 2.2 : tier === "medium" ? 3.2 : 4.6;
-      element.hidden = !world || zoom < minimumZoom;
-      element.classList.toggle("labels-visible", zoom >= (tier === "major" ? 2.8 : tier === "medium" ? 3.8 : 5.2));
-    });
+    const showClusters = world && zoom >= 2.8 && zoom < 5.5;
+    const showGlobalCities = world && zoom >= 3.2;
+    this.map.getLayer("global-city-clusters")?.setLayoutProperty("visibility", showClusters ? "visible" : "none");
+    this.map.getLayer("global-city-cluster-count")?.setLayoutProperty("visibility", showClusters ? "visible" : "none");
+    this.map.getLayer("global-city-symbols")?.setLayoutProperty("visibility", showGlobalCities ? "visible" : "none");
+    this.map.getLayer("global-city-labels")?.setLayoutProperty("visibility", world && zoom >= 4.8 ? "visible" : "none");
     this.cityContextDomMarkers.forEach(marker => {
       const element = marker.getElement();
       const filteredOut = element.dataset.cityMarkerType === "spot"
@@ -376,7 +354,6 @@ class MapManager {
       element.hidden = !world || zoom < minimumZoom;
       element.classList.toggle("labels-visible", zoom >= (tier === "major" ? 3.8 : tier === "medium" ? 4.7 : 5.8));
     });
-    this.scheduleVisibleCityUpdate();
   }
   handleCityContextZoom(event) {
     const userInitiatedZoomOut = (Boolean(event?.originalEvent) && this.cityContextZoomDirection === "out")
@@ -404,12 +381,15 @@ class MapManager {
     this.map.stop(); const opts = { center: [lng, lat], zoom, duration: this.animateAllowed(animate) ? (this.isCoarsePointer ? 700 : 1000) : 0, essential: false };
     if (opts.duration) this.map.flyTo(opts); else this.map.jumpTo(opts);
   }
-  showCityContext(city, { animate = true } = {}) {
+  showCityContext(city, { animate = true, preserveView = false } = {}) {
     if (!this.map || !city || !Number.isFinite(city.lat) || !Number.isFinite(city.lng)) return;
-    this.currentCityContext = city; this.cityContextExitPending = false; this.cityContextZoomOutPending = false; this.cityContextUserInteracted = false; this.activeCitySpotCategory = "all"; this.clearCitySpots();
+    const keepUserView = preserveView && this.currentCityContext?.id === city.id && this.cityContextUserInteracted;
+    this.currentCityContext = city; this.cityContextExitPending = false; this.cityContextZoomOutPending = false; this.cityContextUserInteracted = keepUserView; this.activeCitySpotCategory = "all"; this.clearCitySpots();
+    const requestId = this.cityContextRequestId;
     const sourceSpots = this.getCitySpots(city);
     const spots = [];
-    sourceSpots.forEach((spot, index) => {
+    const visibleSpots = sourceSpots.slice(0, MapManager.MAX_CITY_SPOT_MARKERS);
+    visibleSpots.forEach((spot, index) => {
       const hasCoords = Number.isFinite(spot.lat) && Number.isFinite(spot.lng)
         && spot.lat >= -90 && spot.lat <= 90 && spot.lng >= -180 && spot.lng <= 180;
       const feature = hasCoords
@@ -419,15 +399,18 @@ class MapManager {
       this.syncSpotMapButton(city.id, index, Boolean(feature));
       if (feature) spots.push(feature);
       else window.SpotService?.fetchSpotDetail(spot.name, city.name, city)
-        .then(detail => this.updateSpotDetail(city.id, index, detail))
+        .then(detail => {
+          if (requestId === this.cityContextRequestId && this.currentCityContext?.id === city.id) this.updateSpotDetail(city.id, index, detail);
+        })
         .catch(error => console.warn(`無法定位「${spot.name}」：`, error));
     });
-    window.SpotService?.fetchNearbyPlaces(city).then(places => {
-      if (this.currentCityContext?.id !== city.id || !Array.isArray(places)) return;
+    window.SpotService?.fetchNearbyPlaces(city, { radius: 20000, limit: 50 }).then(places => {
+      if (requestId !== this.cityContextRequestId || this.currentCityContext?.id !== city.id || !Array.isArray(places)) return;
       const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
       const knownNames = new Set(sourceSpots.map(spot => normalizeName(spot.name)));
       let nextIndex = sourceSpots.length;
       places.forEach(spot => {
+        if (this.geojson.spots.features.filter(feature => feature.properties?.kind === "spot").length >= MapManager.MAX_CITY_SPOT_MARKERS) return;
         const name = normalizeName(spot.name);
         if (!name || knownNames.has(name)) return;
         knownNames.add(name);
@@ -461,12 +444,13 @@ class MapManager {
     this.updateMarkersVisibility();
     this.updateCitySpotCount(city.id);
     this.invalidateSize();
-    this.fitCityContext(city, animate);
+    if (!keepUserView) this.fitCityContext(city, animate);
   }
   restoreOverviewMarkers() {
     this.currentCityContext = null; this.cityContextExitPending = false; this.cityContextZoomOutPending = false; this.clearCitySpots(); this.geojson.routes = this.emptyCollection(); this.syncSource("routes"); this.updateMarkersVisibility();
   }
   clearCitySpots() {
+    this.cityContextRequestId += 1;
     window.clearTimeout(this.cityContextFitTimer);
     this.cityContextFitTimer = null;
     this.citySpotMarkers.clear(); this.geojson.spots = this.emptyCollection(); this.geojson.airports = this.emptyCollection();
@@ -563,7 +547,10 @@ class MapManager {
   }
   escapePopupText(value) { return String(value || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   createSpotPopup(city, spot, index, detail = null) {
-    const rating = spot.ratingSource ? `★ ${spot.rating} · ${spot.ratingSource}` : "評分資料未提供";
+    const hasRating = spot.rating !== null && spot.rating !== undefined && spot.rating !== ""
+      && Number.isFinite(Number(spot.rating)) && Number(spot.rating) >= 0 && Number(spot.rating) <= 5
+      && Boolean(String(spot.ratingSource || "").trim());
+    const rating = hasRating ? `★ ${Number(spot.rating).toFixed(1)} · ${spot.ratingSource}` : "評分資料未提供";
     const sourceUrl = this.safeExternalUrl(spot.sourceUrl);
     const sourceLink = sourceUrl ? `<a href="${this.escapePopupText(sourceUrl)}" target="_blank" rel="noopener noreferrer">${this.escapePopupText(spot.sourceLabel || "資料來源")}</a>` : "";
     const address = spot.address ? `<span>地址：${this.escapePopupText(spot.address)}</span>` : "";

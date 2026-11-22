@@ -105,13 +105,14 @@ window.CountryView = {
     }
     priceEl.innerHTML = `
       <div class="data-status-row" style="margin-bottom: 0.75rem;">
-        <span class="badge-tag" style="background:#e0f2fe; color:#0369a1; font-size:0.85rem;">物價指數：${country.priceLevel.tier} (${country.priceLevel.rating})</span>
-        <span class="data-source-badge">台幣估算 · 2026 參考</span>
+        <span class="badge-tag" style="background:#e0f2fe; color:#0369a1; font-size:0.85rem;">相對物價參考級距：${country.priceLevel.tier} (${country.priceLevel.rating})</span>
+        <span class="data-source-badge">規劃參考 · 非即時報價</span>
       </div>
       <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>日均預算：</strong>${country.priceLevel.dailyBudgetTwd}</p>
       <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>餐飲物價：</strong>${country.priceLevel.dining}</p>
       <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>市區交通：</strong>${country.priceLevel.transit}</p>
       <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>住宿參考：</strong>${country.priceLevel.hotel}</p>
+      <p style="font-size:0.82rem; color:var(--text-muted);">以上是專案整理的概略範圍，不是經統計計算的城市評分或即時報價。實際費用會因城市區域、旅行日期、匯率與消費方式而異，請依出發日期向服務提供者確認。</p>
     `;
   },
 
@@ -128,6 +129,9 @@ window.CountryView = {
         return ["https:", "http:"].includes(url.protocol) ? url.href : "";
       } catch (error) { return ""; }
     };
+    const hasSourcedRating = spot => spot?.rating !== null && spot?.rating !== undefined && spot?.rating !== ""
+      && Number.isFinite(Number(spot.rating))
+      && Number(spot.rating) >= 0 && Number(spot.rating) <= 5 && Boolean(String(spot.ratingSource || "").trim());
 
     tabList.setAttribute("role", "tablist");
     tabList.setAttribute("aria-label", "選擇城市");
@@ -251,8 +255,8 @@ window.CountryView = {
             <div class="spot-note" id="spot-note-${idx}">${escapeHtml(spot.note || "")}</div>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.4rem;">
-            <div class="spot-score">${spot.ratingSource ? `★ ${spot.rating} · ${spot.ratingSource}` : "評分資料未提供"}</div>
-            <button type="button" class="spot-map-focus" data-map-focus-spot data-city-id="${currentCity.id}" data-spot-index="${idx}" ${Number.isFinite(spot.lat) && Number.isFinite(spot.lng) ? "" : "disabled"}>🗺️ 在地圖查看</button>
+            <div class="spot-score">${hasSourcedRating(spot) ? `★ ${Number(spot.rating).toFixed(1)} · ${escapeHtml(spot.ratingSource)}` : "評分資料未提供"}</div>
+            <button type="button" class="spot-map-focus" data-map-focus-spot data-city-id="${currentCity.id}" data-spot-index="${idx}" ${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 12) || (!Number.isFinite(spot.lat) || !Number.isFinite(spot.lng)) ? "disabled" : ""} title="${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 12) ? "為保持地圖清晰，目前只載入前 12 個來源優先景點" : "在城市地圖查看位置"}">🗺️ 在地圖查看</button>
             <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${spot.name}, ${currentCity.name}, ${currentCity.countryName || country.name}`)}" target="_blank" rel="noopener noreferrer" class="spot-source-link spot-google-map">在 Google 地圖開啟</a>
             ${safeHttpUrl(spot.sourceUrl) ? `<a href="${safeHttpUrl(spot.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="spot-source-link">查看來源資料</a>` : ""}
             ${safeHttpUrl(spot.website) ? `<a href="${safeHttpUrl(spot.website)}" target="_blank" rel="noopener noreferrer" class="spot-source-link">官方網站／資訊</a>` : ""}
@@ -336,8 +340,9 @@ window.CountryView = {
         currentCity.spotsSource = catalogCity.spotsSource;
         if (isCurrentCity()) {
           window.CountryView.render(state);
-          window.mapManager?.renderCityMarkers();
-          window.mapManager?.renderGlobalCityDomMarkers();
+          if (window.mapManager?.currentCityContext?.id === currentCity.id) {
+            window.mapManager.showCityContext(currentCity, { animate: false, preserveView: true });
+          }
         }
       }).catch(error => {
         console.warn(`無法整理 ${currentCity.name} 的景點資料：`, error);

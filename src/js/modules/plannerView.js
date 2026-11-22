@@ -344,12 +344,12 @@ window.PlannerView = {
     host.innerHTML = `
       <div class="city-tool-heading"><div><span class="section-kicker">PLAN WITH CONFIDENCE</span><h4>把靈感變成可執行計畫</h4></div><div class="city-tool-actions"><button type="button" class="tool-outline-btn" id="btn-favorite-city" data-favorite-key="city:${city.id}" aria-pressed="${this.isFavorite(`city:${city.id}`)}">${this.isFavorite(`city:${city.id}`) ? "★ 已收藏城市" : "☆ 收藏城市"}</button><button type="button" class="tool-outline-btn" id="btn-compare-city" aria-pressed="${selected}">${selected ? "✓ 已加入比較" : "＋ 加入城市比較"}</button></div></div>
       <div class="planner-tool-grid">
-        <details class="planner-budget-disclosure"><summary>💰 旅行預算估算</summary><section class="budget-tool"><div class="budget-inputs">
-          <label>住宿 <input type="number" min="0" step="500" data-budget="hotel" value="${budget.hotel}"></label>
-          <label>交通 <input type="number" min="0" step="500" data-budget="transport" value="${budget.transport}"></label>
-          <label>餐飲 <input type="number" min="0" step="500" data-budget="food" value="${budget.food}"></label>
-          <label>景點／購物 <input type="number" min="0" step="500" data-budget="activity" value="${budget.activity}"></label>
-        </div><div id="budget-chart" class="budget-chart"></div><p id="budget-total" class="tool-total"></p><small class="planner-disclaimer">金額為台幣估算，依 5 天旅程預設，可自行調整。</small></section></details>
+        <details class="planner-budget-disclosure"><summary>💰 自訂旅行預算</summary><section class="budget-tool"><p class="itinerary-help">請依旅行日期、住宿等級與同行人數輸入預算；未取得可靠的城市即時價格時，不預填猜測金額。</p><div class="budget-inputs">
+          <label>住宿總額 <input type="number" min="0" max="10000000" step="500" data-budget="hotel" value="${budget.hotel || ""}" placeholder="輸入金額"></label>
+          <label>交通總額 <input type="number" min="0" max="10000000" step="500" data-budget="transport" value="${budget.transport || ""}" placeholder="輸入金額"></label>
+          <label>餐飲總額 <input type="number" min="0" max="10000000" step="500" data-budget="food" value="${budget.food || ""}" placeholder="輸入金額"></label>
+          <label>景點／購物 <input type="number" min="0" max="10000000" step="500" data-budget="activity" value="${budget.activity || ""}" placeholder="輸入金額"></label>
+        </div><div id="budget-chart" class="budget-chart"></div><p id="budget-total" class="tool-total"></p><small class="planner-disclaimer">所有金額都是你輸入的規劃值，不是城市即時報價；每日平均會依所選行程天數計算。</small></section></details>
         <section class="itinerary-tool"><h5>🗓️ 行程規劃</h5><p class="itinerary-help">可自行安排景點，或使用 AI 依旅遊偏好規劃每日路線。</p><div class="ai-itinerary-controls"><label for="itinerary-ai-preferences">旅行偏好 <span>選填</span></label><input id="itinerary-ai-preferences" type="text" maxlength="160" placeholder="例如：在地美食、博物館、親子、慢遊"><button type="button" class="tool-outline-btn ai-itinerary-button" id="btn-ai-itinerary">✨ AI 產生行程</button><p class="ai-itinerary-status" id="ai-itinerary-status" role="status" aria-live="polite"></p><small class="planner-disclaimer">景點先使用城市目錄與公開地圖資料；資料服務無回應時會提供地圖搜尋入口。地圖入口不是已核實景點，營業時間、交通與費用請以官方資訊為準。</small></div><div class="itinerary-days" role="group" aria-label="選擇旅行天數">${[3, 5, 7].map(days => `<button type="button" data-days="${days}" class="${days === 5 ? "active" : ""}">${days} 天</button>`).join("")}</div><details class="itinerary-options"><summary>調整景點、交通與分享方式</summary><div class="itinerary-options-content"><div class="itinerary-customizer"><label>景點 <select id="itinerary-spot-select" aria-label="選擇景點">${spots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}</option>`).join("")}</select></label><label>加入第 <select id="itinerary-day-select" aria-label="選擇加入天數">${Array.from({ length: 7 }, (_, index) => `<option value="${index}">Day ${index + 1}</option>`).join("")}</select></label><button type="button" class="tool-outline-btn" id="btn-add-itinerary-spot">加入</button></div><label class="itinerary-mode-control">交通方式<select id="itinerary-travel-mode" aria-label="選擇交通方式"><option value="transit">大眾運輸</option><option value="walking">步行</option><option value="driving">開車</option></select><small id="itinerary-mode-recommendation"></small></label><div class="itinerary-actions"><button type="button" class="tool-outline-btn" id="btn-copy-itinerary">複製行程</button><button type="button" class="tool-outline-btn" id="btn-print-itinerary">列印行程</button></div></div></details><div id="itinerary-result" class="itinerary-result"></div></section>
       </div>
     `;
@@ -366,11 +366,13 @@ window.PlannerView = {
     host.querySelectorAll("[data-days]").forEach(button => button.addEventListener("click", () => {
       host.querySelectorAll("[data-days]").forEach(item => item.classList.toggle("active", item === button));
       this.itineraryDays = Number(button.dataset.days);
+      this.renderBudgetChart(host);
       this.renderItinerary(city, this.itineraryDays);
     }));
     host.querySelector("#btn-ai-itinerary")?.addEventListener("click", async event => {
       const button = event.currentTarget;
       const status = host.querySelector("#ai-itinerary-status");
+      let cooldownActive = false;
       if (!window.firebaseAuth?.currentUser) {
         status.textContent = "請先使用 Google 帳戶登入。";
         const panel = document.getElementById("auth-menu-panel");
@@ -385,10 +387,18 @@ window.PlannerView = {
         await window.FirebaseAIReady;
         if (!window.FirebaseAIPlanner?.available) throw window.FirebaseAIPlanner?.error || new Error("AI 服務尚未完成設定。");
         status.textContent = "正在整理城市景點資料…";
-        if (window.CityCatalogService?.ensureSpots) {
-          await window.CityCatalogService.ensureSpots(city);
+        // AI only needs the curated Firestore catalog. Avoid holding up generation
+        // while slower live map providers finish their optional enrichment.
+        if (window.CityCatalogService?.fetchCity) {
+          const catalog = await window.CityCatalogService.fetchCity(city.id);
+          if (catalog?.spots?.length) {
+            const merge = window.CityCatalogService.mergeSpots?.bind(window.CityCatalogService);
+            city.spots = merge
+              ? merge(catalog.spots, city.spots || [], city.spotCandidates || [])
+              : [...catalog.spots, ...(city.spots || [])];
+          }
         }
-        const planningSpots = this.getPlanningSpots(city).slice(0, this.itineraryDays * 3);
+        const planningSpots = this.getPlanningSpots(city).slice(0, this.itineraryDays * 2);
         if (!planningSpots.length) throw new Error("尚未取得可安排的景點，請確認網路後再試。");
         const spotSelect = host.querySelector("#itinerary-spot-select");
         if (spotSelect) spotSelect.innerHTML = planningSpots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}</option>`).join("");
@@ -409,12 +419,31 @@ window.PlannerView = {
       } catch (error) {
         console.error("AI 行程規劃失敗：", error);
         status.dataset.state = "error";
-        if (error?.code === "ai/missing-app-check-site-key") status.textContent = "尚缺 App Check reCAPTCHA Enterprise 網站金鑰，請依設定說明完成啟用。";
+        const errorText = String(error?.message || "");
+        const retryMatch = errorText.match(/after\s+(?:(\d+)m:)?(\d+)s/i);
+        const isAppCheckThrottle = /appCheck\/(?:initial-)?throttle|appCheck\/throttled/i.test(String(error?.code || "")) || /appCheck\/(?:initial-)?throttle|appCheck\/throttled/i.test(errorText);
+        if (isAppCheckThrottle) {
+          cooldownActive = true;
+          let secondsLeft = retryMatch ? (Number(retryMatch[1] || 0) * 60 + Number(retryMatch[2] || 0)) : 8;
+          const retryAt = Date.now() + secondsLeft * 1000;
+          button.disabled = secondsLeft > 0;
+          let cooldownTimer = null;
+          const showCooldown = () => {
+            secondsLeft = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
+            status.textContent = secondsLeft
+              ? `App Check 正在暫時限制驗證請求，請等待 ${secondsLeft} 秒後再試。若持續發生，請確認 Firebase App Check 已為此 Web App 註冊正確的 reCAPTCHA Enterprise 網站金鑰，並將 trilobitexz.github.io 加入允許網域。`
+              : "可以重新嘗試了。若仍遇到 App Check 錯誤，請確認 Firebase Console 中註冊的是相同 Web App 與網站金鑰，且允許網域包含 trilobitexz.github.io。";
+            if (!secondsLeft) { cooldownActive = false; button.disabled = false; if (cooldownTimer) window.clearInterval(cooldownTimer); }
+          };
+          showCooldown();
+          if (cooldownActive) cooldownTimer = window.setInterval(showCooldown, 1000);
+        }
+        else if (error?.code === "ai/missing-app-check-site-key") status.textContent = "尚缺 App Check reCAPTCHA Enterprise 網站金鑰，請依設定說明完成啟用。";
         else if (error?.code === "ai/auth-required") status.textContent = "請先使用 Google 帳戶登入。";
-        else if (error?.code === "permission-denied" || error?.code === "appCheck/throttled") status.textContent = "App Check 驗證未通過，請確認 Firebase Console 已註冊本網站網域與金鑰。";
+        else if (/AppCheck|app check|permission-denied/i.test(errorText)) status.textContent = "App Check 驗證失敗。請在 Firebase Console 確認這個 Web App 的 reCAPTCHA Enterprise 網站金鑰、允許網域與 App Check API 狀態。";
         else status.textContent = error?.message || "AI 暫時無法規劃，請稍後再試。";
       } finally {
-        button.disabled = false;
+        if (!cooldownActive) button.disabled = false;
       }
     });
     host.querySelector("#btn-add-itinerary-spot")?.addEventListener("click", () => {
@@ -439,18 +468,18 @@ window.PlannerView = {
     const saved = readStoredJson(`journey-atlas-budget-${city.id}`, null)
       || (legacyId ? readStoredJson(`journey-atlas-budget-${legacyId}`, null) : null);
     if (!saved || typeof saved !== "object" || Array.isArray(saved)) {
-      return { hotel: 12000, transport: 3500, food: 7000, activity: 5000 };
+      return { hotel: 0, transport: 0, food: 0, activity: 0 };
     }
-    const defaults = { hotel: 12000, transport: 3500, food: 7000, activity: 5000 };
+    const defaults = { hotel: 0, transport: 0, food: 0, activity: 0 };
     return Object.fromEntries(Object.keys(defaults).map(key => {
       const value = Number(saved[key]);
-      return [key, Number.isFinite(value) ? Math.max(0, value) : defaults[key]];
+      return [key, Number.isFinite(value) ? Math.min(10000000, Math.max(0, value)) : defaults[key]];
     }));
   },
   saveBudget: function (city, input) {
     const host = input.closest("#city-planner-tools");
     const budget = {};
-    host.querySelectorAll("[data-budget]").forEach(item => { budget[item.dataset.budget] = Math.max(0, Number(item.value) || 0); });
+    host.querySelectorAll("[data-budget]").forEach(item => { budget[item.dataset.budget] = Math.min(10000000, Math.max(0, Number(item.value) || 0)); });
     try {
       const key = `journey-atlas-budget-${city.id}`;
       const value = JSON.stringify(budget);
@@ -463,8 +492,13 @@ window.PlannerView = {
   renderBudgetChart: function (host) {
     const items = [...host.querySelectorAll("[data-budget]")].map(input => ({ name: input.previousSibling.textContent.trim(), value: Math.max(0, Number(input.value) || 0) }));
     const total = items.reduce((sum, item) => sum + item.value, 0);
-    host.querySelector("#budget-total").textContent = `預估總額：NT$ ${total.toLocaleString()}（每日約 NT$ ${Math.round(total / 5).toLocaleString()}）`;
-    host.querySelector("#budget-chart").innerHTML = items.map(item => `<div class="budget-bar"><span>${item.name}</span><i><b style="width:${total ? (item.value / total) * 100 : 0}%"></b></i><strong>NT$ ${item.value.toLocaleString()}</strong></div>`).join("");
+    const days = Math.max(1, Number(this.itineraryDays) || 5);
+    host.querySelector("#budget-total").textContent = total
+      ? `自訂總額：NT$ ${total.toLocaleString()}（${days} 天平均每日 NT$ ${Math.round(total / days).toLocaleString()}）`
+      : "尚未設定預算";
+    host.querySelector("#budget-chart").innerHTML = total
+      ? items.map(item => `<div class="budget-bar"><span>${item.name}</span><i><b style="width:${(item.value / total) * 100}%"></b></i><strong>NT$ ${item.value.toLocaleString()}</strong></div>`).join("")
+      : `<p class="itinerary-help">輸入任一項金額，即可查看預算分配。</p>`;
   },
   renderItinerary: function (city, days) {
     const result = document.getElementById("itinerary-result");
@@ -484,7 +518,7 @@ window.PlannerView = {
       const load = orderedSpots.length <= 2 ? "輕鬆" : orderedSpots.length <= 4 ? "適中" : "偏滿";
       return `<details class="itinerary-day-card" data-itinerary-day="${dayIndex}" ${dayIndex === 0 ? "open" : ""}>
         <summary class="itinerary-day-summary"><strong>Day ${dayIndex + 1}</strong><span>${escapePlannerText(aiDayPlans[dayIndex]?.theme || day.theme)}</span><small>${orderedSpots.length} 個景點・${load}</small></summary>
-        <div class="itinerary-day-content"><div class="itinerary-day-heading"><small>${escapePlannerText(aiDayPlans[dayIndex]?.note || day.note)}</small></div>
+        <div class="itinerary-day-content"><div class="itinerary-day-heading"><small>${escapePlannerText(aiDayPlans[dayIndex]?.note || day.note)}</small>${aiDayPlans[dayIndex]?.routingRationale ? `<small class="itinerary-planning-rationale">路線安排：${escapePlannerText(aiDayPlans[dayIndex].routingRationale)}</small>` : ""}</div>
         <div class="itinerary-load ${load === "偏滿" ? "is-busy" : ""}">今日安排：${load}・${orderedSpots.length} 個景點 ${load === "偏滿" ? "— 建議移除或分配至其他天" : ""}</div>
         <div class="itinerary-schedule">
           ${orderedSpots.length ? orderedSpots.map(({ index, spot }, order) => {
@@ -619,7 +653,7 @@ window.PlannerView = {
     const stored = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     stored[city.id] = { ...(stored[city.id] || {}), [days]: itinerary };
     const metaKey = String(days) + "Meta";
-    if (Array.isArray(aiDayPlans)) stored[city.id][metaKey] = aiDayPlans.map(day => ({ theme: String(day.theme || ""), note: String(day.note || "") }));
+    if (Array.isArray(aiDayPlans)) stored[city.id][metaKey] = aiDayPlans.map(day => ({ theme: String(day.theme || ""), note: String(day.note || ""), routingRationale: String(day.routingRationale || "") }));
     else delete stored[city.id][metaKey];
     try {
       const value = JSON.stringify(stored);
@@ -646,7 +680,7 @@ window.PlannerView = {
     const aiDayPlans = this.getItineraryMeta(city, days);
     return this.buildItineraryPlan(city, days, mode).map((day, index) => {
       const aiDay = aiDayPlans[index];
-      return `Day ${index + 1}｜${aiDay?.theme || day.theme}\n${aiDay?.note || day.note}\n${day.items.map(item => `【${item.title}】${item.transport ? `\n交通：${item.transport}` : ""}`).join("\n")}`;
+      return `Day ${index + 1}｜${aiDay?.theme || day.theme}\n${aiDay?.note || day.note}${aiDay?.routingRationale ? `\n路線安排：${aiDay.routingRationale}` : ""}\n${day.items.map(item => `【${item.title}】${item.transport ? `\n交通：${item.transport}` : ""}`).join("\n")}`;
     }).join("\n\n");
   },
 

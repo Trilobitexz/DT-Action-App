@@ -41,7 +41,9 @@ gcloud auth application-default login
 npm run seed:city-catalog
 ```
 
-匯入前請檢查 `scripts/seed-city-catalog.mjs` 的來源與目標專案。ADC 憑證只留在使用者環境，不要複製進專案或提交版本控制。執行完成後在 Firestore Console 確認 `cities` 與 `spots` 文件數量。
+匯入預設只使用專案內已整理的景點資料，不呼叫外部百科 API；匯入以 Firestore BulkWriter 批次處理，城市及景點文件保留資料來源、座標來源、圖片來源、營業資訊、精選排序與資料欄位完整度標記。若要在匯入時為資料較少且有座標的城市補查 Wikipedia，可執行 `node scripts/seed-city-catalog.mjs --refresh-wikipedia`；此模式會因外部 API 限流或網路狀況較慢。
+
+匯入前請檢查 `scripts/seed-city-catalog.mjs` 的來源與目標專案，並在 Firebase Console 確認 Firestore 資料庫版本及位置。ADC 憑證只留在使用者環境，不要複製進專案或提交版本控制。執行完成後在 Firestore Console 確認 `cities` 與 `spots` 文件數量及來源欄位。
 
 ## 日常發布與回復
 

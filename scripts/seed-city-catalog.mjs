@@ -19,8 +19,10 @@ const window = {};
 ].forEach(file => vm.runInNewContext(read(file), { window }, { filename: file }));
 
 const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "dt-action-app";
+const refreshWikipedia = process.argv.includes("--refresh-wikipedia");
 admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId });
 const db = admin.firestore();
+const writer = db.bulkWriter();
 try {
   await db.collection("cities").limit(1).get();
 } catch (error) {
@@ -41,6 +43,12 @@ const distanceKm = (a, b) => {
   return 6371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 };
 const attractionCategory = /tourist attraction|museum|gallery|monument|memorial|park|garden|temple|church|mosque|cathedral|castle|palace|historic|heritage|archaeolog|landmark|monastery|shrine|square|bridge|tower|theatre|theater|zoo|aquarium|fort|beach|waterfall|mountain|botanical|island|cave|stadium|opera|library|market|district|plaza|building|protected area/i;
+const hasVerifiedSpotLocation = spot => spot?.lat !== null && spot?.lat !== undefined && spot?.lat !== ""
+  && spot?.lng !== null && spot?.lng !== undefined && spot?.lng !== ""
+  && Number.isFinite(Number(spot.lat))
+  && Number(spot.lat) >= -90 && Number(spot.lat) <= 90
+  && Number.isFinite(Number(spot?.lng)) && Number(spot.lng) >= -180 && Number(spot.lng) <= 180
+  && /^https?:\/\//i.test(String(spot?.sourceUrl || spot?.pageUrl || spot?.url || ""));
 
 async function fetchWikipediaSpots(city) {
   if (!Number.isFinite(city.lat) || !Number.isFinite(city.lng)) return [];
@@ -90,9 +98,10 @@ let failedWikipediaCount = 0;
 
 for (const city of cities) {
   if (!city?.id) continue;
-  const localSpots = [...(city.spots || []), ...(city.spotCandidates || [])];
+  // Unverified editorial names remain search/planning hints; publish only places with a source and coordinates.
+  const localSpots = [...(city.spots || [])].filter(hasVerifiedSpotLocation);
   let wikipediaSpots = [];
-  if (localSpots.length < 8 && Number.isFinite(city.lat) && Number.isFinite(city.lng)) {
+  if (refreshWikipedia && localSpots.length < 8 && Number.isFinite(city.lat) && Number.isFinite(city.lng)) {
     try {
       wikipediaSpots = await fetchWikipediaSpots(city);
       if (wikipediaSpots.length) wikipediaCityCount += 1;
@@ -110,7 +119,7 @@ for (const city of cities) {
     return true;
   });
 
-  await db.collection("cities").doc(city.id).set({
+  const cityDocument = {
     id: city.id,
     name: city.name || city.englishName || city.id,
     englishName: city.englishName || city.name || "",
@@ -118,38 +127,55 @@ for (const city of cities) {
     countryCode: city.countryCode || "",
     flag: city.flag || "",
     continentName: city.continentName || "",
-    lat: Number.isFinite(city.lat) ? city.lat : null,
-    lng: Number.isFinite(city.lng) ? city.lng : null,
-    description: city.descriptionSource?.text || city.description || "",
-    sourceLabel: city.descriptionSource?.sourceLabel || "後台城市目錄",
-    sourceUrl: city.descriptionSource?.pageUrl || city.coordinateSource?.sourceUrl || "",
-    spotCount: spots.length,
+    ...(Number.isFinite(city.lat) ? { lat: city.lat } : {}),
+    ...(Number.isFinite(city.lng) ? { lng: city.lng } : {}),
+    ...(city.descriptionSource?.text || city.description ? { description: city.descriptionSource?.text || city.description } : {}),
+    ...(city.descriptionSource?.sourceLabel ? { sourceLabel: city.descriptionSource.sourceLabel } : {}),
+    ...(city.descriptionSource?.pageUrl || city.coordinateSource?.sourceUrl ? { sourceUrl: city.descriptionSource?.pageUrl || city.coordinateSource?.sourceUrl } : {}),
+    ...(city.coordinateSource?.sourceUrl ? { coordinateSourceUrl: city.coordinateSource.sourceUrl } : {}),
+    ...(city.coordinateSource?.provider ? { coordinateSourceLabel: city.coordinateSource.provider } : {}),
+    ...(spots.length ? {
+      spotCount: spots.length,
+      featuredSpotCount: spots.filter(spot => spot.isFeatured === true).length
+    } : {}),
+    catalogUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     publishedAt: admin.firestore.FieldValue.serverTimestamp(),
-    dataVersion: "2026.11.22-city-catalog-v3"
-  }, { merge: true });
+    dataVersion: "2026.11.23-city-catalog-v4"
+  };
+  writer.set(db.collection("cities").doc(city.id), cityDocument, { merge: true });
   cityCount += 1;
 
-  const batch = db.batch();
   spots.forEach((candidate, index) => {
-    const spot = typeof candidate === "string" ? { name: candidate } : candidate;
+    const spot = candidate;
     const name = String(spot.name || "").trim();
     if (!name) return;
     const id = `${String(index).padStart(3, "0")}-${slug(name)}`;
-    batch.set(db.collection("cities").doc(city.id).collection("spots").doc(id), {
+    writer.set(db.collection("cities").doc(city.id).collection("spots").doc(id), {
       index, name, englishName: spot.englishName || "",
       category: spot.category || "景點", tag: spot.tag || "",
+      isFeatured: spot.isFeatured === true,
+      featuredRank: Number.isInteger(spot.featuredRank) && spot.featuredRank >= 0 ? spot.featuredRank : null,
       note: spot.note || "", description: spot.description || spot.note || "",
       lat: Number.isFinite(spot.lat) ? spot.lat : null,
       lng: Number.isFinite(spot.lng) ? spot.lng : null,
+      rating: Number.isFinite(spot.rating) && spot.rating >= 0 && spot.rating <= 5 && typeof spot.ratingSource === "string" && spot.ratingSource.trim() ? spot.rating : null,
+      ratingSource: Number.isFinite(spot.rating) && spot.rating >= 0 && spot.rating <= 5 && typeof spot.ratingSource === "string" && spot.ratingSource.trim() ? spot.ratingSource.trim() : "",
       sourceUrl: spot.sourceUrl || spot.pageUrl || "",
       sourceLabel: spot.sourceLabel || "專案城市目錄",
+      imageUrl: spot.imageUrl || spot.thumbnailUrl || "",
+      imageSourceUrl: spot.imageSourceUrl || spot.imagePageUrl || "",
       website: spot.website || "", openingHours: spot.openingHours || "",
-      address: spot.address || "", publishedAt: admin.firestore.FieldValue.serverTimestamp()
+      closedDays: spot.closedDays || "",
+      visitHours: Number.isFinite(spot.visitHours) && spot.visitHours > 0 ? spot.visitHours : null,
+      address: spot.address || "",
+      hasCoordinates: Number.isFinite(spot.lat) && Number.isFinite(spot.lng),
+      hasDescription: Boolean(String(spot.description || spot.note || "").trim()),
+      catalogUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      publishedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
   });
-  if (spots.length) await batch.commit();
   spotCount += spots.length;
-  await new Promise(resolve => setTimeout(resolve, 350));
 }
 
-console.log(JSON.stringify({ projectId, cityCount, spotCount, wikipediaCityCount, failedWikipediaCount }, null, 2));
+await writer.close();
+console.log(JSON.stringify({ projectId, cityCount, spotCount, wikipediaRefreshEnabled: refreshWikipedia, wikipediaCityCount, failedWikipediaCount }, null, 2));
