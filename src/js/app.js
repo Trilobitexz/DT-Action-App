@@ -1,12 +1,5 @@
 // 旅遊地點分析 APP - 全域控制器
-document.addEventListener("DOMContentLoaded", async () => {
-
-  try {
-    if (window.mapLibreReady) await window.mapLibreReady;
-  } catch (error) {
-    // MapLibre 載入失敗時，地圖會顯示錯誤狀態，但其他頁面功能仍可使用。
-    console.error("互動地圖無法初始化：", error);
-  }
+document.addEventListener("DOMContentLoaded", () => {
 
   const state = window.AppStore.getState();
 
@@ -138,7 +131,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     }
   });
-  mapManager.init();
+  // 地圖程式以非同步方式載入；先啟動一般介面與導覽，不讓地圖 CDN 延遲整個 App。
+  if (window.mapLibreReady) {
+    window.mapLibreReady.then(() => mapManager.init()).catch(error => {
+      console.error("互動地圖無法初始化：", error);
+    });
+  } else {
+    mapManager.init();
+  }
   mapContextInfo?.addEventListener("change", event => {
     if (event.target?.id === "map-spot-category-filter") {
       mapManager.filterCitySpots(event.target.value);
@@ -154,7 +154,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   window.PlannerView?.init();
   document.getElementById("btn-scroll-comparison")?.addEventListener("click", () => {
-    document.getElementById("comparison-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.PlannerView?.renderComparison();
   });
 
   const backdrop = document.getElementById("drawer-backdrop");
@@ -169,6 +169,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   };
   let drawerScale = readDrawerScale();
+  let drawerTrigger = null;
   const updateDrawerScale = () => {
     drawerScale = Math.min(1.1, Math.max(0.8, drawerScale));
     try {
@@ -194,38 +195,117 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
   const closeDrawers = () => {
+    const restoreTarget = drawerTrigger;
+    drawerTrigger = null;
     drawers.forEach(drawer => {
       drawer.classList.remove("open");
       drawer.setAttribute("aria-hidden", "true");
+      drawer.setAttribute("inert", "");
     });
     document.querySelectorAll("[aria-controls]").forEach(button => button.setAttribute("aria-expanded", "false"));
     if (backdrop) backdrop.hidden = true;
     document.body.classList.remove("drawer-open");
+    if (restoreTarget?.isConnected && !restoreTarget.closest("[aria-hidden='true']")) restoreTarget.focus();
   };
   window.closeTravelDrawers = closeDrawers;
-  const openDrawer = drawerId => {
-    closeDrawers();
+  const openDrawer = (drawerId, triggerButton = null) => {
     const drawer = document.getElementById(drawerId);
-    const trigger = document.querySelector(`[aria-controls="${drawerId}"]`);
+    const trigger = triggerButton || document.querySelector(`[aria-controls="${drawerId}"]`);
     if (!drawer) return;
     if (drawer.getAttribute("aria-hidden") === "false") {
       closeDrawers();
       return;
     }
+    closeDrawers();
+    drawerTrigger = trigger;
     drawer.classList.add("open");
     drawer.setAttribute("aria-hidden", "false");
+    drawer.removeAttribute("inert");
     trigger?.setAttribute("aria-expanded", "true");
     if (backdrop) backdrop.hidden = false;
     document.body.classList.add("drawer-open");
     drawer.querySelector(".drawer-close")?.focus();
   };
-  document.querySelectorAll("[aria-controls]").forEach(button => {
-    button.addEventListener("click", () => openDrawer(button.getAttribute("aria-controls")));
+  document.querySelectorAll("[aria-controls]:not([data-sidebar-action])").forEach(button => {
+    button.addEventListener("click", () => {
+      const drawerId = button.getAttribute("aria-controls");
+      if (drawerId === "city-rankings-drawer") setSidebarActive("cities");
+      if (drawerId === "comparison-drawer") setSidebarActive("compare");
+      openDrawer(drawerId, button);
+    });
   });
+  const sidebarItems = [...document.querySelectorAll("[data-sidebar-action]")];
+  const setSidebarActive = action => sidebarItems.forEach(item => {
+    const active = item.dataset.sidebarAction === action;
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  });
+  const sidebarHint = document.getElementById("sidebar-hint");
+  const openPlannerForCity = triggerButton => {
+    const planner = document.getElementById("city-planner-tools");
+    if (!planner?.children.length) return false;
+    setSidebarActive("planner");
+    if (sidebarHint) sidebarHint.textContent = "正在規劃目前城市的預算與每日行程。";
+    openDrawer("planner-drawer", triggerButton);
+    return true;
+  };
+  sidebarItems.forEach(item => item.addEventListener("click", () => {
+    const action = item.dataset.sidebarAction;
+    if (action === "explore") {
+      setSidebarActive(action);
+      if (sidebarHint) sidebarHint.textContent = "世界地圖與目的地探索。";
+      navigateTo("world");
+    } else if (action === "cities") {
+      setSidebarActive(action);
+      if (sidebarHint) sidebarHint.textContent = "搜尋城市後即可開啟目的地資料。";
+      window.GlobalCitiesView?.render();
+      openDrawer("city-rankings-drawer", item);
+    } else if (action === "compare") {
+      setSidebarActive(action);
+      window.PlannerView?.renderComparison();
+      openDrawer("comparison-drawer", item);
+    } else if (action === "planner") {
+      if (state.currentView === "country" && openPlannerForCity(item)) return;
+      const recent = window.PlannerView?.getRecentDestinations?.()[0];
+      if (recent) {
+        if (recent.type === "global") navigateTo("global-city", { cityId: recent.id });
+        else navigateTo("country", { countryId: recent.countryId, cityId: recent.id });
+        openPlannerForCity(item);
+        return;
+      }
+      if (sidebarHint) sidebarHint.textContent = "先從城市目錄選擇目的地，就能規劃預算與行程。";
+      setSidebarActive("cities");
+      window.GlobalCitiesView?.render();
+      openDrawer("city-rankings-drawer", document.querySelector('[data-sidebar-action="cities"]'));
+    }
+  }));
   document.querySelectorAll("[data-close-drawer]").forEach(button => button.addEventListener("click", closeDrawers));
   backdrop?.addEventListener("click", closeDrawers);
   document.addEventListener("keydown", event => {
-    if (event.key === "Escape") closeDrawers();
+    const activeDrawer = document.querySelector(".side-drawer.open");
+    if (!activeDrawer) return;
+    if (event.key === "Escape") {
+      closeDrawers();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...activeDrawer.querySelectorAll("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])")]
+      .filter(element => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    if (!focusable.length) {
+      event.preventDefault();
+      activeDrawer.querySelector(".drawer-close")?.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !activeDrawer.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !activeDrawer.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
   });
   document.querySelectorAll("[data-ranking-tab]").forEach(tab => {
     tab.addEventListener("click", () => {
@@ -440,6 +520,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateMapContextControls(viewName);
 
     updateBreadcrumb();
+    if (typeof setSidebarActive === "function") setSidebarActive("explore");
     const globalCity = state.globalCityId ? getGlobalCity(state.globalCityId) : null;
     document.title = viewName === "world"
       ? "旅途指南 Journey Atlas｜目的地探索與旅行規劃"

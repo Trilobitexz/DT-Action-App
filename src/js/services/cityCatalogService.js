@@ -3,6 +3,7 @@
     cache: new Map(),
     spotCache: new Map(),
     spotRequests: new Map(),
+    failedCityReads: new Map(),
     waitForFirestore: function () {
       if (window.firebaseFirestore) return Promise.resolve(window.firebaseFirestore);
       return new Promise(resolve => {
@@ -12,7 +13,7 @@
           if (window.firebaseFirestore) {
             window.clearInterval(timer);
             resolve(window.firebaseFirestore);
-          } else if (attempts >= 100) {
+          } else if (attempts >= 20) {
             window.clearInterval(timer);
             resolve(null);
           }
@@ -23,13 +24,23 @@
       const key = String(cityId || "");
       if (!key) return null;
       if (this.cache.has(key)) return this.cache.get(key);
+      const previousFailure = this.failedCityReads.get(key);
+      if (previousFailure && Date.now() - previousFailure < 30000) return null;
       const db = await this.waitForFirestore();
-      if (!db) return null;
+      if (!db) {
+        this.failedCityReads.set(key, Date.now());
+        return null;
+      }
       try {
-        const [citySnapshot, spotSnapshot] = await Promise.all([
+        const read = Promise.all([
           db.collection("cities").doc(key).get(),
-          db.collection("cities").doc(key).collection("spots").orderBy("index").get()
+          db.collection("cities").doc(key).collection("spots").orderBy("index").limit(40).get()
         ]);
+        let timeoutId;
+        const [citySnapshot, spotSnapshot] = await Promise.race([
+          read,
+          new Promise((_, reject) => { timeoutId = window.setTimeout(() => reject(new Error("Firestore 城市目錄查詢逾時")), 3000); })
+        ]).finally(() => window.clearTimeout(timeoutId));
         const city = citySnapshot.exists ? citySnapshot.data() : null;
         const spots = [];
         spotSnapshot.forEach(doc => {
@@ -59,8 +70,10 @@
         });
         const result = { city: city || null, spots };
         this.cache.set(key, result);
+        this.failedCityReads.delete(key);
         return result;
       } catch (error) {
+        this.failedCityReads.set(key, Date.now());
         console.warn(`讀取後台城市目錄失敗（${key}）：`, error);
         return null;
       }
@@ -105,7 +118,7 @@
         };
       });
     },
-    ensureSpots: function (city, { radius = 25000, limit = 80 } = {}) {
+    ensureSpots: function (city, { radius = 20000, limit = 50 } = {}) {
       if (!city?.id) return Promise.resolve([]);
       const key = String(city.id);
       if (this.spotCache.has(key)) {
@@ -126,12 +139,12 @@
           console.warn("城市景點快取無法讀取：", error);
         }
 
-        let cloudSpots = [];
-        if (!saved) {
-          const catalog = await this.fetchCity(key);
-          cloudSpots = catalog?.spots || [];
-        }
         let liveSpots = saved?.spots || [];
+        let cloudCatalog = null;
+        const cloudPromise = !saved ? this.fetchCity(key).catch(error => {
+            console.warn(`讀取 ${city.name || key} 雲端城市目錄失敗：`, error);
+            return null;
+          }) : Promise.resolve(null);
         if (!saved && window.SpotService) {
           let coordinates = Number.isFinite(city.lat) && Number.isFinite(city.lng)
             ? { lat: city.lat, lng: city.lng }
@@ -151,15 +164,25 @@
               };
             }
           }
-          if (coordinates) {
-            liveSpots = await window.SpotService.fetchNearbyPlaces({ ...city, ...coordinates }, { radius, limit })
-              .catch(error => {
-                console.warn(`載入 ${city.name} 周邊景點失敗：`, error);
-                return [];
-              });
-          }
+          const livePromise = coordinates
+            ? window.SpotService.fetchNearbyPlaces({ ...city, ...coordinates }, { radius, limit }).catch(error => {
+              console.warn(`載入 ${city.name} 周邊景點失敗：`, error);
+              return [];
+            })
+            : Promise.resolve([]);
+          [cloudCatalog, liveSpots] = await Promise.all([cloudPromise, livePromise]);
+        } else if (!saved) {
+          cloudCatalog = await cloudPromise;
         }
 
+        const cloudSpots = cloudCatalog?.spots || [];
+        if (cloudCatalog?.city?.description && !city.descriptionSource?.text) {
+          city.descriptionSource = {
+            text: cloudCatalog.city.description,
+            pageUrl: cloudCatalog.city.sourceUrl || null,
+            sourceLabel: cloudCatalog.city.sourceLabel || "後台城市目錄"
+          };
+        }
         let spots = this.mergeSpots(city.spots || [], cloudSpots, liveSpots, city.spotCandidates || []);
         if (!spots.length) spots = this.createMapSearchSuggestions(city);
         city.spots = spots;

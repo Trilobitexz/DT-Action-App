@@ -4,6 +4,78 @@
 
 ---
 
+## 專案架構與執行邏輯
+
+### 系統架構
+
+本專案是以 GitHub Pages 發布的靜態前端網站，沒有自建 Node.js／Express API 伺服器。前端模組直接呼叫 Firebase 與公開資料服務；Firebase 提供登入、資料庫和 AI 服務。具有寫入權限的城市目錄匯入工作由管理者在本機執行 Firebase Admin SDK，不會在瀏覽器執行。
+
+```mermaid
+flowchart LR
+  Browser[使用者瀏覽器]
+  UI[HTML 與 CSS]
+  App[app.js 導覽與互動]
+  Data[本地城市資料]
+  Services[資料服務模組]
+  Maps[MapLibre 地圖]
+  Auth[Firebase Authentication\nGoogle 登入]
+  DB[Cloud Firestore]
+  AI[Firebase AI Logic\nGemini]
+  External[OSM／Wikipedia／Wikimedia\n天氣與匯率服務]
+  Pages[GitHub Pages]
+  Admin[管理者 seed 腳本\nFirebase Admin SDK]
+
+  Pages --> Browser
+  Browser --> UI --> App
+  App --> Data
+  App --> Services
+  App --> Maps
+  Services --> External
+  App <--> Auth
+  App <--> DB
+  App --> AI
+  Admin --> DB
+```
+
+### 前端模組
+
+| 路徑 | 職責 |
+| --- | --- |
+| `index.html` | 頁面骨架、世界／大洲／國家城市層級、工具入口及依序載入的瀏覽器腳本。 |
+| `src/css/style.css` | 桌面與手機版版面、元件狀態、抽屜、地圖和行程樣式。 |
+| `src/js/app.js` | 應用啟動、網址路徑、主要頁面切換、地圖互動與抽屜控制。地圖程式下載完成前，其他介面先啟動。 |
+| `src/js/store/appStore.js` | 當前目的地、篩選條件、頁面路徑和地圖視角的記憶。 |
+| `src/js/modules/continentView.js` | 大洲目的地卡片與篩選結果。 |
+| `src/js/modules/countryView.js` | 國家／城市資訊、景點卡片、圖片、地圖定位及即時資料補充。 |
+| `src/js/modules/globalCitiesView.js` | 全球城市目錄、搜尋和分批呈現。 |
+| `src/js/modules/plannerView.js` | 側邊工作區中的收藏、比較、預算、行程、AI 生成及本機／雲端同步介面。 |
+| `src/js/map/mapManager.js`、`geoContinents.js` | MapLibre 地圖、圖層、投影、標記和地圖上下文。 |
+| `src/js/services/` | 景點、城市目錄、天氣、匯率和航班資料的請求、快取與 fallback。 |
+| `src/data/` | 隨網站發布的城市、國家、座標及景點初始資料。 |
+| `src/js/firebase.js`、`firebase-ai-config.js` | Firebase Web 初始化、帳戶／Firestore 雲端同步，以及 Firebase AI Logic/App Check 公開設定。 |
+| `sw.js`、`manifest.json`、`src/js/pwa.js` | PWA 安裝資訊、Service Worker 更新與同源靜態資源快取。 |
+
+### 使用者操作與資料流
+
+1. GitHub Pages 回傳靜態 HTML、CSS、JavaScript 和內建城市資料。一般腳本以 `defer` 依文件順序執行；MapLibre 地圖程式另行非同步載入，地圖失敗不阻擋其他頁面操作。
+2. 固定側欄可切換探索、全球城市、獨立行程工作區和比較抽屜；行程入口使用目前城市，若尚未選城市則回到最近造訪城市，初次使用會提示先選目的地。使用者也可由世界地圖或洲別篩選下鑽到國家／城市。網址 hash 與 Store 記錄目前層級，支援直接分享、瀏覽器上一頁／下一頁及記住地圖視角。
+3. 城市頁先用內建資料呈現，再並行查詢 Firestore 公開城市目錄及 OSM／Wikipedia／Wikidata 等來源；查詢設有逾時和備援，結果會快取 7 至 14 天。景點卡片可直接開啟 Google Maps URL（不需 Google Maps API key），並從 Wikipedia／Wikimedia Commons 載入縮圖與圖片來源連結。圖片只為目前顯示的景點載入，展開更多景點時才補查其餘項目。資料服務失敗時保留可用資料、提供地圖搜尋入口及重新載入按鈕。
+4. 預算、收藏、比較、最近瀏覽及行程先存在目前瀏覽器的本機儲存空間。Google 登入成功後，Firebase Auth UID 作為使用者識別，資料同步至 `users/{uid}/appData/{dataId}`；Firestore 規則只允許該 UID 存取自己的受限資料文件。
+5. AI 行程由已載入的候選景點產生，Firebase AI Logic 呼叫 Gemini；App Check 使用 reCAPTCHA Enterprise 驗證應用程式。AI 不寫入公開城市目錄；使用者的行程保存仍透過個人資料同步流程。
+6. Service Worker 快取同源網站殼層，以便離線開啟已下載資源；地圖底圖、Firebase 與即時外部資料仍需要網路。
+
+### Firebase 與維運邊界
+
+- **Authentication**：Google Popup 登入，前端不提供電子郵件／密碼登入。
+- **Cloud Firestore**：`cities/{cityId}` 與 `spots` 子集合供公開讀取，瀏覽器禁止寫入；`users/{uid}/appData/{dataId}` 為個人資料，依 UID 隔離。規則來源為 `firestore.rules`，索引來源為 `firestore.indexes.json`。
+- **城市目錄寫入**：`scripts/seed-city-catalog.mjs` 透過 Firebase Admin SDK 與 Application Default Credentials 執行；服務帳戶憑證不得放入網站或 Git。
+- **AI 與 App Check**：`src/js/firebase-ai-config.js` 只存公開 reCAPTCHA Enterprise site key；App Check 註冊、允許網域、enforcement 與帳單狀態在 Firebase／Google Cloud Console 管理。
+- **發布**：網站由 GitHub Pages 發布；Firebase 設定部署另由 Firebase CLI 執行。Firebase Hosting 設定雖保留在 `firebase.json`，不是目前網站發布管道。
+
+相關檔案：[`Firebase 維運與發布流程`](./FIREBASE_OPERATIONS.md)、[`firestore.rules`](./firestore.rules)、[`firebase.json`](./firebase.json)、[`seed-city-catalog.mjs`](./scripts/seed-city-catalog.mjs)。雲端規則、App Check 或資料庫的實際部署狀態需在 Firebase Console 核對，不能只由本機來源檔推定。
+
+---
+
 ## 專案核心特色
 
 1. **互動式世界地圖**：提供世界地圖視角，支援縮放、平移與直覺點選；進入城市後會沿用同一張地圖放大至城市尺度，只顯示已編目或已定位的景點與機場標記，點擊標記可查看資訊並返回世界或上一層地圖。
@@ -11,7 +83,7 @@
 3. **國家與城市深度分析**：
    - ✈️ **直飛航班情報**：清楚呈現直飛/轉機、航空公司、預估航程。
    - 💰 **當地日常物價指數**：提供日均預算、餐飲、交通與住宿估算。
-   - 🏙️ **城市景點目錄**：按城市載入有座標、來源連結及 OSM 圖資欄位的地點；未核實的推薦文案和評分不會冒充實際資料。
+   - 🏙️ **城市景點目錄**：按城市載入有座標與來源連結的地點，景點卡片可直接開啟 Google 地圖，並按需顯示 Wikipedia／Wikimedia Commons 圖片與來源。
    - 🗃️ **多來源旅遊資料**：整合可選的 OpenTripMap、Wikivoyage、Wikidata、中文 Wikipedia、Wikimedia Commons、OpenStreetMap/Nominatim 與 Open-Meteo；以多級 fallback 提供景點摘要、結構化描述、圖片、地址座標與即時天氣。
    - 🌐 **全球城市目錄**：整合 200 座去重城市，可依名稱或來源資料完整度瀏覽；每座城市開啟後先顯示基本位置與目的地資料，再載入附近地點與百科摘要。
    - 🔎 **免資料庫城市搜尋**：城市基本座標與摘要隨前端載入，點入後再以即時服務補充資料，適合原型部署與快速探索。
@@ -24,6 +96,7 @@
    - ✍️ 完整行程產生器會依每日早午晚時段安排景點、餐食、移動與備註，依城市交通特性提供地鐵／公車建議與 Google Maps 大眾運輸路線，也可指定景點加入某一天並複製或列印。
    - 🏷️ 資料來源、更新狀態與規劃參考提醒。
 6. **分層式探索介面**：
+   - 🧭 固定側邊導覽可切換探索、城市目錄、行程規劃與城市比較；手機版改為底部功能列。
    - 🌐 將全球城市目錄收進左側抽屜，透過名稱、資料完整度與搜尋瀏覽。
    - ⚖️ 將城市比較獨立為側邊抽屜，避免首頁資訊過度擁擠。
    - 📱 桌面版由左側滑入、手機版自動全寬，支援遮罩、Esc、鍵盤焦點與減少動畫偏好。

@@ -309,10 +309,12 @@ window.PlannerView = {
     const panel = document.getElementById("comparison-panel");
     if (!panel) return;
     const cities = this.allCities().filter(city => this.compareIds.includes(city.id));
-    const quickStatus = document.getElementById("comparison-quick-status");
-    if (quickStatus) {
-      quickStatus.textContent = cities.length ? `已選 ${cities.length}/4 座城市，點擊查看` : "回到頁面查看已選城市";
-    }
+    const statusText = cities.length
+      ? `已選 ${cities.length}/4 座城市，點擊查看`
+      : "尚未選擇城市，請先從城市詳情加入比較。";
+    document.querySelectorAll("#comparison-quick-status, #comparison-drawer-status").forEach(status => {
+      status.textContent = statusText;
+    });
     panel.innerHTML = `
       <div class="comparison-heading"><div><span class="section-kicker">COMPARE SOURCE DATA</span><h2>城市資料比較</h2><p>最多比較 4 座城市；各欄位會顯示目前可用資料與來源狀態。</p></div><span class="destination-count">${cities.length}/4 已選</span></div>
       <div class="comparison-actions">${cities.map(city => `<button type="button" class="compare-chip" data-remove="${city.id}">${city.flag || "🌍"} ${city.name} ×</button>`).join("")}</div>
@@ -342,13 +344,13 @@ window.PlannerView = {
     host.innerHTML = `
       <div class="city-tool-heading"><div><span class="section-kicker">PLAN WITH CONFIDENCE</span><h4>把靈感變成可執行計畫</h4></div><div class="city-tool-actions"><button type="button" class="tool-outline-btn" id="btn-favorite-city" data-favorite-key="city:${city.id}" aria-pressed="${this.isFavorite(`city:${city.id}`)}">${this.isFavorite(`city:${city.id}`) ? "★ 已收藏城市" : "☆ 收藏城市"}</button><button type="button" class="tool-outline-btn" id="btn-compare-city" aria-pressed="${selected}">${selected ? "✓ 已加入比較" : "＋ 加入城市比較"}</button></div></div>
       <div class="planner-tool-grid">
-        <section class="budget-tool"><h5>💰 旅行預算估算</h5><div class="budget-inputs">
+        <details class="planner-budget-disclosure"><summary>💰 旅行預算估算</summary><section class="budget-tool"><div class="budget-inputs">
           <label>住宿 <input type="number" min="0" step="500" data-budget="hotel" value="${budget.hotel}"></label>
           <label>交通 <input type="number" min="0" step="500" data-budget="transport" value="${budget.transport}"></label>
           <label>餐飲 <input type="number" min="0" step="500" data-budget="food" value="${budget.food}"></label>
           <label>景點／購物 <input type="number" min="0" step="500" data-budget="activity" value="${budget.activity}"></label>
-        </div><div id="budget-chart" class="budget-chart"></div><p id="budget-total" class="tool-total"></p><small class="planner-disclaimer">金額為台幣估算，依 5 天旅程預設，可自行調整。</small></section>
-        <section class="itinerary-tool"><h5>🗓️ 行程規劃</h5><p class="itinerary-help">可自行安排景點，或使用 AI 依旅遊偏好規劃每日路線。</p><div class="ai-itinerary-controls"><label for="itinerary-ai-preferences">旅行偏好 <span>選填</span></label><input id="itinerary-ai-preferences" type="text" maxlength="160" placeholder="例如：在地美食、博物館、親子、慢遊"><button type="button" class="tool-outline-btn ai-itinerary-button" id="btn-ai-itinerary">✨ AI 產生行程</button><p class="ai-itinerary-status" id="ai-itinerary-status" role="status" aria-live="polite"></p><small class="planner-disclaimer">景點先使用城市目錄與公開地圖資料；資料服務無回應時會提供地圖搜尋入口。地圖入口不是已核實景點，營業時間、交通與費用請以官方資訊為準。</small></div><div class="itinerary-days" role="group" aria-label="選擇旅行天數">${[3, 5, 7].map(days => `<button type="button" data-days="${days}" class="${days === 5 ? "active" : ""}">${days} 天</button>`).join("")}</div><div class="itinerary-customizer"><label>景點 <select id="itinerary-spot-select" aria-label="選擇景點">${spots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}</option>`).join("")}</select></label><label>加入第 <select id="itinerary-day-select" aria-label="選擇加入天數">${Array.from({ length: 7 }, (_, index) => `<option value="${index}">Day ${index + 1}</option>`).join("")}</select></label><button type="button" class="tool-outline-btn" id="btn-add-itinerary-spot">加入</button></div><label class="itinerary-mode-control">交通方式<select id="itinerary-travel-mode" aria-label="選擇交通方式"><option value="transit">大眾運輸</option><option value="walking">步行</option><option value="driving">開車</option></select><small id="itinerary-mode-recommendation"></small></label><div class="itinerary-actions"><button type="button" class="tool-outline-btn" id="btn-copy-itinerary">複製行程</button><button type="button" class="tool-outline-btn" id="btn-print-itinerary">列印行程</button></div><div id="itinerary-result" class="itinerary-result"></div></section>
+        </div><div id="budget-chart" class="budget-chart"></div><p id="budget-total" class="tool-total"></p><small class="planner-disclaimer">金額為台幣估算，依 5 天旅程預設，可自行調整。</small></section></details>
+        <section class="itinerary-tool"><h5>🗓️ 行程規劃</h5><p class="itinerary-help">可自行安排景點，或使用 AI 依旅遊偏好規劃每日路線。</p><div class="ai-itinerary-controls"><label for="itinerary-ai-preferences">旅行偏好 <span>選填</span></label><input id="itinerary-ai-preferences" type="text" maxlength="160" placeholder="例如：在地美食、博物館、親子、慢遊"><button type="button" class="tool-outline-btn ai-itinerary-button" id="btn-ai-itinerary">✨ AI 產生行程</button><p class="ai-itinerary-status" id="ai-itinerary-status" role="status" aria-live="polite"></p><small class="planner-disclaimer">景點先使用城市目錄與公開地圖資料；資料服務無回應時會提供地圖搜尋入口。地圖入口不是已核實景點，營業時間、交通與費用請以官方資訊為準。</small></div><div class="itinerary-days" role="group" aria-label="選擇旅行天數">${[3, 5, 7].map(days => `<button type="button" data-days="${days}" class="${days === 5 ? "active" : ""}">${days} 天</button>`).join("")}</div><details class="itinerary-options"><summary>調整景點、交通與分享方式</summary><div class="itinerary-options-content"><div class="itinerary-customizer"><label>景點 <select id="itinerary-spot-select" aria-label="選擇景點">${spots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}</option>`).join("")}</select></label><label>加入第 <select id="itinerary-day-select" aria-label="選擇加入天數">${Array.from({ length: 7 }, (_, index) => `<option value="${index}">Day ${index + 1}</option>`).join("")}</select></label><button type="button" class="tool-outline-btn" id="btn-add-itinerary-spot">加入</button></div><label class="itinerary-mode-control">交通方式<select id="itinerary-travel-mode" aria-label="選擇交通方式"><option value="transit">大眾運輸</option><option value="walking">步行</option><option value="driving">開車</option></select><small id="itinerary-mode-recommendation"></small></label><div class="itinerary-actions"><button type="button" class="tool-outline-btn" id="btn-copy-itinerary">複製行程</button><button type="button" class="tool-outline-btn" id="btn-print-itinerary">列印行程</button></div></div></details><div id="itinerary-result" class="itinerary-result"></div></section>
       </div>
     `;
     host.querySelector("#btn-favorite-city").addEventListener("click", event => {
@@ -386,7 +388,7 @@ window.PlannerView = {
         if (window.CityCatalogService?.ensureSpots) {
           await window.CityCatalogService.ensureSpots(city);
         }
-        const planningSpots = this.getPlanningSpots(city);
+        const planningSpots = this.getPlanningSpots(city).slice(0, this.itineraryDays * 3);
         if (!planningSpots.length) throw new Error("尚未取得可安排的景點，請確認網路後再試。");
         const spotSelect = host.querySelector("#itinerary-spot-select");
         if (spotSelect) spotSelect.innerHTML = planningSpots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}</option>`).join("");
@@ -478,10 +480,11 @@ window.PlannerView = {
     result.innerHTML = plan.map((day, dayIndex) => {
       const orderedSpots = custom[dayIndex].length
         ? custom[dayIndex].map(index => ({ index, spot: spots[index] })).filter(item => item.spot)
-        : spots.map((spot, index) => ({ index, spot })).filter(item => !customSet.has(item.index) && item.index % days === dayIndex);
+        : spots.map((spot, index) => ({ index, spot })).filter(item => !customSet.has(item.index) && item.index % days === dayIndex).slice(0, 3);
       const load = orderedSpots.length <= 2 ? "輕鬆" : orderedSpots.length <= 4 ? "適中" : "偏滿";
-      return `<article class="itinerary-day-card" data-itinerary-day="${dayIndex}">
-        <div class="itinerary-day-heading"><strong>Day ${dayIndex + 1}</strong><span>${escapePlannerText(aiDayPlans[dayIndex]?.theme || day.theme)}</span><small>${escapePlannerText(aiDayPlans[dayIndex]?.note || day.note)}</small></div>
+      return `<details class="itinerary-day-card" data-itinerary-day="${dayIndex}" ${dayIndex === 0 ? "open" : ""}>
+        <summary class="itinerary-day-summary"><strong>Day ${dayIndex + 1}</strong><span>${escapePlannerText(aiDayPlans[dayIndex]?.theme || day.theme)}</span><small>${orderedSpots.length} 個景點・${load}</small></summary>
+        <div class="itinerary-day-content"><div class="itinerary-day-heading"><small>${escapePlannerText(aiDayPlans[dayIndex]?.note || day.note)}</small></div>
         <div class="itinerary-load ${load === "偏滿" ? "is-busy" : ""}">今日安排：${load}・${orderedSpots.length} 個景點 ${load === "偏滿" ? "— 建議移除或分配至其他天" : ""}</div>
         <div class="itinerary-schedule">
           ${orderedSpots.length ? orderedSpots.map(({ index, spot }, order) => {
@@ -499,7 +502,8 @@ window.PlannerView = {
           }).join("") : `<p class="itinerary-empty-day">尚未安排景點，可從上方加入。</p>`}
         </div>
 
-      </article>`;
+        </div>
+      </details>`;
     }).join("");
 
     let dragged = null;

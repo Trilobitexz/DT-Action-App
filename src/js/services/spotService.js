@@ -2,11 +2,12 @@
 window.SpotService = {
   cache: {},
   openTripMapApiKey: "",
-  requestTimeoutMs: 10000,
+  requestTimeoutMs: 8000,
   requestQueue: [],
   nearbyPlaceRequests: {},
   cityLocationRequests: {},
   spotDetailRequests: {},
+  spotImageRequests: {},
   activeRequests: 0,
   scheduledRequests: 0,
   maxConcurrentRequests: 3,
@@ -115,6 +116,45 @@ window.SpotService = {
       thumbnail: image.thumburl || image.url,
       pageUrl: `https://commons.wikimedia.org/wiki/${encodeURIComponent(page.title).replace(/%20/g, "_")}`
     };
+  },
+
+  fetchSpotImage: function (spotName, cityName = "") {
+    const cacheKey = `image:${spotName}|${cityName}`;
+    if (this.cache[cacheKey]) return Promise.resolve(this.cache[cacheKey]);
+    if (this.spotImageRequests[cacheKey]) return this.spotImageRequests[cacheKey];
+    const cleanName = String(spotName || "").split("(")[0].trim();
+    const request = (async () => {
+      try {
+        const data = await this.requestJson(`https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanName)}`);
+        const thumbnail = data.thumbnail?.source || null;
+        if (thumbnail) {
+          const image = {
+            thumbnail,
+            pageUrl: data.content_urls?.desktop?.page || null,
+            title: data.title || spotName
+          };
+          this.cache[cacheKey] = image;
+          this.trimCache();
+          return image;
+        }
+      } catch (error) {
+        // 沒有百科縮圖時，改查 Commons；失敗則讓景點卡片維持文字版。
+      }
+      try {
+        const commons = await this.fetchCommonsImage(cleanName, cityName);
+        const image = { ...commons, title: spotName };
+        this.cache[cacheKey] = image;
+        this.trimCache();
+        return image;
+      } catch (error) {
+        this.cache[cacheKey] = { thumbnail: null };
+        this.trimCache();
+        return null;
+      }
+    })();
+    this.spotImageRequests[cacheKey] = request;
+    request.then(() => { delete this.spotImageRequests[cacheKey]; }, () => { delete this.spotImageRequests[cacheKey]; });
+    return request;
   },
 
   fetchOpenTripMap: async function (spotName, cityName) {
@@ -309,18 +349,17 @@ window.SpotService = {
     }
     if (this.nearbyPlaceRequests[cacheKey]) return this.nearbyPlaceRequests[cacheKey];
 
-    const query = `[out:json][timeout:25];(node["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});way["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});relation["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});node["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});way["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});relation["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});node["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});way["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});relation["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});node["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});way["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});relation["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});node["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng});way["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng});relation["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng}););out center tags;`;
+    const query = `[out:json][timeout:15];(node["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});way["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});relation["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});node["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});way["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});relation["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});node["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});way["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});relation["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});node["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});way["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});relation["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});node["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng});way["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng});relation["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng}););out center tags;`;
     this.nearbyPlaceRequests[cacheKey] = (async () => {
       try {
         let data = null;
         let requestError = null;
         for (const endpoint of [
           "https://overpass-api.de/api/interpreter",
-          "https://overpass.kumi.systems/api/interpreter",
           "https://overpass.nchc.org.tw/api/interpreter"
         ]) {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
           try {
             const response = await fetch(endpoint, {
               method: "POST",
