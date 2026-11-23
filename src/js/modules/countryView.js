@@ -169,6 +169,14 @@ window.CountryView = {
 
     const currentCity = country.cities.find(ci => ci.id === state.selectedCityId) || country.cities[0];
     if (!currentCity) return;
+    spotsContainer.onmouseover = event => {
+      const card = event.target.closest(".spot-item[data-spot-index]");
+      if (card && !card.contains(event.relatedTarget)) window.mapManager?.setSpotCardHighlight?.(card.dataset.cityId, Number(card.dataset.spotIndex), true);
+    };
+    spotsContainer.onmouseout = event => {
+      const card = event.target.closest(".spot-item[data-spot-index]");
+      if (card && !card.contains(event.relatedTarget)) window.mapManager?.setSpotCardHighlight?.(card.dataset.cityId, Number(card.dataset.spotIndex), false);
+    };
     spotsContainer.onclick = event => {
       const retryButton = event.target.closest("[data-retry-city-spots]");
       if (retryButton) {

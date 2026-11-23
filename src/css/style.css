@@ -2744,6 +2744,51 @@ body.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
 .cloud-sync-status[data-state="success"] { color: #16745e; }
 .cloud-sync-status[data-state="error"] { color: #b42318; }
 
+/* 地圖探索控制、城市與景點連動 */
+#map-hero-card .map-continent-chips {
+  inset: auto .7rem .7rem auto;
+  max-width: min(72%, 670px);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  transform: none;
+}
+.btn-auth.auth-menu-trigger { white-space: nowrap; flex: 0 0 auto; }
+.map-global-city-marker {
+  min-height: 25px;
+  padding: 3px 6px;
+  border-color: rgba(37,99,235,.54);
+  border-radius: 999px;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 2px 8px rgba(30,64,175,.2);
+}
+.map-global-city-marker.labels-visible { padding-inline: 8px; }
+.map-global-city-marker:hover,
+.map-global-city-marker:focus-visible { z-index: 4; }
+.map-context-landmark.is-hovered {
+  z-index: 8;
+  background: #b65337;
+  color: #fff;
+  transform: scale(1.32);
+  box-shadow: 0 5px 18px rgba(114,48,32,.35);
+}
+.map-context-landmark.is-hovered .map-context-landmark-label { display: block; }
+.spot-item-map-hover {
+  border-color: #b65337 !important;
+  background: #fffaf7 !important;
+  box-shadow: 0 0 0 3px rgba(182,83,55,.12), 0 8px 22px rgba(67,42,32,.1) !important;
+}
+.spot-item-map-focus { scroll-margin-block: 25vh; }
+@media (max-width: 760px) {
+  #map-hero-card .map-continent-chips {
+    inset: auto .45rem .55rem auto;
+    width: auto;
+    max-width: 82%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    transform: none;
+  }
+}
+
 /* 首頁進階工具採漸進揭露，讓地圖與目的地探索保持主視覺。 */
 .progressive-tool-section {
   margin: 1rem 0;

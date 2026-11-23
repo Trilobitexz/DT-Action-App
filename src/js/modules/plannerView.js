@@ -546,7 +546,7 @@ window.PlannerView = {
     const syncDayMap = dayIndex => {
       const card = dayCards[dayIndex];
       if (!card?.open) { window.mapManager?.clearItineraryRoute?.(); return; }
-      const mappedCount = window.mapManager?.showItineraryDay?.(city, daySpotLists[dayIndex]) || 0;
+      const mappedCount = window.mapManager?.showItineraryDay?.(city, daySpotLists[dayIndex], dayIndex) || 0;
       card.dataset.mapLinked = mappedCount ? "true" : "false";
     };
     dayCards.forEach((card, dayIndex) => card.addEventListener("toggle", () => {
