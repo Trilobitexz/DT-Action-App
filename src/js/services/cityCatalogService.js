@@ -45,13 +45,14 @@
           new Promise((_, reject) => { timeoutId = window.setTimeout(() => reject(new Error("Firestore 城市目錄查詢逾時")), 3000); })
         ]).finally(() => window.clearTimeout(timeoutId));
         const city = citySnapshot.exists ? citySnapshot.data() : null;
+        const coordinate = value => value !== null && value !== undefined && value !== ""
+          && Number.isFinite(Number(value)) ? Number(value) : null;
+        const cityCoordinates = { lat: coordinate(city?.lat), lng: coordinate(city?.lng) };
         const spots = [];
         spotSnapshot.forEach(doc => {
           const data = doc.data();
           if (!data || !data.name) return;
-          const coordinate = value => value !== null && value !== undefined && value !== ""
-            && Number.isFinite(Number(value)) ? Number(value) : null;
-          spots.push({
+          const spot = {
             id: doc.id,
             index: data.index !== null && data.index !== undefined && data.index !== "" && Number.isFinite(Number(data.index)) ? Number(data.index) : null,
             isFeatured: data.isFeatured === true,
@@ -78,7 +79,8 @@
             rating: data.rating !== null && data.rating !== undefined && data.rating !== "" && Number.isFinite(Number(data.rating)) && Number(data.rating) >= 0 && Number(data.rating) <= 5 ? Number(data.rating) : null,
             ratingSource: typeof data.ratingSource === "string" && data.ratingSource.trim() ? data.ratingSource.trim() : null,
             publishedAt: data.publishedAt?.toMillis ? data.publishedAt.toMillis() : null
-          });
+          };
+          if (this.hasValidSpotCoordinates(spot, cityCoordinates)) spots.push(spot);
         });
         const result = { city: city || null, spots };
         this.cache.set(key, result);
@@ -96,6 +98,21 @@
     normalizeSpotName: function (value) {
       return String(value || "").normalize("NFKC").trim().toLocaleLowerCase()
         .replace(/[\s\p{P}]+/gu, "");
+    },
+    hasValidSpotCoordinates: function (spot, city = null) {
+      const lat = spot?.lat;
+      const lng = spot?.lng;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)
+        || lat === 0 || lng === 0 || lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+      if (Number.isFinite(city?.lat) && Number.isFinite(city?.lng)) {
+        const radians = Math.PI / 180;
+        const dLat = (lat - city.lat) * radians;
+        const dLng = (lng - city.lng) * radians;
+        const value = Math.sin(dLat / 2) ** 2 + Math.cos(city.lat * radians) * Math.cos(lat * radians) * Math.sin(dLng / 2) ** 2;
+        const distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+        if (distanceKm > 50) return false;
+      }
+      return true;
     },
     mergeSpots: function (...groups) {
       const merged = [];
@@ -160,7 +177,6 @@
       if (this.spotRequests.has(key)) return this.spotRequests.get(key);
 
       const request = (async () => {
-        const curated = this.mergeSpots(city.spots || [], city.spotCandidates || []);
         const localKey = `journey-atlas-city-spots-v2-${key}`;
         let saved = null;
         try {
@@ -170,20 +186,47 @@
           console.warn("城市景點快取無法讀取：", error);
         }
 
-        let liveSpots = saved?.spots || [];
-        let cloudCatalog = null;
-        const cloudPromise = !saved ? this.fetchCity(key).catch(error => {
-            console.warn(`讀取 ${city.name || key} 雲端城市目錄失敗：`, error);
-            return null;
-          }) : Promise.resolve(null);
+        const cachedSpots = Array.isArray(saved?.spots) ? saved.spots : [];
+        const cloudPromise = this.fetchCity(key).catch(error => {
+          console.warn(`讀取 ${city.name || key} 雲端城市目錄失敗：`, error);
+          return null;
+        });
         if (typeof onCatalogReady === "function") {
           cloudPromise.then(catalog => {
-            if (!catalog?.spots?.length) return;
-            const earlySpots = this.sortSpotsByQuality(this.mergeSpots(city.spots || [], catalog.spots, city.spotCandidates || []));
+            if (!catalog) return;
+            const catalogCity = catalog.city || {};
+            if ((!Number.isFinite(city.lat) || !Number.isFinite(city.lng))
+              && Number.isFinite(catalogCity.lat) && Number.isFinite(catalogCity.lng)) {
+              city.lat = catalogCity.lat;
+              city.lng = catalogCity.lng;
+            }
+            const earlySpots = this.sortSpotsByQuality(this.mergeSpots(catalog.spots, city.spots || [], cachedSpots, city.spotCandidates || []));
+            if (!earlySpots.some(spot => this.hasValidSpotCoordinates(spot, city))
+              && (!Number.isFinite(city.lat) || !Number.isFinite(city.lng))) return;
             onCatalogReady(earlySpots, catalog);
           }).catch(error => console.warn("無法提早顯示雲端景點目錄：", error));
         }
-        if (!saved && window.SpotService) {
+        const cloudCatalog = await cloudPromise;
+        if (cloudCatalog?.city) {
+          const catalogCity = cloudCatalog.city;
+          if ((!Number.isFinite(city.lat) || !Number.isFinite(city.lng))
+            && Number.isFinite(catalogCity.lat) && Number.isFinite(catalogCity.lng)) {
+            city.lat = catalogCity.lat;
+            city.lng = catalogCity.lng;
+          }
+          if (catalogCity.description && !city.descriptionSource?.text) {
+            city.descriptionSource = {
+              text: catalogCity.description,
+              pageUrl: catalogCity.sourceUrl || null,
+              sourceLabel: catalogCity.sourceLabel || "後台城市目錄"
+            };
+          }
+        }
+        const cloudSpots = cloudCatalog?.spots || [];
+        const preferredSpots = this.sortSpotsByQuality(this.mergeSpots(cloudSpots, city.spots || [], cachedSpots, city.spotCandidates || []));
+        const hasEnoughLocatedSpots = preferredSpots.filter(spot => this.hasValidSpotCoordinates(spot, city)).length >= 3;
+        let liveSpots = [];
+        if (!hasEnoughLocatedSpots && window.SpotService) {
           let coordinates = Number.isFinite(city.lat) && Number.isFinite(city.lng)
             ? { lat: city.lat, lng: city.lng }
             : null;
@@ -202,31 +245,19 @@
               };
             }
           }
-          const livePromise = coordinates
-            ? window.SpotService.fetchNearbyPlaces({ ...city, ...coordinates }, { radius, limit }).catch(error => {
+          liveSpots = coordinates
+            ? await window.SpotService.fetchNearbyPlaces({ ...city, ...coordinates }, { radius, limit }).catch(error => {
               console.warn(`載入 ${city.name} 周邊景點失敗：`, error);
               return [];
             })
-            : Promise.resolve([]);
-          [cloudCatalog, liveSpots] = await Promise.all([cloudPromise, livePromise]);
-        } else if (!saved) {
-          cloudCatalog = await cloudPromise;
+            : [];
         }
-
-        const cloudSpots = cloudCatalog?.spots || [];
-        if (cloudCatalog?.city?.description && !city.descriptionSource?.text) {
-          city.descriptionSource = {
-            text: cloudCatalog.city.description,
-            pageUrl: cloudCatalog.city.sourceUrl || null,
-            sourceLabel: cloudCatalog.city.sourceLabel || "後台城市目錄"
-          };
-        }
-        let spots = this.mergeSpots(city.spots || [], cloudSpots, liveSpots, city.spotCandidates || []);
+        let spots = this.mergeSpots(cloudSpots, city.spots || [], cachedSpots, liveSpots, city.spotCandidates || []);
         spots = this.sortSpotsByQuality(spots);
         if (!spots.length) spots = this.createMapSearchSuggestions(city);
         city.spots = spots;
         city._spotCatalogReady = true;
-        city.spotsSource = saved ? "cached" : liveSpots.length ? "live" : cloudSpots.length ? "firestore" : "local-or-map-search";
+        city.spotsSource = cloudSpots.length ? "firestore" : liveSpots.length ? "live" : saved ? "cached" : "local-or-map-search";
         city.dataStatus = { ...(city.dataStatus || {}), spots: spots.some(spot => !spot.isSearchSuggestion) ? "available" : "map-search-fallback" };
         this.spotCache.set(key, spots);
         if (liveSpots.length) {

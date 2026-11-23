@@ -283,7 +283,7 @@ window.CountryView = {
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.4rem;">
             <div class="spot-score">${hasSourcedRating(spot) ? `★ ${Number(spot.rating).toFixed(1)} · ${escapeHtml(spot.ratingSource)}` : "評分資料未提供"}</div>
-            <button type="button" class="spot-map-focus" data-map-focus-spot data-city-id="${currentCity.id}" data-spot-index="${idx}" ${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 12) || (!Number.isFinite(spot.lat) || !Number.isFinite(spot.lng)) ? "disabled" : ""} title="${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 12) ? "為保持地圖清晰，目前只載入前 12 個來源優先景點" : "在城市地圖查看位置"}">🗺️ 在地圖查看</button>
+            <button type="button" class="spot-map-focus" data-map-focus-spot data-city-id="${currentCity.id}" data-spot-index="${idx}" ${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 50) || (!Number.isFinite(spot.lat) || !Number.isFinite(spot.lng)) ? "disabled" : ""} title="${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 50) ? "目前地圖景點數量已達上限" : "在城市地圖查看位置"}">🗺️ 在地圖查看</button>
             <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${spot.name}, ${currentCity.name}, ${currentCity.countryName || country.name}`)}" target="_blank" rel="noopener noreferrer" class="spot-source-link spot-google-map">在 Google 地圖開啟</a>
             ${safeHttpUrl(spot.sourceUrl) ? `<a href="${safeHttpUrl(spot.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="spot-source-link">查看來源資料</a>` : ""}
             ${safeHttpUrl(spot.website) ? `<a href="${safeHttpUrl(spot.website)}" target="_blank" rel="noopener noreferrer" class="spot-source-link">官方網站／資訊</a>` : ""}
@@ -371,9 +371,23 @@ window.CountryView = {
       window.CityCatalogService.ensureSpots(catalogCity, {
         onCatalogReady: (publishedSpots, publishedCatalog) => {
           if (!isCurrentCity()) return;
+          const catalogCityData = publishedCatalog.city || {};
+          if ((!Number.isFinite(currentCity.lat) || !Number.isFinite(currentCity.lng))
+            && Number.isFinite(catalogCityData.lat) && Number.isFinite(catalogCityData.lng)) {
+            currentCity.lat = catalogCityData.lat;
+            currentCity.lng = catalogCityData.lng;
+            catalogCity.lat = catalogCityData.lat;
+            catalogCity.lng = catalogCityData.lng;
+            currentCity.coordinateSource = {
+              provider: catalogCityData.coordinateSourceLabel || "Firestore 公開城市目錄",
+              sourceUrl: catalogCityData.coordinateSourceUrl || ""
+            };
+          }
           currentCity.spots = publishedSpots;
           currentCity.attractions = publishedSpots.map(spot => spot.name);
           currentCity.spotsSource = "firestore";
+          currentCity._spotCatalogReady = true;
+          catalogCity._spotCatalogReady = true;
           if (publishedCatalog.city?.description && !currentCity.descriptionSource?.text) {
             currentCity.descriptionSource = {
               text: publishedCatalog.city.description,
@@ -386,8 +400,22 @@ window.CountryView = {
           if (storedCity) {
             storedCity.spots = publishedSpots;
             storedCity.attractions = currentCity.attractions;
+            if (Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng)) {
+              storedCity.lat = currentCity.lat;
+              storedCity.lng = currentCity.lng;
+              storedCity.coordinateSource = currentCity.coordinateSource || storedCity.coordinateSource;
+            }
           }
           window.CountryView.render(state);
+          if (Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng)) {
+            window.mapManager?.showCityContext(currentCity, {
+              animate: false,
+              preserveView: window.mapManager?.currentCityContext?.id === currentCity.id
+            });
+            if (country.flightInfo?.hasDirect === true || country.flightInfo?.hasDirect === false) {
+              window.mapManager?.showFlightRoute(currentCity, country.flightInfo.hasDirect);
+            }
+          }
         }
       }).then(spots => {
         currentCity.spots = spots;

@@ -160,32 +160,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const backdrop = document.getElementById("drawer-backdrop");
   const drawers = document.querySelectorAll(".side-drawer");
   const sidebar = document.querySelector(".app-sidebar");
-  const sidebarToggle = document.getElementById("sidebar-collapse-toggle");
-  const setSidebarCollapsed = (collapsed, persist = true) => {
-    document.body.classList.toggle("sidebar-collapsed", collapsed);
-    if (sidebarToggle) {
-      sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
-      const label = collapsed ? "展開側邊導覽" : "收合側邊導覽";
-      sidebarToggle.setAttribute("aria-label", label);
-      sidebarToggle.title = label;
-      const text = sidebarToggle.querySelector(".sidebar-toggle-label");
-      if (text) text.textContent = collapsed ? "展開導覽" : "收合導覽";
-    }
-    if (persist) {
-      try { localStorage.setItem("journey-atlas-sidebar-collapsed", String(collapsed)); }
-      catch (error) { console.warn("無法儲存側邊導覽狀態。", error); }
-    }
+  const sidebarCompactQuery = window.matchMedia?.("(max-width: 980px)");
+  const syncSidebarLayout = () => {
+    document.body.classList.toggle("sidebar-collapsed", sidebarCompactQuery?.matches === true);
     if (sidebar) window.requestAnimationFrame(() => mapManager.invalidateSize());
   };
-  let sidebarInitiallyCollapsed = window.matchMedia?.("(min-width: 981px)").matches === false;
-  try {
-    const savedSidebarState = localStorage.getItem("journey-atlas-sidebar-collapsed");
-    if (savedSidebarState !== null) sidebarInitiallyCollapsed = savedSidebarState === "true";
-  } catch (error) { console.warn("無法讀取側邊導覽狀態，使用預設值。", error); }
-  setSidebarCollapsed(sidebarInitiallyCollapsed, false);
-  sidebarToggle?.addEventListener("click", () => {
-    setSidebarCollapsed(!document.body.classList.contains("sidebar-collapsed"));
-  });
+  syncSidebarLayout();
+  sidebarCompactQuery?.addEventListener?.("change", syncSidebarLayout);
   let drawerTrigger = null;
   const closeDrawers = () => {
     const restoreTarget = drawerTrigger;

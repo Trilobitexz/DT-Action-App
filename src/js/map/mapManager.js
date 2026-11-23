@@ -1,6 +1,6 @@
 // MapLibre GL JS 單一地圖引擎：Mercator 與 globe 投影共用向量圖層及互動狀態。
 class MapManager {
-  static MAX_CITY_SPOT_MARKERS = 12;
+  static MAX_CITY_SPOT_MARKERS = 50;
 
   constructor(containerId, options = {}) {
     this.containerId = containerId;
@@ -160,7 +160,7 @@ class MapManager {
     this.map.addLayer({ id: "global-city-clusters", type: "circle", source: "globalCities", filter: ["has", "point_count"], layout: { visibility: "none" }, paint: { "circle-color": "#176b5b", "circle-radius": ["step", ["get", "point_count"], 14, 10, 18, 30, 23], "circle-opacity": 0.9, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
     this.map.addLayer({ id: "global-city-cluster-count", type: "symbol", source: "globalCities", filter: ["has", "point_count"], layout: { visibility: "none", "text-field": ["get", "point_count_abbreviated"], "text-size": 11 }, paint: { "text-color": "#ffffff" } });
     this.map.addLayer({ id: "global-city-symbols", type: "circle", source: "globalCities", filter: ["!", ["has", "point_count"]], layout: { visibility: "none" }, paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 5, 6, 9, 9], "circle-color": "#2563eb", "circle-opacity": 0.96, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.6 } });
-    this.map.addLayer({ id: "global-city-labels", type: "symbol", source: "globalCities", filter: ["!", ["has", "point_count"]], layout: { visibility: "none", "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": ["step", ["zoom"], 0, 4.8, 9, 6, 11], "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true, "text-allow-overlap": false }, paint: { "text-color": "#1e3a8a", "text-halo-color": "#ffffff", "text-halo-width": 1.6 } });
+    this.map.addLayer({ id: "global-city-labels", type: "symbol", source: "globalCities", filter: ["!", ["has", "point_count"]], layout: { visibility: "none", "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": ["step", ["zoom"], 0, 4.2, 9, 6, 11], "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true, "text-allow-overlap": false }, paint: { "text-color": "#1e3a8a", "text-halo-color": "#ffffff", "text-halo-width": 1.6 } });
     this.map.addLayer({ id: "spot-circles", type: "circle", source: "spots", filter: ["!=", ["get", "kind"], "center"], layout: { visibility: "none" }, paint: { "circle-radius": 8, "circle-color": "#d3483c", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
     this.map.addLayer({ id: "spot-labels", type: "symbol", source: "spots", filter: ["!=", ["get", "kind"], "center"], layout: { visibility: "none", "text-field": ["get", "label"], "text-size": 11, "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#7f2927", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
     this.map.addLayer({ id: "city-center", type: "circle", source: "spots", filter: ["==", ["get", "kind"], "center"], paint: { "circle-radius": 7, "circle-color": "#1689bb", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
@@ -333,12 +333,12 @@ class MapManager {
     const world = !this.currentCityContext, zoom = this.map.getZoom();
     this.map.getLayer("continent-symbols")?.setLayoutProperty("visibility", world && zoom < 2.8 ? "visible" : "none");
     ["city-circles", "city-symbols"].forEach(id => this.map.getLayer(id)?.setLayoutProperty("visibility", "none"));
-    const showClusters = world && zoom >= 2.8 && zoom < 5.5;
-    const showGlobalCities = world && zoom >= 3.2;
+    const showClusters = world && zoom >= 2.0 && zoom < 5.5;
+    const showGlobalCities = world && zoom >= 2.0;
     this.map.getLayer("global-city-clusters")?.setLayoutProperty("visibility", showClusters ? "visible" : "none");
     this.map.getLayer("global-city-cluster-count")?.setLayoutProperty("visibility", showClusters ? "visible" : "none");
     this.map.getLayer("global-city-symbols")?.setLayoutProperty("visibility", showGlobalCities ? "visible" : "none");
-    this.map.getLayer("global-city-labels")?.setLayoutProperty("visibility", world && zoom >= 4.8 ? "visible" : "none");
+    this.map.getLayer("global-city-labels")?.setLayoutProperty("visibility", world && zoom >= 4.2 ? "visible" : "none");
     this.cityContextDomMarkers.forEach(marker => {
       const element = marker.getElement();
       const filteredOut = element.dataset.cityMarkerType === "spot"
@@ -353,9 +353,9 @@ class MapManager {
     this.localCityDomMarkers.forEach(marker => {
       const element = marker.getElement();
       const tier = element.classList.contains("city-tier-major") ? "major" : element.classList.contains("city-tier-medium") ? "medium" : "small";
-      const minimumZoom = tier === "major" ? 4.0 : tier === "medium" ? 4.6 : 5.2;
+      const minimumZoom = tier === "major" ? 3.2 : tier === "medium" ? 4.0 : 4.8;
       element.hidden = !world || zoom < minimumZoom;
-      element.classList.toggle("labels-visible", zoom >= (tier === "major" ? 3.8 : tier === "medium" ? 4.7 : 5.8));
+      element.classList.toggle("labels-visible", zoom >= (tier === "major" ? 3.2 : tier === "medium" ? 4.2 : 5.2));
     });
   }
   handleCityContextZoom(event) {
@@ -385,7 +385,8 @@ class MapManager {
     if (opts.duration) this.map.flyTo(opts); else this.map.jumpTo(opts);
   }
   showCityContext(city, { animate = true, preserveView = false } = {}) {
-    if (!this.map || !city || !Number.isFinite(city.lat) || !Number.isFinite(city.lng)) return;
+    if (!this.map || !city || !Number.isFinite(city.lat) || !Number.isFinite(city.lng)
+      || city.lat < -90 || city.lat > 90 || city.lng < -180 || city.lng > 180) return;
     const keepUserView = preserveView && this.currentCityContext?.id === city.id && this.cityContextUserInteracted;
     this.currentCityContext = city; this.cityContextExitPending = false; this.cityContextZoomOutPending = false; this.cityContextUserInteracted = keepUserView; this.activeCitySpotCategory = "all"; this.clearCitySpots();
     const requestId = this.cityContextRequestId;
@@ -394,6 +395,7 @@ class MapManager {
     const visibleSpots = sourceSpots.slice(0, MapManager.MAX_CITY_SPOT_MARKERS);
     visibleSpots.forEach((spot, index) => {
       const hasCoords = Number.isFinite(spot.lat) && Number.isFinite(spot.lng)
+        && spot.lat !== 0 && spot.lng !== 0
         && spot.lat >= -90 && spot.lat <= 90 && spot.lng >= -180 && spot.lng <= 180;
       const feature = hasCoords
         ? this.feature(`${city.id}-spot-${index}`, [spot.lng, spot.lat], { kind: "spot", cityId: city.id, index, name: spot.name, label: `${index + 1}. ${spot.name}`, category: spot.category || "景點", rating: spot.rating || "—", note: spot.note || "", approximate: false })
@@ -414,6 +416,8 @@ class MapManager {
       let nextIndex = sourceSpots.length;
       places.forEach(spot => {
         if (this.geojson.spots.features.filter(feature => feature.properties?.kind === "spot").length >= MapManager.MAX_CITY_SPOT_MARKERS) return;
+        if (!Number.isFinite(spot?.lat) || !Number.isFinite(spot?.lng) || spot.lat === 0 || spot.lng === 0
+          || spot.lat < -90 || spot.lat > 90 || spot.lng < -180 || spot.lng > 180) return;
         const name = normalizeName(spot.name);
         if (!name || knownNames.has(name)) return;
         knownNames.add(name);
@@ -677,7 +681,12 @@ class MapManager {
   }
   fitCityContext(city, animate = true) {
     if (!this.map || this.currentCityContext?.id !== city.id) return;
-    const points = [[city.lng, city.lat], ...this.geojson.spots.features.map(item => item.geometry.coordinates), ...this.geojson.airports.features.map(item => item.geometry.coordinates)];
+    const spotPoints = this.geojson.spots.features
+      .filter(item => item.properties?.kind === "spot")
+      .map(item => item.geometry.coordinates);
+    const points = spotPoints.length
+      ? [[city.lng, city.lat], ...spotPoints]
+      : [[city.lng, city.lat], ...this.geojson.airports.features.map(item => item.geometry.coordinates)];
     if (points.length < 2) {
       this.flyToCity(city.lat, city.lng, 11, { animate });
       return;

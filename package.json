@@ -3,7 +3,9 @@
   "private": true,
   "description": "旅途指南 Journey Atlas",
   "scripts": {
+    "enrich:city-spots": "node scripts/enrich-city-spots.mjs",
     "seed:city-catalog": "node scripts/seed-city-catalog.mjs",
+    "verify:city-catalog": "node scripts/verify-city-catalog.mjs",
     "deploy:firebase-config": "npx firebase-tools deploy --only auth,firestore:rules,firestore:indexes --project dt-action-app"
   },
   "dependencies": {

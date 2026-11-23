@@ -78,7 +78,7 @@ flowchart LR
 
 ## 專案核心特色
 
-1. **互動式世界地圖**：提供世界地圖視角，支援縮放、平移與直覺點選；全球城市使用 MapLibre GeoJSON 群聚，縮放後逐步顯示單一城市及標籤。進入城市後沿用同一張地圖放大至城市尺度，優先顯示最多 12 個來源排序靠前的景點與機場，減少標記重疊；點擊標記可查看資訊並返回世界或上一層地圖。
+1. **互動式世界地圖**：提供世界地圖視角，支援縮放、平移與直覺點選；全球城市使用 MapLibre GeoJSON 群聚，縮放後逐步顯示單一城市及標籤。進入城市後沿用同一張地圖放大至城市尺度，顯示最多 50 個有效座標景點與機場；點擊標記可查看資訊並返回世界或上一層地圖。
 2. **大洲與多維度篩選**：支援直飛篩選、預算與物價指標過濾、關鍵字即時搜尋。
 3. **國家與城市深度分析**：
    - ✈️ **直飛航班情報**：清楚呈現直飛/轉機、航空公司、預估航程。
@@ -120,14 +120,14 @@ Firebase 使用 compat SDK 初始化 Authentication 與 Analytics；Google 登�
 ### 評分與費用呈現原則
 
 - 景點星等只有在同時具備 0–5 範圍的數值與評分來源時才顯示；缺任一項時顯示「評分資料未提供」，不以模型或編輯者印象補分。
-- 城市目錄以 `isFeatured`／`featuredRank` 優先，接著優先有來源連結及座標的資料，最後依既有來源順序呈現。地圖只載入排序前 12 個城市景點，景點清單仍可展開瀏覽完整資料；未載入地圖的項目仍可透過 Google Maps 搜尋。
+- 城市目錄以 `isFeatured`／`featuredRank` 優先，接著優先有來源連結及座標的資料，最後依既有來源順序呈現。地圖最多載入 50 個有效座標景點，並依已載入景點調整視野；景點清單仍可展開瀏覽完整資料。
 - 內建國家級物價範圍是概略規劃資料，不是城市排名、統計分數或即時報價；日期、地區、匯率和消費方式都會造成差異。預算工具因此不預填通用金額，只加總使用者輸入的項目並除以行程天數。
 - 若要把物價升級成可比較的城市估值，資料必須帶有來源、幣別、採樣日期、住宿／餐飲等級及區域；在這些欄位齊備前不產生城市物價分數。
 
 - 城市、航班與物價部分為專案整理或規劃參考資料，不代表即時航班、即時價格或官方簽證結果。
 - 天氣、匯率與景點補充資料依賴外部服務；服務無法使用時，介面會保留內建資料並標示目前狀態。
 - 景點圖片、百科摘要、地址與座標可能來自不同公開資料來源，更新時間與完整度可能不同。
-- 前端館藏會優先讀取 Firestore 公開目錄 `cities/{cityId}` 與 `cities/{cityId}/spots/{spotId}`；訪客可讀取，瀏覽器不提供一般寫入權限。執行 `npm run seed:city-catalog` 可透過 Firebase Admin Application Default Credentials 將現有館藏匯入後台。
+- 前端館藏會優先讀取 Firestore 公開目錄 `cities/{cityId}` 與 `cities/{cityId}/spots/{spotId}`；訪客可讀取，瀏覽器不提供一般寫入權限。城市景點離線資料由 `npm run enrich:city-spots` 產生，再執行 `npm run seed:city-catalog` 透過 Firebase Admin Application Default Credentials 匯入。
 - GeoNames 城市地名資料以 CC BY 4.0 授權；資料來源與地名 ID 保留於城市目錄，地圖頁會顯示來源連結。
 - OpenStreetMap Nominatim 僅在使用者開啟尚未有座標的城市時查詢，每個瀏覽器序列化請求並至少間隔 1.1 秒，座標快取 180 天；使用量需遵守 [Nominatim 使用政策](https://operations.osmfoundation.org/policies/nominatim/)。
 - 景點補充會合併 OpenStreetMap、Wikidata 與 Wikipedia 的地理資料；資料服務無回應且沒有本地景點候選時，改顯示標示清楚的地圖搜尋入口，不推測單一景點或座標。
@@ -159,6 +159,14 @@ Firebase 初始化與 Web SDK 設定位於 [`src/js/firebase.js`](./src/js/fireb
 Firebase Authentication 前端登入使用 Google（不含 LINE，也不顯示電子郵件／密碼登入表單）。本機程式預期使用 Firestore Standard；實際資料庫版本與位置請在 Firebase Console 核對。登入後，城市收藏、比較清單、最近瀏覽、預算與行程會同步至 `users/{uid}/appData/{dataId}`；部署本機規則後，每位使用者只能讀寫自己的資料。資料仍會保留在本機，網路／規則問題時會在帳戶選單顯示同步狀態。
 
 Firestore 安全規則位於 [`firestore.rules`](./firestore.rules)，僅允許指定應用資料文件與受限 JSON 字串大小。雲端是否已部署需在 Firebase Console 核對；可依照 [`Firebase 維運與發布流程`](./FIREBASE_OPERATIONS.md) 部署 Authentication／Firestore 設定並完成發布檢查。Firebase Hosting 設定保留於 `firebase.json`，但目前網站發布由 GitHub Pages 負責。
+
+### 城市景點離線補齊與匯入
+
+1. 在具備網路的管理者電腦執行 `npm run enrich:city-spots`（或 `node scripts/enrich-city-spots.mjs`）。腳本讀取前端 200 座去重城市，沿用內建 GeoNames 座標，缺座標時依 Nominatim 政策以至少 1.1 秒間隔查詢；先查中文 Wikipedia geosearch，不足三筆再查英文 Wikipedia 與 Wikidata，篩出 50 公里內具來源網址與合法座標的景點。若只想重試上次未達三筆的城市，可加 `--retry-incomplete`。
+2. 腳本產生 `scripts/data/prebuilt-spots.json`，並列出成功城市數及不足三筆的城市。公開資料不足時不會捏造景點；必須人工檢查缺漏，預設匯入會拒絕未達至少 200 城市、每城三筆或座標驗證不通過的資料。
+3. 檢查統計後執行 `npm run seed:city-catalog`（或 `node scripts/seed-city-catalog.mjs`）。需安裝專案依賴，並以 `gcloud auth application-default login` 設定管理者 ADC，確認帳號有目標 Firebase 專案的 Firestore 寫入權限。匯入腳本會先完整驗證 JSON，再以最多 400 筆操作的 Firestore `writeBatch` 寫入；固定文件 ID 允許修正資料後安全重跑。
+4. 執行 `npm run verify:city-catalog`（或 `node scripts/verify-city-catalog.mjs`）從 Firestore 回讀全部城市文件與景點子集合，逐筆驗證座標、來源、50 公里範圍與至少三筆景點。只有回讀驗證成功，才可判定資料庫匯入完成。
+5. 前端進入城市頁時先讀 Firestore 子集合；有效景點到達即更新卡片和 MapLibre 標記，並依標記 bounds 調整視野。地圖仍需網路載入底圖；公開資料、Nominatim 回應和服務可用度無法保證每次都能取得三筆百科景點，因此以產生報告與匯入前驗證為準。
 
 
 ## AI 旅程規劃

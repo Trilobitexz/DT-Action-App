@@ -15,13 +15,12 @@
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="src/css/style.css?v=43">
+  <link rel="stylesheet" href="src/css/style.css?v=44">
 
 </head>
 <body>
   <aside class="app-sidebar" aria-label="主要功能導覽">
     <a class="sidebar-brand" href="#view-world" onclick="window.appNavigate('world'); return false;"><span>✈</span><strong>旅途指南</strong><small>JOURNEY ATLAS</small></a>
-    <button type="button" class="sidebar-collapse-toggle" id="sidebar-collapse-toggle" aria-expanded="true" aria-controls="sidebar-navigation" aria-label="收合側邊導覽" title="收合側邊導覽"><span aria-hidden="true">◀</span><span class="sidebar-toggle-label">收合導覽</span></button>
     <nav class="sidebar-nav" id="sidebar-navigation" aria-label="功能選單">
       <button type="button" class="sidebar-nav-item active" data-sidebar-action="explore" aria-label="探索" aria-current="page"><span>🌍</span><small>探索</small></button>
       <button type="button" class="sidebar-nav-item" data-sidebar-action="cities" aria-label="城市目錄" aria-controls="city-rankings-drawer" aria-expanded="false"><span>🏙️</span><small>城市目錄</small></button>
@@ -302,7 +301,7 @@
       window.mapLibreReady.catch(error => console.error(error));
     </script>
     <script src="src/js/map/geoContinents.js" defer></script>
-    <script src="src/js/map/mapManager.js?v=38" defer></script>
+    <script src="src/js/map/mapManager.js?v=40" defer></script>
 
     <!-- 載入資料庫與各洲資料模組 -->
     <script src="src/data/travelData.js" defer></script>
@@ -318,19 +317,19 @@
     <script src="src/js/services/weatherService.js" defer></script>
     <script src="src/js/services/flightService.js" defer></script>
     <script src="src/js/services/spotService.js?v=44" defer></script>
-    <script src="src/js/services/cityCatalogService.js?v=6" defer></script>
+    <script src="src/js/services/cityCatalogService.js?v=7" defer></script>
     <!-- 載入狀態管理 Store (階段三) -->
     <script src="src/js/store/appStore.js" defer></script>
 
 
     <!-- 載入視圖模組 -->
     <script src="src/js/modules/continentView.js" defer></script>
-    <script src="src/js/modules/countryView.js?v=43" defer></script>
-    <script src="src/js/modules/globalCitiesView.js?v=2" defer></script>
+    <script src="src/js/modules/countryView.js?v=44" defer></script>
+    <script src="src/js/modules/globalCitiesView.js?v=3" defer></script>
     <script src="src/js/modules/plannerView.js?v=7" defer></script>
     <script src="src/js/firebase-ai-config.js?v=2" defer></script>
     <script src="src/js/firebase.js?v=33" defer></script>
-    <script src="src/js/app.js?v=37" defer></script>
+    <script src="src/js/app.js?v=38" defer></script>
     <script src="src/js/pwa.js" defer></script>
   </div>
 </body>
