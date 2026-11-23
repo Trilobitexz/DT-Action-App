@@ -99,6 +99,7 @@ window.SpotService = {
     return {
       title: data.title,
       extract: data.extract || "",
+      type: data.type || "",
       thumbnail: data.thumbnail?.source || null,
       pageUrl: data.content_urls?.desktop?.page || null,
       location: Number.isFinite(Number(data.coordinates?.lat)) && Number.isFinite(Number(data.coordinates?.lon))
@@ -260,6 +261,9 @@ window.SpotService = {
     for (const source of sources) {
       try {
         const result = await source.fetch();
+        const isDisambiguation = result?.type === "disambiguation"
+          || /(?:可以指|可能指的是|消歧義|may refer to)/i.test(result?.extract || "");
+        if (isDisambiguation) continue;
         const location = result?.location;
         const verifiedLocation = Number.isFinite(cityCoordinates?.lat) && Number.isFinite(cityCoordinates?.lng)
           && Number.isFinite(location?.latitude) && Number.isFinite(location?.longitude)

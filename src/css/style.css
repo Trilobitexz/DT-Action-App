@@ -2874,7 +2874,7 @@ body.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
 #map-hero-card .map-toolbar {
   position: absolute !important;
   inset: .75rem .75rem auto auto !important;
-  z-index: 7;
+  z-index: 20;
   display: block !important;
   width: auto !important;
   max-width: calc(100% - 1.5rem);
@@ -2919,7 +2919,7 @@ body.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
 #map-hero-card .map-control-actions > .map-btn { height: 34px; min-height: 34px; padding-inline: .55rem; border-radius: 999px; }
 #map-hero-card .map-continent-chips {
   inset: auto .7rem .7rem auto;
-  z-index: 6;
+  z-index: 20;
   max-width: min(72%, 670px);
   justify-content: flex-end;
   transform: none;

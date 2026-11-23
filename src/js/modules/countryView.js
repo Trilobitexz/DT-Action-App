@@ -222,7 +222,9 @@ window.CountryView = {
         ? `座標 ${currentCity.lat.toFixed(4)}, ${currentCity.lng.toFixed(4)}`
         : "座標資料載入中";
       cityDescription.innerText = currentCity.descriptionSource?.text
-        || `${currentCity.name}（${currentCity.englishName}）位於${currentCity.countryName || country.name}，${locationText}。正在整理旅遊指南與百科資料。`;
+        || (currentCity._citySummaryLookupFailed
+          ? "目前找不到相符的城市百科摘要；景點清單與地圖仍可使用。"
+          : `${currentCity.name}（${currentCity.englishName}）位於${currentCity.countryName || country.name}，${locationText}。正在整理旅遊指南與百科資料。`);
     }
     const cityHeading = document.querySelector("#view-country .city-tabs-card h3");
     if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：${currentCity.destinationType === "island" ? "目的地資訊" : "城市資訊"}與景點資料`;
@@ -440,12 +442,21 @@ window.CountryView = {
         console.warn(`無法整理 ${currentCity.name} 的景點資料：`, error);
       });
     }
-    if (!cityDescription?.textContent?.includes("正在向 OpenStreetMap") && cityDescription && window.SpotService?.fetchCitySummary
+    if (!currentCity._citySummaryLookupStarted && !cityDescription?.textContent?.includes("正在向 OpenStreetMap") && cityDescription && window.SpotService?.fetchCitySummary
       && Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng)) {
+      currentCity._citySummaryLookupStarted = true;
       cityDescription.textContent = "正在查詢與城市座標相符的百科介紹…";
       window.SpotService.fetchCitySummary(currentCity.englishName || currentCity.name, currentCity.countryName || country.name, currentCity).then(summary => {
-        if (!summary?.extract || !isCurrentCity()) return;
-        cityDescription.textContent = summary.extract;
+        if (!isCurrentCity()) return;
+        const description = document.getElementById("city-description-text");
+        if (!description) return;
+        if (!summary?.extract) {
+          currentCity._citySummaryLookupFailed = true;
+          description.textContent = "目前找不到相符的城市百科摘要；景點清單與地圖仍可使用。";
+          return;
+        }
+        currentCity.descriptionSource = { text: summary.extract, pageUrl: summary.pageUrl || null, sourceLabel: summary.sourceLabel || "百科資料" };
+        description.textContent = summary.extract;
         if (summary.pageUrl) {
           const source = document.createElement("a");
           source.href = summary.pageUrl;
@@ -453,9 +464,16 @@ window.CountryView = {
           source.rel = "noopener noreferrer";
           source.textContent = `資料來源：${summary.sourceLabel || "百科資料"}`;
           source.style.cssText = "display:inline-block; margin-top:0.35rem; font-size:0.78rem;";
-          cityDescription.append(document.createElement("br"), source);
+          description.append(document.createElement("br"), source);
         }
-      }).catch(error => console.warn("城市介紹查詢失敗：", error));
+      }).catch(error => {
+        console.warn("城市介紹查詢失敗：", error);
+        if (isCurrentCity()) {
+          currentCity._citySummaryLookupFailed = true;
+          const description = document.getElementById("city-description-text");
+          if (description) description.textContent = "城市百科摘要暫時無法載入；景點清單與地圖仍可使用。";
+        }
+      });
     }
     this.renderCityWeather(currentCity, renderedCountryId, renderedCityId, state);
 

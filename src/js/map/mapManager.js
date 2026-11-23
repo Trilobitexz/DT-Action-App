@@ -4,7 +4,7 @@ class MapManager {
 
   constructor(containerId, options = {}) {
     this.containerId = containerId;
-    this.defaultCenter = options.center || [25, 10];
+    this.defaultCenter = options.center || [20, 0];
     this.defaultZoom = options.zoom || 2.4;
     this.map = null;
     this.activeLayerKey = "voyager";
@@ -75,10 +75,12 @@ class MapManager {
     if (!container) { if (status) status.textContent = "找不到地圖容器，請重新載入頁面。"; return; }
     if (!window.maplibregl) { if (status) status.textContent = "地圖程式載入失敗，請確認網路連線。"; return; }
     if (this.map) return;
+    const initialZoom = Math.max(1.2, Math.min(this.defaultZoom, Math.log2(Math.max(container.clientWidth, 256) / 256)));
+    this.initialZoom = initialZoom;
     this.map = new window.maplibregl.Map({
       container, style: this.tileProviders.voyager.style,
-      center: [this.defaultCenter[1], this.defaultCenter[0]], zoom: this.defaultZoom,
-      minZoom: 1.5, maxZoom: 18, projection: { type: "mercator" },
+      center: [this.defaultCenter[1], this.defaultCenter[0]], zoom: initialZoom,
+      minZoom: 1.2, maxZoom: 18, projection: { type: "mercator" },
       renderWorldCopies: true, attributionControl: false,
       canvasContextAttributes: { antialias: false, preserveDrawingBuffer: false }, fadeDuration: 0
     });
@@ -921,7 +923,7 @@ class MapManager {
   flyToWorld({ animate = true } = {}) {
     if (!this.map) return;
     this.currentCityContext = null; this.clearCitySpots(); this.clearFlightRoute(); this.updateMarkersVisibility();
-    const options = { center: [this.defaultCenter[1], this.defaultCenter[0]], zoom: this.defaultZoom, duration: this.animateAllowed(animate) ? 850 : 0, essential: false };
+    const options = { center: [this.defaultCenter[1], this.defaultCenter[0]], zoom: this.initialZoom || this.defaultZoom, duration: this.animateAllowed(animate) ? 850 : 0, essential: false };
     this.map.stop(); if (options.duration) this.map.flyTo(options); else this.map.jumpTo(options);
   }
   setProjection(mode) {
