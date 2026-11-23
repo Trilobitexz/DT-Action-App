@@ -2,7 +2,7 @@
 window.SpotService = {
   cache: {},
   openTripMapApiKey: "",
-  requestTimeoutMs: 8000,
+  requestTimeoutMs: 4000,
   requestQueue: [],
   nearbyPlaceRequests: {},
   cityLocationRequests: {},
@@ -17,9 +17,9 @@ window.SpotService = {
   nominatimTail: Promise.resolve(),
   nextNominatimAt: 0,
 
-  requestJson: function (url) {
+  requestJson: function (url, timeoutMs = this.requestTimeoutMs) {
     return new Promise((resolve, reject) => {
-      this.requestQueue.push({ url, resolve, reject });
+      this.requestQueue.push({ url, expiresAt: Date.now() + timeoutMs, resolve, reject });
       this.processRequestQueue();
     });
   },
@@ -33,8 +33,16 @@ window.SpotService = {
       this.scheduledRequests += 1;
       window.setTimeout(() => {
         this.scheduledRequests -= 1;
+        const remainingMs = request.expiresAt - Date.now();
+        if (remainingMs <= 0) {
+          const timeoutError = new Error("Request timed out");
+          timeoutError.name = "AbortError";
+          request.reject(timeoutError);
+          this.processRequestQueue();
+          return;
+        }
         this.activeRequests += 1;
-        this.runRequest(request.url)
+        this.runRequest(request.url, remainingMs)
           .then(request.resolve, request.reject)
           .finally(() => {
             this.activeRequests -= 1;
@@ -44,9 +52,9 @@ window.SpotService = {
     }
   },
 
-  runRequest: async function (url) {
+  runRequest: async function (url, timeoutMs = this.requestTimeoutMs) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     let res;
     try {
       res = await fetch(url, { headers: { "Accept": "application/json" }, signal: controller.signal });
@@ -139,6 +147,11 @@ window.SpotService = {
         }
       } catch (error) {
         // 沒有百科縮圖時，改查 Commons；失敗則讓景點卡片維持文字版。
+        if (error.name === "AbortError") {
+          this.cache[cacheKey] = { thumbnail: null };
+          this.trimCache();
+          return null;
+        }
       }
       try {
         const commons = await this.fetchCommonsImage(cleanName, cityName);
@@ -263,7 +276,7 @@ window.SpotService = {
           return summary;
         }
       } catch (error) {
-        if (!/404|查無/.test(error.message || "")) {
+        if (error.name !== "AbortError" && !/404|查無/.test(error.message || "")) {
           console.warn("城市介紹服務暫時無法使用：", error);
         }
       }
@@ -352,14 +365,18 @@ window.SpotService = {
     const query = `[out:json][timeout:15];(node["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});way["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});relation["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});node["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});way["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});relation["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});node["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});way["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});relation["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});node["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});way["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});relation["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});node["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng});way["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng});relation["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng}););out center tags;`;
     this.nearbyPlaceRequests[cacheKey] = (async () => {
       try {
+        const queryDeadline = Date.now() + this.requestTimeoutMs;
         let data = null;
         let requestError = null;
+        let queryTimedOut = false;
         for (const endpoint of [
           "https://overpass-api.de/api/interpreter",
           "https://overpass.nchc.org.tw/api/interpreter"
         ]) {
+          const remainingMs = queryDeadline - Date.now();
+          if (remainingMs <= 0) { queryTimedOut = true; break; }
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          const timeoutId = setTimeout(() => controller.abort(), remainingMs);
           try {
             const response = await fetch(endpoint, {
               method: "POST",
@@ -372,12 +389,16 @@ window.SpotService = {
             break;
           } catch (error) {
             requestError = error;
+            if (error.name === "AbortError" || Date.now() >= queryDeadline) {
+              queryTimedOut = true;
+              break;
+            }
           } finally {
             clearTimeout(timeoutId);
           }
         }
         if (!data) {
-          console.warn(`OpenStreetMap 查詢 ${city.name || "此城市"} 失敗，改查 Wikidata：`, requestError);
+          if (!queryTimedOut && requestError) console.warn(`OpenStreetMap 查詢 ${city.name || "此城市"} 暫時無法使用，改以其他來源補充。`, requestError);
           data = { elements: [] };
         }
         const fetchedAt = Date.now();
@@ -405,7 +426,7 @@ window.SpotService = {
             : "";
           return {
             name, category: categories[kind] || "景點", lat, lng,
-            note: description || "OpenStreetMap 已編目地點；尚無描述資料。",
+            note: description || "OpenStreetMap 收錄的地點；暫無補充介紹。",
             description,
             address: [tags["addr:full"], [tags["addr:street"], tags["addr:housenumber"], tags["addr:city"]].filter(Boolean).join(" ")].find(Boolean) || "",
             openingHours: tags.opening_hours || "",
@@ -435,13 +456,14 @@ window.SpotService = {
           .slice(0, limit);
         let places = osmPlaces;
         let wikidataChecked = false;
-        if (places.length < Math.min(12, limit)) {
+        if (!queryTimedOut && Date.now() < queryDeadline && places.length < Math.min(12, limit)) {
           let wikidataPlaces = [];
           try {
-            wikidataPlaces = await this.fetchWikidataNearbyPlaces(city, { radius, limit });
+            wikidataPlaces = await this.fetchWikidataNearbyPlaces(city, { radius, limit, timeoutMs: Math.max(1, queryDeadline - Date.now()) });
             wikidataChecked = true;
           } catch (error) {
-            console.warn(`Wikidata 附近地點查詢失敗（${city.name || "此城市"}）：`, error);
+            if (error.name === "AbortError") queryTimedOut = true;
+            else console.warn(`Wikidata 附近地點查詢失敗（${city.name || "此城市"}）：`, error);
           }
           const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
             .normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
@@ -453,9 +475,9 @@ window.SpotService = {
             if (normalizedName && !duplicate && places.length < limit) places.push(place);
           });
         }
-        if (places.length < Math.min(8, limit)) {
+        if (!queryTimedOut && Date.now() < queryDeadline && places.length < Math.min(8, limit)) {
           try {
-            const wikipediaPlaces = await this.fetchWikipediaNearbyPlaces(city, { radius, limit });
+            const wikipediaPlaces = await this.fetchWikipediaNearbyPlaces(city, { radius, limit, timeoutMs: Math.max(1, queryDeadline - Date.now()) });
             const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
               .normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
             wikipediaPlaces.forEach(place => {
@@ -466,7 +488,7 @@ window.SpotService = {
             });
             wikidataChecked = true;
           } catch (error) {
-            console.warn(`Wikipedia 附近地點查詢失敗（${city.name || "此城市"}）：`, error);
+            if (error.name !== "AbortError") console.warn(`Wikipedia 附近地點查詢失敗（${city.name || "此城市"}）：`, error);
           }
         }
         try { localStorage.setItem(cacheKey, JSON.stringify({ fetchedAt, places, wikidataChecked })); }
@@ -482,7 +504,7 @@ window.SpotService = {
     return this.nearbyPlaceRequests[cacheKey];
   },
 
-  fetchWikipediaNearbyPlaces: async function (city, { radius = 20000, limit = 250 } = {}) {
+  fetchWikipediaNearbyPlaces: async function (city, { radius = 20000, limit = 250, timeoutMs = this.requestTimeoutMs } = {}) {
     if (!Number.isFinite(city?.lat) || !Number.isFinite(city?.lng)) return [];
     const radiusMeters = Math.max(1000, Math.min(50000, radius));
     const params = new URLSearchParams({
@@ -503,7 +525,7 @@ window.SpotService = {
       origin: "*"
     });
     const fetchedAt = Date.now();
-    const data = await this.requestJson(`https://en.wikipedia.org/w/api.php?${params.toString()}`);
+    const data = await this.requestJson(`https://en.wikipedia.org/w/api.php?${params.toString()}`, timeoutMs);
     const attractionCategory = /tourist attraction|museum|gallery|monument|memorial|park|garden|temple|church|mosque|cathedral|castle|palace|historic|heritage|archaeolog|landmark|monastery|shrine|square|bridge|tower|theatre|theater|zoo|aquarium|fort|beach|waterfall|mountain|botanical|island|cave|stadium|opera|library|market|district|plaza|building|protected area/i;
     return (data.query?.pages || []).map(page => {
       const point = page.coordinates?.[0];
@@ -526,7 +548,7 @@ window.SpotService = {
         category,
         lat,
         lng,
-        note: String(page.extract || "").replace(/\s+/g, " ").trim() || "Wikipedia 地理搜尋已編目地點。",
+        note: String(page.extract || "").replace(/\s+/g, " ").trim() || "Wikipedia 收錄的地點；暫無補充介紹。",
         description: String(page.extract || "").replace(/\s+/g, " ").trim(),
         wikipedia: page.title,
         wikipediaUrl: pageUrl,
@@ -541,7 +563,7 @@ window.SpotService = {
       .slice(0, limit);
   },
 
-  fetchWikidataNearbyPlaces: async function (city, { radius = 20000, limit = 250 } = {}) {
+  fetchWikidataNearbyPlaces: async function (city, { radius = 20000, limit = 250, timeoutMs = this.requestTimeoutMs } = {}) {
     if (!Number.isFinite(city?.lat) || !Number.isFinite(city?.lng)) return [];
     const radiusKm = Math.max(1, Math.min(50, radius / 1000));
     const query = `SELECT DISTINCT ?place ?placeLabel ?placeDescription ?coordinate ?distance ?article WHERE {
@@ -559,7 +581,7 @@ window.SpotService = {
     ORDER BY ?distance
     LIMIT ${Math.max(1, Math.min(250, limit))}`;
     const url = `https://query.wikidata.org/sparql?${new URLSearchParams({ query, format: "json" }).toString()}`;
-    const result = await this.requestJson(url);
+    const result = await this.requestJson(url, timeoutMs);
     const fetchedAt = Date.now();
     return (result.results?.bindings || []).map(binding => {
       const point = /^Point\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*\)$/i.exec(binding.coordinate?.value || "");

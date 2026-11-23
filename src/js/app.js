@@ -70,7 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </label>
           <span>✈ 機場 ${airportCount} 個</span>
           <span>${hasDirect === true ? "🛫 台灣可直飛" : hasDirect === false ? "🔁 台灣出發需轉機" : "✈ 航線依出發日期即時查詢"}</span>
-          <small>資料版本：${window.TRAVEL_DATA.releaseVersion || window.TRAVEL_DATA.cityDataVersion || "內建資料"}<br>座標參考：<a href="https://www.geonames.org/export/" target="_blank" rel="noopener noreferrer">GeoNames（CC BY 4.0）</a>；景點位置來自 OpenStreetMap、Wikipedia 或 Wikidata，標記詳情會附來源連結。<br>縮小至城市外圍後會自動回到附近城市，再縮小可返回洲別視圖。</small>
+          <small>城市位置為探索參考；景點位置整理自公開地圖與旅遊資料，點開標記可查看相關資訊與來源。</small>
           <div class="city-map-key" aria-label="地圖圖例"><span><i>1</i>地圖編號與下方清單一致</span><span>🔵 地名參考點</span><span>✈ 機場</span><span>點擊標記看景點資訊</span></div>`;
       }
     }
@@ -186,41 +186,7 @@ document.addEventListener("DOMContentLoaded", () => {
   sidebarToggle?.addEventListener("click", () => {
     setSidebarCollapsed(!document.body.classList.contains("sidebar-collapsed"));
   });
-  const readDrawerScale = () => {
-    try {
-      const stored = Number(localStorage.getItem("journey-atlas-drawer-scale"));
-      return Number.isFinite(stored) && stored >= 0.8 && stored <= 1.1 ? stored : 1;
-    } catch (error) {
-      console.warn("無法讀取抽屜縮放設定，使用預設值。", error);
-      return 1;
-    }
-  };
-  let drawerScale = readDrawerScale();
   let drawerTrigger = null;
-  const updateDrawerScale = () => {
-    drawerScale = Math.min(1.1, Math.max(0.8, drawerScale));
-    try {
-      localStorage.setItem("journey-atlas-drawer-scale", String(drawerScale));
-    } catch (error) {
-      console.warn("無法儲存抽屜縮放設定。", error);
-    }
-    drawers.forEach(drawer => {
-      drawer.style.setProperty("--drawer-scale", String(drawerScale));
-      drawer.querySelectorAll("[data-drawer-scale-value]").forEach(value => {
-        value.textContent = `${Math.round(drawerScale * 100)}%`;
-      });
-    });
-  };
-  updateDrawerScale();
-  document.querySelectorAll("[data-drawer-scale]").forEach(button => {
-    button.addEventListener("click", () => {
-      const action = button.dataset.drawerScale;
-      if (action === "down") drawerScale -= 0.05;
-      if (action === "up") drawerScale += 0.05;
-      if (action === "reset") drawerScale = 1;
-      updateDrawerScale();
-    });
-  });
   const closeDrawers = () => {
     const restoreTarget = drawerTrigger;
     drawerTrigger = null;
@@ -693,6 +659,91 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.appNavigate = navigateTo;
   window.appState = state;
+  const globalSearch = document.getElementById("global-search");
+  const globalSearchResults = document.getElementById("global-search-results");
+  const normalizeSearchText = value => String(value || "").normalize("NFKC").trim().toLocaleLowerCase();
+  const searchCities = [
+    ...(window.TRAVEL_DATA.globalCities || []).map(city => ({ ...city, searchType: "global" })),
+    ...(window.TRAVEL_DATA.countries || []).flatMap(country => country.cities.map(city => ({ ...city, countryId: country.id, countryName: country.name, continentId: country.continentId, flag: country.flag, searchType: "local" })))
+  ].filter((city, index, cities) => cities.findIndex(candidate =>
+    normalizeSearchText(candidate.name) === normalizeSearchText(city.name)
+    && normalizeSearchText(candidate.countryName) === normalizeSearchText(city.countryName)) === index);
+  const navigateToSearchCity = city => {
+    if (!city) return;
+    globalSearchResults.hidden = true;
+    globalSearch.setAttribute("aria-expanded", "false");
+    globalSearch.value = "";
+    navigateTo(city.searchType === "global" ? "global-city" : "country", city.searchType === "global"
+      ? { cityId: city.id }
+      : { countryId: city.countryId, continentId: city.continentId, cityId: city.id });
+  };
+  const renderGlobalSearchResults = () => {
+    const query = normalizeSearchText(globalSearch.value);
+    globalSearchResults.replaceChildren();
+    if (!query) {
+      globalSearchResults.hidden = true;
+      globalSearch.setAttribute("aria-expanded", "false");
+      return [];
+    }
+    const matches = searchCities.filter(city => [city.name, city.englishName, city.countryName, city.continentName]
+      .some(value => normalizeSearchText(value).includes(query))).slice(0, 8);
+    matches.forEach((city, index) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "global-search-option";
+      option.id = `global-search-option-${index}`;
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", "false");
+      const name = document.createElement("strong");
+      name.textContent = `${city.flag || "🌍"} ${city.name}`;
+      const meta = document.createElement("small");
+      meta.textContent = [city.englishName, city.countryName].filter(Boolean).join(" · ");
+      option.append(name, meta);
+      option.addEventListener("click", () => navigateToSearchCity(city));
+      globalSearchResults.appendChild(option);
+    });
+    if (!matches.length) {
+      const empty = document.createElement("p");
+      empty.className = "global-search-empty";
+      empty.textContent = "找不到這個目的地，試試其他城市或國家名稱。";
+      globalSearchResults.appendChild(empty);
+    }
+    globalSearchResults.hidden = false;
+    globalSearch.setAttribute("aria-expanded", "true");
+    return matches;
+  };
+  globalSearch?.addEventListener("input", renderGlobalSearchResults);
+  globalSearch?.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      globalSearchResults.hidden = true;
+      globalSearch.setAttribute("aria-expanded", "false");
+    } else if (event.key === "ArrowDown") {
+      const first = globalSearchResults.querySelector("[role='option']");
+      if (first) { event.preventDefault(); first.focus(); }
+    } else if (event.key === "Enter") {
+      const city = renderGlobalSearchResults()[0];
+      if (city) { event.preventDefault(); navigateToSearchCity(city); }
+    }
+  });
+  globalSearchResults?.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      globalSearchResults.hidden = true;
+      globalSearch.setAttribute("aria-expanded", "false");
+      globalSearch.focus();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const options = [...globalSearchResults.querySelectorAll("[role='option']")];
+      const current = options.indexOf(document.activeElement);
+      const next = options[current + (event.key === "ArrowDown" ? 1 : -1)];
+      if (next) { event.preventDefault(); next.focus(); }
+      else if (event.key === "ArrowUp") { event.preventDefault(); globalSearch.focus(); }
+    }
+  });
+  document.addEventListener("click", event => {
+    if (!event.target.closest("#global-search-wrap")) {
+      globalSearchResults.hidden = true;
+      globalSearch.setAttribute("aria-expanded", "false");
+    }
+  });
   const readRoute = () => {
     const route = new URLSearchParams(window.location.hash.slice(1));
     const view = route.get("view");

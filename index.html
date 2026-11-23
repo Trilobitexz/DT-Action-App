@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0b1f33">
+  <meta name="theme-color" content="#f7f6f3">
   <meta name="color-scheme" content="light">
 
   <meta name="description" content="從互動地圖開始，慢慢探索世界城市、旅行風格、航班預算與精選景點。">
@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="src/css/style.css?v=41">
+  <link rel="stylesheet" href="src/css/style.css?v=43">
 
 </head>
 <body>
@@ -35,20 +35,17 @@
     <a class="skip-link" href="#view-world">跳至主要內容</a>
     <header class="app-header">
       <div class="header-inner">
-        <a class="logo-group" href="#view-world" aria-label="旅途指南首頁" onclick="window.appNavigate('world'); return false;">
-          <span class="logo-badge" aria-hidden="true">✈</span>
-          <span class="logo-copy">
-            <h1>旅途指南 <span>JOURNEY ATLAS</span></h1>
-            <span class="sub">把下一趟旅行，規劃得更從容。</span>
-          </span>
-        </a>
-
         <!-- 麵包屑導航 (容錯與平順返回) -->
         <nav class="breadcrumb-nav" id="breadcrumb-nav" aria-label="所在位置">
           <span class="breadcrumb-item active">🌍 世界地圖</span>
         </nav>
 
         <div class="header-actions">
+          <div class="global-search-wrap" id="global-search-wrap">
+            <span aria-hidden="true">⌕</span>
+            <input id="global-search" type="search" role="combobox" aria-label="搜尋全球城市或國家" aria-autocomplete="list" aria-controls="global-search-results" aria-expanded="false" placeholder="想去哪裡？搜尋城市或國家" autocomplete="off">
+            <div class="global-search-results" id="global-search-results" role="listbox" hidden></div>
+          </div>
           <div class="auth-menu" id="auth-menu">
             <button class="btn-auth auth-menu-trigger" id="auth-menu-trigger" type="button" aria-expanded="false" aria-controls="auth-menu-panel">
               <span class="auth-avatar" id="auth-avatar" aria-hidden="true">👤</span>
@@ -64,9 +61,6 @@
               <button class="auth-logout" id="btn-google-sign-out" type="button" hidden>登出</button>
             </div>
           </div>
-          <button class="btn-reset" id="btn-reset-global" title="回到起點重新篩選">
-            🔄 重新選擇
-          </button>
         </div>
       </div>
     </header>
@@ -79,21 +73,12 @@
           <span class="eyebrow"><span class="status-dot" aria-hidden="true"></span> 開始一段探索</span>
           <h2 id="world-heading">先看見世界，<span>再找到你的下一站。</span></h2>
           <p>從地圖上的一個地方開始。放大看看附近的城市，點開感興趣的目的地，再慢慢了解航班、花費與景點。</p>
-          <div class="intro-trust-row"><span>拖曳地圖，看看世界</span><span>放大地圖，發現城市</span><span>點選標記，深入探索</span></div>
         </div>
-        <div class="intro-coordinate" aria-label="探索方式"><span>YOUR JOURNEY</span><strong>01 <i>/</i> 03</strong><span>世界 → 城市 → 景點</span><b><i></i> 隨心探索</b></div>
       </section>
       <div id="map-world-slot">
       <section id="map-hero-card" class="map-hero-card map-first-card" aria-labelledby="map-heading">
         <div class="map-toolbar">
-          <div class="map-toolbar-heading">
-            <div class="map-toolbar-copy">
-              <span class="section-kicker">EXPLORE AT YOUR OWN PACE</span>
-              <h2 id="map-heading">探索地圖</h2>
-              <p>拖曳地圖慢慢找方向；左右跨越世界邊界時，地圖會循環接續，地標也會留在正確位置。</p>
-            </div>
-            <span class="map-world-state"><i aria-hidden="true"></i> 世界循環探索</span>
-          </div>
+          <h2 id="map-heading" class="visually-hidden">探索世界地圖</h2>
           <div class="map-controls" aria-label="地圖控制">
             <div class="map-control-cluster map-style-cluster">
               <span class="map-control-caption">底圖風格</span>
@@ -117,6 +102,7 @@
                   <button type="button" class="map-projection-option" id="btn-map-3d" aria-pressed="false" aria-label="使用 3D 地球" title="切換到 3D 地球"><span aria-hidden="true">◉</span><strong>3D</strong><small>地球</small></button>
                 </div>
                 <button type="button" class="map-btn map-context-action" id="btn-map-back" title="返回上一層地圖" aria-label="返回上一層地圖">← 返回上一層</button>
+                <button type="button" class="btn-reset map-reset-global" id="btn-reset-global" title="回到起點重新探索">重新探索</button>
               </div>
             </div>
           </div>
@@ -136,16 +122,9 @@
         </nav>
       </section>
       </div>
-      <section class="explore-next-step" aria-label="探索方式說明">
-        <span class="explore-step-number">01</span><p><strong>先自由看看</strong><span>地圖上的洲別與城市標記，帶你找到感興趣的方向。</span></p>
-        <span class="explore-step-arrow" aria-hidden="true">→</span>
-        <span class="explore-step-number">02</span><p><strong>再慢慢深入</strong><span>從國家、城市到景點，一層一層認識目的地。</span></p>
-        <span class="explore-step-arrow" aria-hidden="true">→</span>
-        <span class="explore-step-number">03</span><p><strong>最後再做決定</strong><span>需要時再比較航班、預算與行程，不急著先做選擇。</span></p>
-      </section>
       <div class="world-support-tools" aria-label="探索輔助工具">
         <button type="button" class="side-drawer-trigger" id="btn-open-city-rankings" aria-controls="city-rankings-drawer" aria-expanded="false">
-          <span>🌐</span><span><strong>探索全球城市目錄</strong><small>依名稱或資料完整度瀏覽城市資料</small></span><b>→</b>
+          <span>🌐</span><span><strong>探索全球城市</strong><small>看看收錄的 200+ 座熱門城市</small></span><b>→</b>
         </button>
         <button type="button" class="side-drawer-trigger secondary" id="btn-scroll-comparison" aria-controls="comparison-drawer" aria-expanded="false">
           <span>⚖️</span><span><strong>已經有幾個想法？查看比較清單</strong><small id="comparison-quick-status">先探索喜歡的城市，再放進比較清單</small></span><b>↓</b>
@@ -153,9 +132,9 @@
       </div>
       <section id="recent-destinations-panel" class="recent-destinations-panel" aria-labelledby="recent-destinations-heading"></section>
       <details class="progressive-tool-section" id="recommendation-tools-section">
-        <summary><span><strong>依景點類型探索</strong><small>瀏覽有來源與座標的文化、歷史及自然地點</small></span><b aria-hidden="true">＋</b></summary>
+        <summary><span><strong>依主題探索景點</strong><small>從文化歷史或自然風景開始尋找靈感</small></span><b aria-hidden="true">＋</b></summary>
         <section class="recommendation-panel" aria-labelledby="recommendation-heading">
-          <div class="recommendation-heading"><div><span class="section-kicker">SOURCE-BASED EXPLORATION</span><h2 id="recommendation-heading">依已編目地點分類探索</h2><p>只整理有來源與座標的地點；不依城市名稱推測特色、價格或航班。</p></div></div>
+          <div class="recommendation-heading"><div><span class="section-kicker">EXPLORE BY INTEREST</span><h2 id="recommendation-heading">依主題探索景點</h2><p>從已整理的景點線索，發現適合你的目的地。</p></div></div>
           <form id="recommendation-form" class="recommendation-form">
             <label>地點類別<select name="style"><option value="culture">文化與歷史地點</option><option value="nature">自然與戶外地點</option></select></label>
             <button type="submit" class="primary-action">查看已載入資料 →</button>
@@ -247,22 +226,22 @@
       <div class="city-tabs-card">
         <div style="margin-bottom: 1rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.75rem;">
           <div>
-            <h3 style="font-size:1.2rem; font-weight:700;">🏙️ 城市資訊與已編目景點</h3>
+            <h3 style="font-size:1.2rem; font-weight:700;">🏙️ 城市資訊與精選景點</h3>
             <p id="city-description-text" style="font-size:0.9rem; color:var(--text-muted); margin-top:0.25rem;">城市特色與風貌介紹</p>
           </div>
           <div id="city-weather-widget" class="weather-badge" style="display:none;"></div>
         </div>
         <div id="city-detail-facts" class="city-detail-facts" aria-label="城市深度資料"></div>
         <details class="city-reference-details">
-          <summary>城市資料完整度與來源</summary>
+          <summary>旅行資訊與資料來源</summary>
           <div class="city-insight-panel">
             <div class="city-insight-header">
               <div><span class="section-kicker">TRAVEL INSIGHT</span><h4>用一眼看懂這座城市</h4></div>
-              <span class="source-badge">資料狀態：預估與即時混合</span>
+              <span class="source-badge">資訊更新時間依來源而異</span>
             </div>
             <div id="city-insight-chart" class="city-insight-chart" role="img" aria-label="城市旅遊面向圖表"></div>
           </div>
-          <div class="city-source-list"><strong>資料來源與使用說明</strong><span>• 城市目錄：本專案整理之公開城市名單與座標</span><span>• 目錄更新：2026-11-16（資料版本 2026.11.16-map-zoom-1）</span><span>• 天氣：<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo API</a>（即時預報）</span><span>• 旅遊指南：<a href="https://en.wikivoyage.org/" target="_blank" rel="noopener noreferrer">Wikivoyage</a>（城市與旅遊摘要）</span><span>• 百科補充：<a href="https://zh.wikipedia.org/" target="_blank" rel="noopener noreferrer">中文 Wikipedia</a>（歷史與背景資料）</span><span>• 圖片資料庫：<a href="https://commons.wikimedia.org/" target="_blank" rel="noopener noreferrer">Wikimedia Commons</a>（景點圖片）</span><span>• 地點資料庫：<a href="https://www.openstreetmap.org/" target="_blank" rel="noopener noreferrer">OpenStreetMap / Nominatim</a>（地址、類型與座標）</span><small>不同來源的資料可能有更新時間差異；旅遊排名、氣候與預估分數僅供規劃參考，實際狀況請以官方來源及出發前最新資訊為準。</small></div>
+          <div class="city-source-list"><strong>資訊來源與使用說明</strong><span>• 城市與位置：整理自公開城市名單與地圖資訊</span><span>• 內容更新：2026-11-16</span><span>• 天氣：<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a>（天氣預報）</span><span>• 旅遊指南：<a href="https://en.wikivoyage.org/" target="_blank" rel="noopener noreferrer">Wikivoyage</a>（城市與旅遊摘要）</span><span>• 百科補充：<a href="https://zh.wikipedia.org/" target="_blank" rel="noopener noreferrer">中文 Wikipedia</a>（歷史與背景資料）</span><span>• 景點圖片：<a href="https://commons.wikimedia.org/" target="_blank" rel="noopener noreferrer">Wikimedia Commons</a></span><span>• 地點資訊：<a href="https://www.openstreetmap.org/" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>（地址、類型與位置）</span><small>不同來源的內容更新時間可能不同；旅行排名、氣候與預估分數僅供規劃參考，請於出發前查看官方最新資訊。</small></div>
         </details>
         <div class="city-tab-list" id="city-tab-list"></div>
         <div class="spot-list" id="city-spots-list"></div>
@@ -272,13 +251,12 @@
     <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
     <aside class="side-drawer rankings-drawer" id="city-rankings-drawer" aria-labelledby="rankings-drawer-title" aria-hidden="true" inert>
       <div class="drawer-content">
-        <div class="drawer-header"><div><span class="section-kicker">CITY INTELLIGENCE</span><h2 id="rankings-drawer-title">全球城市目錄</h2><p>搜尋城市後直接查看地圖、景點與行程資料。</p></div><button type="button" class="drawer-close" data-close-drawer aria-label="關閉城市目錄">×</button></div>
-        <div class="drawer-scale-control" aria-label="調整側欄顯示比例"><span>顯示比例</span><button type="button" data-drawer-scale="down" aria-label="縮小側欄內容">−</button><strong data-drawer-scale-value>100%</strong><button type="button" data-drawer-scale="up" aria-label="放大側欄內容">＋</button><button type="button" data-drawer-scale="reset" aria-label="重設側欄比例">重設</button></div>
-        <div class="drawer-meta"><strong id="global-city-count"></strong><span>可搜尋、分批載入</span></div>
+        <div class="drawer-header"><div><span class="section-kicker">DESTINATION GUIDE</span><h2 id="rankings-drawer-title">探索全球城市</h2><p>挑一座城市，看看景點靈感與旅行資訊。</p></div><button type="button" class="drawer-close" data-close-drawer aria-label="關閉城市目錄">×</button></div>
+        <div class="drawer-meta"><strong id="global-city-count"></strong><span>為下一趟旅程尋找靈感</span></div>
         <div class="global-city-search-wrap"><span aria-hidden="true">🔎</span><input id="global-city-search" type="search" placeholder="搜尋城市、國家或洲別" aria-label="搜尋全球城市"></div>
-        <div class="ranking-tabs" role="tablist" aria-label="城市目錄排序"><button type="button" class="active" data-ranking-tab="population" role="tab" aria-selected="true">依名稱</button><button type="button" data-ranking-tab="travel" role="tab" aria-selected="false">資料完整度</button></div>
-        <div class="ranking-tab-panel active" id="ranking-panel-population"><h3>🌐 全球城市目錄</h3><div id="global-population-list" class="global-city-list"></div></div>
-        <div class="ranking-tab-panel" id="ranking-panel-travel" hidden><h3>📚 依資料完整度排序</h3><div id="global-travel-list" class="global-city-list"></div></div>
+        <div class="ranking-tabs" role="tablist" aria-label="城市目錄排序"><button type="button" class="active" data-ranking-tab="population" role="tab" aria-selected="true">城市名稱</button><button type="button" data-ranking-tab="travel" role="tab" aria-selected="false">旅行資訊</button></div>
+        <div class="ranking-tab-panel active" id="ranking-panel-population"><h3>🌐 世界城市</h3><div id="global-population-list" class="global-city-list"></div></div>
+        <div class="ranking-tab-panel" id="ranking-panel-travel" hidden><h3>📚 旅行資訊較豐富</h3><div id="global-travel-list" class="global-city-list"></div></div>
       </div>
     </aside>
     <aside class="side-drawer comparison-drawer" id="comparison-drawer" aria-labelledby="comparison-drawer-title" aria-hidden="true" inert>
@@ -324,7 +302,7 @@
       window.mapLibreReady.catch(error => console.error(error));
     </script>
     <script src="src/js/map/geoContinents.js" defer></script>
-    <script src="src/js/map/mapManager.js?v=37" defer></script>
+    <script src="src/js/map/mapManager.js?v=38" defer></script>
 
     <!-- 載入資料庫與各洲資料模組 -->
     <script src="src/data/travelData.js" defer></script>
@@ -339,20 +317,20 @@
     <script src="src/js/services/currencyService.js" defer></script>
     <script src="src/js/services/weatherService.js" defer></script>
     <script src="src/js/services/flightService.js" defer></script>
-    <script src="src/js/services/spotService.js?v=42" defer></script>
-    <script src="src/js/services/cityCatalogService.js?v=5" defer></script>
+    <script src="src/js/services/spotService.js?v=44" defer></script>
+    <script src="src/js/services/cityCatalogService.js?v=6" defer></script>
     <!-- 載入狀態管理 Store (階段三) -->
     <script src="src/js/store/appStore.js" defer></script>
 
 
     <!-- 載入視圖模組 -->
     <script src="src/js/modules/continentView.js" defer></script>
-    <script src="src/js/modules/countryView.js?v=41" defer></script>
-    <script src="src/js/modules/globalCitiesView.js" defer></script>
-    <script src="src/js/modules/plannerView.js?v=6" defer></script>
+    <script src="src/js/modules/countryView.js?v=43" defer></script>
+    <script src="src/js/modules/globalCitiesView.js?v=2" defer></script>
+    <script src="src/js/modules/plannerView.js?v=7" defer></script>
     <script src="src/js/firebase-ai-config.js?v=2" defer></script>
     <script src="src/js/firebase.js?v=33" defer></script>
-    <script src="src/js/app.js?v=36" defer></script>
+    <script src="src/js/app.js?v=37" defer></script>
     <script src="src/js/pwa.js" defer></script>
   </div>
 </body>

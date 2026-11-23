@@ -80,7 +80,7 @@ window.CountryView = {
           : country.flightInfo.hasDirect === false
             ? '<span class="badge-tag badge-transit" style="font-size:0.85rem;">⚠️ 台灣出發需轉機</span>'
             : '<span class="data-source-badge">依城市與出發日期即時查詢</span>'}
-        <span class="data-source-badge">依官方即時班表確認</span>
+        <span class="data-source-badge" title="實際航班與班表請以航空公司和即時查詢結果為準。">班表資訊 ⓘ</span>
       </div>
       <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>出發與航程：</strong>${country.flightInfo.hasDirect === null ? `${currentCity?.name || country.name}：${country.flightInfo.flightTime}` : `${country.flightInfo.departureFrom} ｜ ${country.flightInfo.flightTime}`}</p>
       <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>執飛航空公司：</strong>${country.flightInfo.airlines.length ? country.flightInfo.airlines.join("、") : "請以即時航班查詢結果為準"}</p>
@@ -106,7 +106,7 @@ window.CountryView = {
     priceEl.innerHTML = `
       <div class="data-status-row" style="margin-bottom: 0.75rem;">
         <span class="badge-tag" style="background:#e0f2fe; color:#0369a1; font-size:0.85rem;">相對物價參考級距：${country.priceLevel.tier} (${country.priceLevel.rating})</span>
-        <span class="data-source-badge">規劃參考 · 非即時報價</span>
+        <span class="data-source-badge" title="以上為專案整理的概略範圍，不是經統計計算的城市評分或即時報價；實際費用依日期、區域、匯率與消費方式而異。">參考資料 ⓘ</span>
       </div>
       <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>日均預算：</strong>${country.priceLevel.dailyBudgetTwd}</p>
       <p style="margin-bottom: 0.4rem; font-size: 0.9rem;"><strong>餐飲物價：</strong>${country.priceLevel.dining}</p>
@@ -132,6 +132,27 @@ window.CountryView = {
     const hasSourcedRating = spot => spot?.rating !== null && spot?.rating !== undefined && spot?.rating !== ""
       && Number.isFinite(Number(spot.rating))
       && Number(spot.rating) >= 0 && Number(spot.rating) <= 5 && Boolean(String(spot.ratingSource || "").trim());
+    const hasCoordinates = spot => Number.isFinite(spot?.lat) && Number.isFinite(spot?.lng)
+      && spot.lat >= -90 && spot.lat <= 90 && spot.lng >= -180 && spot.lng <= 180;
+    const spotQuality = spot => (spot.imageUrl || spot.thumbnail || spot.photoUrl ? 4 : 0)
+      + (String(spot.description || spot.note || "").trim().length >= 24 ? 2 : 0)
+      + (hasCoordinates(spot) ? 1 : 0);
+    const imageFallback = category => {
+      const text = String(category || "");
+      if (/美食|餐|市場|咖啡|food|restaurant/i.test(text)) return { icon: "🍜", label: "在地風味", tone: "food" };
+      if (/自然|公園|花園|海灘|山|瀑布|nature|park|beach/i.test(text)) return { icon: "🌿", label: "自然風景", tone: "nature" };
+      if (/博物館|歷史|文化|寺|教堂|museum|historic|culture/i.test(text)) return { icon: "🏛️", label: "文化探索", tone: "culture" };
+      return { icon: "📍", label: "城市地標", tone: "landmark" };
+    };
+    const sortSpotsByQuality = items => [...items].sort((a, b) => {
+      if (Boolean(a.isSearchSuggestion) !== Boolean(b.isSearchSuggestion)) return a.isSearchSuggestion ? 1 : -1;
+      const qualityDifference = spotQuality(b) - spotQuality(a);
+      if (qualityDifference) return qualityDifference;
+      if (Boolean(a.isFeatured) !== Boolean(b.isFeatured)) return a.isFeatured ? -1 : 1;
+      const aRank = Number.isFinite(a.featuredRank) ? a.featuredRank : Number.POSITIVE_INFINITY;
+      const bRank = Number.isFinite(b.featuredRank) ? b.featuredRank : Number.POSITIVE_INFINITY;
+      return bRank !== aRank && (a.isFeatured || b.isFeatured) ? aRank - bRank : 0;
+    });
 
     tabList.setAttribute("role", "tablist");
     tabList.setAttribute("aria-label", "選擇城市");
@@ -173,10 +194,10 @@ window.CountryView = {
         if (expanded) {
           spotsContainer.querySelectorAll("[data-extra-spot]").forEach(item => item.remove());
           expandButton.dataset.expanded = "false";
-          expandButton.textContent = `顯示其餘 ${spots.length - 4} 個景點`;
+          expandButton.textContent = `顯示其餘 ${spots.length - visibleSpotCount} 個景點`;
         } else {
-          expandButton.insertAdjacentHTML("beforebegin", spots.slice(4).map((spot, index) => renderSpotCard(spot, index + 4, true)).join(""));
-          loadSpotDetails(spots.slice(4), 4);
+          expandButton.insertAdjacentHTML("beforebegin", spots.slice(visibleSpotCount).map((spot, index) => renderSpotCard(spot, index + visibleSpotCount, true)).join(""));
+          loadSpotDetails(spots.slice(visibleSpotCount), visibleSpotCount);
           expandButton.dataset.expanded = "true";
           expandButton.textContent = "收合景點清單";
         }
@@ -215,10 +236,10 @@ window.CountryView = {
       const metrics = [
         ["城市介紹", currentCity.descriptionSource?.text ? 1 : 0, currentCity.descriptionSource?.text ? "附來源" : "百科摘要載入中"],
         ["景點", Math.min(verifiedSpotCount, 5) / 5, `${verifiedSpotCount} 筆有座標來源${searchSpotCount ? `，另有 ${searchSpotCount} 個地圖搜尋入口` : ""}`],
-        ["機場", airports.length ? 1 : 0, airports.length ? `${airports.length} 筆已編目資料` : "依城市資料與即時地圖查詢"],
-        ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, currentCity.coordinateSource?.provider || "城市目錄座標"]
+        ["機場", airports.length ? 1 : 0, airports.length ? `${airports.length} 個機場資訊` : "查看城市周邊資訊"],
+        ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, currentCity.coordinateSource?.provider || "城市位置參考"]
       ];
-      chart.innerHTML = `<p class="city-data-completeness-label">資料完整度（不代表旅遊評分）</p>` + metrics.map(([name, completeness, hint]) => `
+      chart.innerHTML = `<p class="city-data-completeness-label">目前可參考的旅行資訊（不代表旅遊評分）</p>` + metrics.map(([name, completeness, hint]) => `
         <div class="insight-metric" data-insight="${name === "景點" ? "spots" : ""}" title="${hint}">
           <div><strong>${name}</strong><span>${hint}</span>${name === "座標" && currentCity.coordinateSource?.sourceUrl ? `<a href="${currentCity.coordinateSource.sourceUrl}" target="_blank" rel="noopener noreferrer">查看來源</a>` : ""}</div>
           <div class="insight-track"><i style="width:${completeness * 100}%"></i></div>
@@ -239,11 +260,17 @@ window.CountryView = {
         return true;
       }).map(candidate => ({ ...candidate, ratingSource: null, lat: null, lng: null }))
     ];
-    const spots = availableSpots.length ? availableSpots : (window.CityCatalogService?.createMapSearchSuggestions(currentCity) || []);
+    const fallbackSuggestions = (currentCity._spotCatalogReady || !window.CityCatalogService?.ensureSpots)
+      ? (window.CityCatalogService?.createMapSearchSuggestions(currentCity) || []) : [];
+    const spots = sortSpotsByQuality(availableSpots.length ? availableSpots : fallbackSuggestions);
+    const visibleSpotCount = 6;
+    const skeletonCount = currentCity._spotCatalogReady
+      ? 0
+      : Math.max(0, visibleSpotCount - Math.min(spots.length, visibleSpotCount));
     const renderSpotCard = (spot, idx, extra = false) => `
       <div class="spot-item" id="spot-item-${idx}" data-city-id="${currentCity.id}" data-spot-index="${idx}" ${extra ? "data-extra-spot" : ""}>
         <div style="display:flex; gap:1rem; align-items:center; width:100%;">
-          <div class="spot-media"><div id="spot-thumb-${idx}" class="spot-thumbnail" hidden></div><a id="spot-image-source-${idx}" class="spot-image-source" target="_blank" rel="noopener noreferrer" hidden>圖片來源</a></div>
+          <div class="spot-media"><div id="spot-thumb-${idx}" class="spot-thumbnail" data-image-category="${imageFallback(spot.category).tone}"><span class="spot-image-fallback" role="img" aria-label="${imageFallback(spot.category).label}"><span aria-hidden="true">${imageFallback(spot.category).icon}</span><small>${imageFallback(spot.category).label}</small></span></div><a id="spot-image-source-${idx}" class="spot-image-source" target="_blank" rel="noopener noreferrer" hidden>圖片來源</a></div>
           <div class="spot-main" style="flex:1;">
             <h5>
               <span style="color:var(--primary); font-weight:800;">#${idx + 1}</span>
@@ -266,9 +293,8 @@ window.CountryView = {
         </div>
       </div>
     `;
-    spotsContainer.innerHTML = spots.length
-      ? `${spots.slice(0, 4).map((spot, idx) => renderSpotCard(spot, idx)).join("")}${spots.length > 4 ? `<button type="button" class="spot-list-toggle" data-toggle-spots data-expanded="false">顯示其餘 ${spots.length - 4} 個景點</button>` : ""}`
-      : `<p class="spot-data-empty">正在查詢 ${escapeHtml(currentCity.name)} 周邊的公開景點資料；結果會附上地圖座標與來源連結。</p>`;
+    spotsContainer.innerHTML = `${spots.slice(0, visibleSpotCount).map((spot, idx) => renderSpotCard(spot, idx)).join("")}${Array.from({ length: skeletonCount }, (_, index) => `<article class="spot-item spot-skeleton" aria-hidden="true"><span class="skeleton-media"></span><span class="skeleton-copy"><i></i><i></i><i></i></span><span class="skeleton-actions"><i></i><i></i></span></article>`).join("")}${spots.length > visibleSpotCount ? `<button type="button" class="spot-list-toggle" data-toggle-spots data-expanded="false">顯示其餘 ${spots.length - visibleSpotCount} 個景點</button>` : ""}`
+      || `<p class="spot-data-empty">正在整理 ${escapeHtml(currentCity.name)} 的景點靈感…</p>`;
     if (currentCity._spotCatalogReady && currentCity.spotsSource === "local-or-map-search") {
       const retry = document.createElement("button");
       retry.type = "button";
@@ -292,6 +318,7 @@ window.CountryView = {
         const idx = offset + relativeIndex;
         const thumbEl = document.getElementById(`spot-thumb-${idx}`);
         const imageUrl = spot.imageUrl || spot.thumbnail || spot.photoUrl;
+        if (spot.imageFailed) return;
         const addImage = (url, alt, sourceUrl) => {
           if (!url || !thumbEl || !isCurrentCity()) return;
           let safeImageUrl;
@@ -300,41 +327,69 @@ window.CountryView = {
             if (!/^https?:$/.test(safeImageUrl.protocol)) return;
           } catch (error) { return; }
           const image = document.createElement("img");
-          image.src = safeImageUrl.href;
           image.alt = alt || spot.name;
           image.loading = "lazy";
           image.decoding = "async";
           image.referrerPolicy = "no-referrer";
+          image.onload = () => {
+            if (!thumbEl.isConnected || !isCurrentCity()) return;
+            thumbEl.classList.add("has-image");
+            const attribution = document.getElementById(`spot-image-source-${idx}`);
+            if (attribution && sourceUrl) {
+              try {
+                const safeSourceUrl = new URL(sourceUrl, window.location.href);
+                if (/^https?:$/.test(safeSourceUrl.protocol)) {
+                  attribution.href = safeSourceUrl.href;
+                  attribution.hidden = false;
+                }
+              } catch (error) { /* 無效來源連結不顯示 */ }
+            }
+          };
           image.onerror = () => {
-            thumbEl.hidden = true;
+            spot.imageFailed = true;
+            image.remove();
+            thumbEl.classList.remove("has-image");
+            thumbEl.title = "景點圖片暫不可用，已改用分類圖示顯示";
             const sourceLink = document.getElementById(`spot-image-source-${idx}`);
             if (sourceLink) sourceLink.hidden = true;
           };
-          thumbEl.replaceChildren(image);
-          thumbEl.hidden = false;
-          const attribution = document.getElementById(`spot-image-source-${idx}`);
-          if (attribution && sourceUrl) {
-            try {
-              const safeSourceUrl = new URL(sourceUrl, window.location.href);
-              if (/^https?:$/.test(safeSourceUrl.protocol)) {
-                attribution.href = safeSourceUrl.href;
-                attribution.hidden = false;
-              }
-            } catch (error) { /* 無效來源連結不顯示 */ }
-          }
+          thumbEl.appendChild(image);
+          image.src = safeImageUrl.href;
         };
         if (imageUrl) {
           addImage(imageUrl, spot.name, spot.imageSourceUrl || spot.wikipediaUrl);
           return;
         }
         window.SpotService.fetchSpotImage(spot.name, currentCity.name).then(image => {
-          if (image && isCurrentCity()) addImage(image.thumbnail, image.title || spot.name, image.pageUrl);
+          if (image?.thumbnail && isCurrentCity()) addImage(image.thumbnail, image.title || spot.name, image.pageUrl);
+          else if (!image) spot.imageFailed = true;
         }).catch(error => console.warn("景點圖片載入失敗：", error));
       });
     };
     const catalogCity = currentCity.catalogSourceCity || currentCity;
     if (window.CityCatalogService?.ensureSpots && !catalogCity._spotCatalogReady) {
-      window.CityCatalogService.ensureSpots(catalogCity).then(spots => {
+      window.CityCatalogService.ensureSpots(catalogCity, {
+        onCatalogReady: (publishedSpots, publishedCatalog) => {
+          if (!isCurrentCity()) return;
+          currentCity.spots = publishedSpots;
+          currentCity.attractions = publishedSpots.map(spot => spot.name);
+          currentCity.spotsSource = "firestore";
+          if (publishedCatalog.city?.description && !currentCity.descriptionSource?.text) {
+            currentCity.descriptionSource = {
+              text: publishedCatalog.city.description,
+              pageUrl: publishedCatalog.city.sourceUrl || null,
+              sourceLabel: publishedCatalog.city.sourceLabel || "後台城市目錄"
+            };
+          }
+          const storedCity = window.TRAVEL_DATA.globalCities.find(city => city.id === renderedCityId)
+            || window.TRAVEL_DATA.countries.flatMap(item => item.cities || []).find(city => city.id === renderedCityId);
+          if (storedCity) {
+            storedCity.spots = publishedSpots;
+            storedCity.attractions = currentCity.attractions;
+          }
+          window.CountryView.render(state);
+        }
+      }).then(spots => {
         currentCity.spots = spots;
         currentCity._spotCatalogReady = true;
         currentCity.spotsSource = catalogCity.spotsSource;
@@ -367,7 +422,7 @@ window.CountryView = {
     }
     this.renderCityWeather(currentCity, renderedCountryId, renderedCityId, state);
 
-    loadSpotDetails(spots.slice(0, 4));
+    loadSpotDetails(spots.slice(0, visibleSpotCount));
     if (window.SpotService && !catalogCity._spotCatalogReady
       && !window.CityCatalogService?.spotRequests?.has(catalogCity.id)) {
       window.CityCatalogService?.fetchCity(currentCity.id).then(published => {
@@ -411,18 +466,19 @@ window.CountryView = {
         if (!isCurrentCity() || !Array.isArray(places)) return;
         const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
         const knownNames = new Set(spots.map(spot => normalizeName(spot.name)));
-        const verifiedPlaces = places.filter(place => {
+        const verifiedPlaces = sortSpotsByQuality(places.filter(place => {
           const name = normalizeName(place.name);
           if (!name || knownNames.has(name)) return false;
           knownNames.add(name);
           return true;
-        });
+        }));
         if (verifiedPlaces.length) {
+          spotsContainer.querySelectorAll(".spot-skeleton").forEach(skeleton => skeleton.remove());
           const liveRecords = verifiedPlaces.map(place => ({
             name: place.name,
             category: place.category || "景點",
             tag: place.sourceLabel || "公開資料編目",
-            note: [place.description || `${place.sourceLabel || "公開地圖／知識資料"} 已編目地點；尚無描述資料。`, place.address ? `地址：${place.address}` : "", place.openingHours ? `開放時間：${place.openingHours}` : "", place.fee ? `收費標記：${place.fee}` : "", place.wheelchair ? `無障礙標記：${place.wheelchair}` : "", place.heritage ? `文化遺產標記：${place.heritage}` : "", place.startDate ? `建檔年代標記：${place.startDate}` : "", place.phone ? `電話：${place.phone}` : ""].filter(Boolean).join(" · "),
+            note: [place.description || `${place.sourceLabel || "公開地圖／知識資料"} 收錄的景點；暫無補充介紹。`, place.address ? `地址：${place.address}` : "", place.openingHours ? `開放時間：${place.openingHours}` : "", place.fee ? `收費資訊：${place.fee}` : "", place.wheelchair ? `無障礙資訊：${place.wheelchair}` : "", place.heritage ? `文化遺產：${place.heritage}` : "", place.startDate ? `建築年代：${place.startDate}` : "", place.phone ? `電話：${place.phone}` : ""].filter(Boolean).join(" · "),
             lat: place.lat,
             lng: place.lng,
             sourceId: place.sourceId,
@@ -481,8 +537,10 @@ window.CountryView = {
         const sourceNote = document.createElement("p");
         sourceNote.className = "spot-source-attribution";
         const sourceLabels = [...new Set(verifiedPlaces.map(place => place.sourceLabel).filter(Boolean))];
-        sourceNote.textContent = `周邊地點來源：${sourceLabels.join("、") || "公開地圖資料"}；${places[0]?.sourceDatasetAt ? `圖資時間：${places[0].sourceDatasetAt}。` : ""}各筆來源連結可查看與校正。`;
-        spotsContainer.appendChild(sourceNote);
+        sourceNote.textContent = "地點資料來源與圖資時間 ⓘ";
+        sourceNote.title = `周邊地點來源：${sourceLabels.join("、") || "公開地圖資料"}；${places[0]?.sourceDatasetAt ? `圖資時間：${places[0].sourceDatasetAt}。` : ""}各筆來源連結可查看與校正。`;
+        const moreButton = spotsContainer.querySelector("[data-toggle-spots]");
+        spotsContainer.insertBefore(sourceNote, moreButton);
         verifiedPlaces.forEach((place, offset) => {
           const index = spots.length + offset;
           const card = document.createElement("article");
@@ -501,7 +559,7 @@ window.CountryView = {
           note.className = "spot-note";
           const fetchedDate = place.fetchedAt ? new Date(place.fetchedAt).toLocaleDateString("zh-TW") : "";
           note.textContent = [
-            place.description || `${place.sourceLabel || "公開地圖／知識資料"} 已編目地點；尚無描述資料。`,
+            place.description || `${place.sourceLabel || "公開地圖／知識資料"} 收錄的景點；暫無補充介紹。`,
             place.address ? `地址：${place.address}` : "",
             place.openingHours ? `開放時間：${place.openingHours}` : "",
             place.fee ? `收費標記：${place.fee}` : "",
@@ -565,10 +623,27 @@ window.CountryView = {
             wikidataLink.textContent = `Wikidata ${place.wikidataId}`;
             actions.appendChild(wikidataLink);
           }
-          card.append(copy, actions);
-          spotsContainer.appendChild(card);
+          const media = document.createElement("div");
+          media.className = "spot-media";
+          const thumb = document.createElement("div");
+          thumb.id = `spot-thumb-${index}`;
+          thumb.className = "spot-thumbnail";
+          const fallback = imageFallback(place.category);
+          thumb.dataset.imageCategory = fallback.tone;
+          thumb.innerHTML = `<span class="spot-image-fallback" role="img" aria-label="${fallback.label}"><span aria-hidden="true">${fallback.icon}</span><small>${fallback.label}</small></span>`;
+          const imageSource = document.createElement("a");
+          imageSource.id = `spot-image-source-${index}`;
+          imageSource.className = "spot-image-source";
+          imageSource.target = "_blank";
+          imageSource.rel = "noopener noreferrer";
+          imageSource.hidden = true;
+          imageSource.textContent = "圖片來源";
+          media.append(thumb, imageSource);
+          card.append(media, copy, actions);
+          spotsContainer.insertBefore(card, moreButton);
           if (window.mapManager?.citySpotMarkers?.get(`${currentCity.id}:${index}`)?.feature) focus.disabled = false;
         });
+        loadSpotDetails(verifiedPlaces, spots.length);
         const insight = chart?.querySelector('[data-insight="spots"]');
         if (insight) {
           const label = insight.querySelector("div > span");

@@ -13,10 +13,16 @@ window.GlobalCitiesView = {
       target.innerHTML = visible.map(city => `
         <button type="button" class="global-city-card" onclick="window.appNavigate('global-city', { cityId: '${city.id}' })">
           <span class="global-city-flag">${city.flag}</span>
-          <span class="global-city-copy"><strong>${city.name}</strong><small>${city.englishName} · ${city.countryName} · ${city.coordinateSource ? "座標有來源" : "開啟時載入位置與詳細資料"}</small></span>
+          <span class="global-city-copy"><strong>${city.name}</strong><small>${city.englishName} · ${city.countryName} · ${city.coordinateSource ? "目的地資訊已備妥" : "探索城市周邊資訊"}</small></span>
           <span class="global-city-arrow">↗</span>
         </button>
-      `).join("") || `<p class="global-city-empty">找不到符合「${search?.value || ""}」的城市。</p>`;
+      `).join("");
+      if (!visible.length) {
+        const empty = document.createElement("p");
+        empty.className = "global-city-empty";
+        empty.textContent = `找不到符合「${search?.value || ""}」的城市。`;
+        target.replaceChildren(empty);
+      }
       if (visible.length < filtered.length) {
         const more = document.createElement("button");
         more.type = "button";
@@ -32,7 +38,7 @@ window.GlobalCitiesView = {
     renderList("global-population-list", lists.nameSorted, "name");
     renderList("global-travel-list", lists.dataComplete, "completeness");
     const count = document.getElementById("global-city-count");
-    if (count) count.textContent = `收錄 ${lists.nameSorted.length} 座去重城市`;
+    if (count) count.textContent = `收錄 ${lists.nameSorted.length} 座全球城市`;
     if (search && !search.dataset.bound) {
       search.dataset.bound = "true";
       let timer;

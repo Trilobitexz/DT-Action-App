@@ -3,6 +3,7 @@
     cache: new Map(),
     spotCache: new Map(),
     spotRequests: new Map(),
+    cityRequests: new Map(),
     failedCityReads: new Map(),
     waitForFirestore: function () {
       if (window.firebaseFirestore) return Promise.resolve(window.firebaseFirestore);
@@ -20,18 +21,20 @@
         }, 100);
       });
     },
-    fetchCity: async function (cityId) {
+    fetchCity: function (cityId) {
       const key = String(cityId || "");
-      if (!key) return null;
-      if (this.cache.has(key)) return this.cache.get(key);
-      const previousFailure = this.failedCityReads.get(key);
-      if (previousFailure && Date.now() - previousFailure < 30000) return null;
-      const db = await this.waitForFirestore();
-      if (!db) {
-        this.failedCityReads.set(key, Date.now());
-        return null;
-      }
-      try {
+      if (!key) return Promise.resolve(null);
+      if (this.cache.has(key)) return Promise.resolve(this.cache.get(key));
+      if (this.cityRequests.has(key)) return this.cityRequests.get(key);
+      const request = (async () => {
+        const previousFailure = this.failedCityReads.get(key);
+        if (previousFailure && Date.now() - previousFailure < 30000) return null;
+        const db = await this.waitForFirestore();
+        if (!db) {
+          this.failedCityReads.set(key, Date.now());
+          return null;
+        }
+        try {
         const read = Promise.all([
           db.collection("cities").doc(key).get(),
           db.collection("cities").doc(key).collection("spots").orderBy("index").limit(40).get()
@@ -80,12 +83,15 @@
         const result = { city: city || null, spots };
         this.cache.set(key, result);
         this.failedCityReads.delete(key);
-        return result;
-      } catch (error) {
-        this.failedCityReads.set(key, Date.now());
-        console.warn(`讀取後台城市目錄失敗（${key}）：`, error);
-        return null;
-      }
+          return result;
+        } catch (error) {
+          this.failedCityReads.set(key, Date.now());
+          console.warn(`讀取後台城市目錄失敗（${key}）：`, error);
+          return null;
+        }
+      })().finally(() => this.cityRequests.delete(key));
+      this.cityRequests.set(key, request);
+      return request;
     },
     normalizeSpotName: function (value) {
       return String(value || "").normalize("NFKC").trim().toLocaleLowerCase()
@@ -103,6 +109,22 @@
         merged.push({ ...item, name });
       });
       return merged;
+    },
+    sortSpotsByQuality: function (spots) {
+      const hasCoords = spot => Number.isFinite(spot?.lat) && spot.lat >= -90 && spot.lat <= 90
+        && Number.isFinite(spot?.lng) && spot.lng >= -180 && spot.lng <= 180;
+      const quality = spot => (spot.imageUrl || spot.thumbnail || spot.photoUrl ? 4 : 0)
+        + (String(spot.description || spot.note || "").trim().length >= 24 ? 2 : 0)
+        + (hasCoords(spot) ? 1 : 0);
+      return [...spots].sort((a, b) => {
+        if (Boolean(a.isSearchSuggestion) !== Boolean(b.isSearchSuggestion)) return a.isSearchSuggestion ? 1 : -1;
+        const qualityDifference = quality(b) - quality(a);
+        if (qualityDifference) return qualityDifference;
+        if (Boolean(a.isFeatured) !== Boolean(b.isFeatured)) return a.isFeatured ? -1 : 1;
+        const aRank = Number.isFinite(a.featuredRank) ? a.featuredRank : Number.POSITIVE_INFINITY;
+        const bRank = Number.isFinite(b.featuredRank) ? b.featuredRank : Number.POSITIVE_INFINITY;
+        return a.isFeatured && b.isFeatured && aRank !== bRank ? aRank - bRank : 0;
+      });
     },
     createMapSearchSuggestions: function (city) {
       const searches = [
@@ -127,7 +149,7 @@
         };
       });
     },
-    ensureSpots: function (city, { radius = 20000, limit = 50 } = {}) {
+    ensureSpots: function (city, { radius = 20000, limit = 50, onCatalogReady = null } = {}) {
       if (!city?.id) return Promise.resolve([]);
       const key = String(city.id);
       if (this.spotCache.has(key)) {
@@ -154,13 +176,20 @@
             console.warn(`讀取 ${city.name || key} 雲端城市目錄失敗：`, error);
             return null;
           }) : Promise.resolve(null);
+        if (typeof onCatalogReady === "function") {
+          cloudPromise.then(catalog => {
+            if (!catalog?.spots?.length) return;
+            const earlySpots = this.sortSpotsByQuality(this.mergeSpots(city.spots || [], catalog.spots, city.spotCandidates || []));
+            onCatalogReady(earlySpots, catalog);
+          }).catch(error => console.warn("無法提早顯示雲端景點目錄：", error));
+        }
         if (!saved && window.SpotService) {
           let coordinates = Number.isFinite(city.lat) && Number.isFinite(city.lng)
             ? { lat: city.lat, lng: city.lng }
             : null;
           if (!coordinates && city.englishName && city.countryCode) {
             coordinates = await window.SpotService.resolveCityLocation(city).catch(error => {
-              console.warn(`無法取得 ${city.name || key} 座標：`, error);
+              if (error.name !== "AbortError") console.warn(`無法取得 ${city.name || key} 座標：`, error);
               return null;
             });
             if (coordinates) {
@@ -193,21 +222,7 @@
           };
         }
         let spots = this.mergeSpots(city.spots || [], cloudSpots, liveSpots, city.spotCandidates || []);
-        const sourcePriority = spot => {
-          if (spot.isFeatured === true) return 0;
-          const hasSource = /^https?:\/\//i.test(String(spot.sourceUrl || spot.pageUrl || ""));
-          const hasCoordinates = Number.isFinite(spot.lat) && Number.isFinite(spot.lng);
-          if (hasSource && hasCoordinates) return 1;
-          if (hasSource) return 2;
-          return 3;
-        };
-        spots = spots.map((spot, originalOrder) => ({ spot, originalOrder })).sort((a, b) => {
-          const aRank = Number.isFinite(a.spot.featuredRank) ? a.spot.featuredRank : Number.POSITIVE_INFINITY;
-          const bRank = Number.isFinite(b.spot.featuredRank) ? b.spot.featuredRank : Number.POSITIVE_INFINITY;
-          if (Boolean(a.spot.isFeatured) !== Boolean(b.spot.isFeatured)) return a.spot.isFeatured ? -1 : 1;
-          if (aRank !== bRank) return aRank - bRank;
-          return sourcePriority(a.spot) - sourcePriority(b.spot) || a.originalOrder - b.originalOrder;
-        }).map(item => item.spot);
+        spots = this.sortSpotsByQuality(spots);
         if (!spots.length) spots = this.createMapSearchSuggestions(city);
         city.spots = spots;
         city._spotCatalogReady = true;
