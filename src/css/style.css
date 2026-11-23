@@ -2362,6 +2362,7 @@ body { background: #f7f6f3; background-image: radial-gradient(ellipse at 15% 0, 
 .app-sidebar { width: 240px; gap: 1.8rem; padding: 1.5rem 1rem; background: rgba(255,255,255,.94); }
 body { grid-template-columns: 240px minmax(0, 1fr); }
 body.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
+body.sidebar-collapsed .app-sidebar { width: 100%; }
 .view-panel { padding: clamp(1rem, 2.3vw, 2rem) clamp(1rem, 3vw, 2.75rem) 2.5rem; }
 .world-intro { margin: 0 auto .65rem; padding: clamp(1rem, 2vw, 1.5rem) clamp(1rem, 2.3vw, 2rem); }
 .world-intro-copy > p { max-width: 50rem; margin-top: .35rem; font-size: .92rem; }
@@ -2873,11 +2874,11 @@ body.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
 #map-hero-card { position: relative; }
 #map-hero-card .map-toolbar {
   position: absolute !important;
-  inset: .75rem .75rem auto auto !important;
+  inset: .75rem .75rem auto .75rem !important;
   z-index: 20;
   display: block !important;
   width: auto !important;
-  max-width: calc(100% - 1.5rem);
+  max-width: none;
   padding: 0 !important;
   border: 0 !important;
   background: transparent !important;
@@ -2886,10 +2887,11 @@ body.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
 #map-hero-card .map-toolbar > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 #map-hero-card .map-controls {
   display: flex !important;
-  width: auto !important;
-  max-width: min(780px, calc(100vw - 7rem));
+  width: 100% !important;
+  max-width: none;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: .42rem;
   pointer-events: auto;
 }
@@ -2911,6 +2913,9 @@ body.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
 #map-hero-card .map-zoom-group,
 #map-hero-card .map-projection-switch { width: auto; border: 0; background: transparent; }
 #map-hero-card .map-layer-btn { height: 34px; padding-inline: .55rem; border-radius: 999px; }
+#map-hero-card .map-style-cluster { flex: 0 0 auto; }
+#map-hero-card .map-layer-btn { display: inline-flex; align-items: center; justify-content: center; gap: .24rem; white-space: nowrap; }
+#map-hero-card .map-tools-cluster { max-width: min(100%, 780px); margin-left: auto; }
 #map-hero-card .map-control-actions { flex-wrap: nowrap; gap: .22rem; }
 #map-hero-card .map-zoom-group .map-btn { width: 34px; height: 34px; min-height: 34px; }
 #map-hero-card .map-zoom-group .map-reset-btn { min-width: auto; padding-inline: .55rem; }
@@ -2926,12 +2931,19 @@ body.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
 }
 #map-hero-card #leaflet-map .maplibregl-ctrl-bottom-right { right: auto; bottom: .7rem; left: .7rem; }
 @media (max-width: 760px) {
-  #map-hero-card .map-toolbar { inset: .55rem .45rem auto auto !important; max-width: calc(100% - .9rem); }
-  #map-hero-card .map-controls { max-width: min(100%, calc(100vw - 1.5rem)); gap: .28rem; }
+  #map-hero-card .map-toolbar { inset: .55rem .45rem auto .45rem !important; max-width: none; }
+  #map-hero-card .map-controls { display: grid !important; width: 100% !important; grid-template-columns: minmax(0, 1fr); justify-items: stretch; gap: .32rem; }
+  #map-hero-card .map-style-cluster { justify-self: start; }
+  #map-hero-card .map-tools-cluster { justify-self: end; max-width: 100%; margin-left: 0; }
   #map-hero-card .map-control-cluster { gap: .18rem; padding: .24rem .3rem; }
-  #map-hero-card .map-layer-btn { height: 31px; padding-inline: .38rem; font-size: .65rem; }
+  #map-hero-card .map-layer-btn { height: 32px; padding-inline: .48rem; font-size: .72rem; }
   #map-hero-card .map-control-actions { flex-wrap: wrap; justify-content: center; }
   #map-hero-card .map-control-actions > .map-btn { padding-inline: .42rem; font-size: .68rem; }
   #map-hero-card .map-continent-chips { inset: auto .45rem .55rem auto; width: max-content; max-width: 82%; justify-content: flex-start; }
   #map-hero-card #leaflet-map .maplibregl-ctrl-bottom-right { bottom: .55rem; left: .45rem; }
+}
+@media (max-width: 430px) {
+  #map-hero-card .map-layer-btn,
+  #map-hero-card .map-layer-btn:first-child { font-size: .66rem; }
+  #map-hero-card .map-layer-btn:first-child::after { content: none !important; }
 }
