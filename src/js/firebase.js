@@ -9,7 +9,9 @@
     measurementId: "G-WZXKJB3ZLR"
   };
 
-  var sdkUrl = "https://www.gstatic.com/firebasejs/11.0.2/";
+  // Keep the compat SDK on the same release as the modular AI/App Check SDKs
+  // loaded below. Mixed Firebase versions can split app/component registries.
+  var sdkUrl = "https://www.gstatic.com/firebasejs/13.3.0/";
   var sdkFiles = ["firebase-app-compat.js", "firebase-auth-compat.js", "firebase-firestore-compat.js", "firebase-analytics-compat.js"];
   var sdkReady = new Promise(function (resolve, reject) {
     var index = 0;
@@ -48,7 +50,10 @@
       var appSdk = modules[0];
       var appCheckSdk = modules[1];
       var aiSdk = modules[2];
-      var aiApp = appSdk.initializeApp(config, "journey-atlas-ai");
+      // The compat scripts and these ESM modules maintain separate app
+      // registries. Create a named app in the modular registry so Firebase AI
+      // Logic and App Check can initialize reliably alongside compat Auth.
+      var aiApp = appSdk.initializeApp(config, { name: "journey-atlas-ai" });
       appCheckSdk.initializeAppCheck(aiApp, {
         provider: new appCheckSdk.ReCaptchaEnterpriseProvider(siteKey),
         isTokenAutoRefreshEnabled: true

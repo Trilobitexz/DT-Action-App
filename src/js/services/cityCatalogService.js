@@ -224,9 +224,12 @@
         }
         const cloudSpots = cloudCatalog?.spots || [];
         const preferredSpots = this.sortSpotsByQuality(this.mergeSpots(cloudSpots, city.spots || [], cachedSpots, city.spotCandidates || []));
-        const hasEnoughLocatedSpots = preferredSpots.filter(spot => this.hasValidSpotCoordinates(spot, city)).length >= 3;
+        // Three database landmarks are enough for a fast first paint, but a city
+        // guide should keep enriching toward a fuller selection in the background.
+        const locatedSpotCount = preferredSpots.filter(spot => this.hasValidSpotCoordinates(spot, city)).length;
+        const shouldEnrichWithLivePlaces = locatedSpotCount < Math.min(24, limit);
         let liveSpots = [];
-        if (!hasEnoughLocatedSpots && window.SpotService) {
+        if (shouldEnrichWithLivePlaces && window.SpotService) {
           let coordinates = Number.isFinite(city.lat) && Number.isFinite(city.lng)
             ? { lat: city.lat, lng: city.lng }
             : null;

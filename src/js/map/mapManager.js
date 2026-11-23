@@ -110,7 +110,10 @@ class MapManager {
     this.map.on("idle", () => {
       if (!this.layersReady) this.ensureLayersInstalled();
     });
-    this.map.on("moveend", () => this.scheduleVisibleCityUpdate());
+    this.map.on("moveend", () => {
+      this.updateMarkersVisibility();
+      this.scheduleVisibleCityUpdate();
+    });
     this.map.on("zoomend", event => {
       this.updateMarkersVisibility();
       this.scheduleVisibleCityUpdate();
@@ -345,8 +348,9 @@ class MapManager {
         && this.activeCitySpotCategory !== "all"
         && element.dataset.spotCategory !== this.activeCitySpotCategory;
       element.hidden = !this.currentCityContext || filteredOut;
-      element.classList.toggle("labels-visible", Boolean(this.currentCityContext) && zoom >= 7.5);
+      element.classList.toggle("labels-visible", Boolean(this.currentCityContext) && zoom >= 10.5);
     });
+    this.applyCitySpotDensity(zoom);
     this.continentDomMarkers.forEach(marker => {
       marker.getElement().hidden = !world || zoom >= 3.4;
     });
@@ -356,6 +360,31 @@ class MapManager {
       const minimumZoom = tier === "major" ? 3.2 : tier === "medium" ? 4.0 : 4.8;
       element.hidden = !world || zoom < minimumZoom;
       element.classList.toggle("labels-visible", zoom >= (tier === "major" ? 3.2 : tier === "medium" ? 4.2 : 5.2));
+    });
+  }
+  applyCitySpotDensity(zoom = this.map?.getZoom() || 0) {
+    if (!this.map || !this.currentCityContext) return;
+    // Keep every location reachable while reducing overlapping pins at city scale.
+    // At neighborhood zoom all pins return; at wider zoom keep a stable, spatially
+    // distributed subset, recalculated as the map moves or zooms.
+    const minDistance = zoom < 8 ? 64 : zoom < 9 ? 44 : zoom < 10 ? 28 : zoom < 11 ? 14 : 0;
+    const pins = [...this.cityContextDomMarkers.values()]
+      .map(marker => ({ marker, element: marker.getElement() }))
+      .filter(item => item.element.dataset.cityMarkerType === "spot"
+        && Boolean(this.currentCityContext)
+        && (this.activeCitySpotCategory === "all" || item.element.dataset.spotCategory === this.activeCitySpotCategory))
+      .sort((a, b) => Number(b.element.dataset.featured === "true") - Number(a.element.dataset.featured === "true")
+        || Number(a.element.dataset.featuredRank || a.element.dataset.spotIndex || 0) - Number(b.element.dataset.featuredRank || b.element.dataset.spotIndex || 0));
+    const accepted = [];
+    pins.forEach(({ marker, element }) => {
+      const point = this.map.project(marker.getLngLat());
+      const overlaps = minDistance > 0 && accepted.some(other => {
+        const dx = point.x - other.x;
+        const dy = point.y - other.y;
+        return dx * dx + dy * dy < minDistance * minDistance;
+      });
+      element.hidden = overlaps;
+      if (!overlaps) accepted.push(point);
     });
   }
   handleCityContextZoom(event) {
@@ -398,7 +427,7 @@ class MapManager {
         && spot.lat !== 0 && spot.lng !== 0
         && spot.lat >= -90 && spot.lat <= 90 && spot.lng >= -180 && spot.lng <= 180;
       const feature = hasCoords
-        ? this.feature(`${city.id}-spot-${index}`, [spot.lng, spot.lat], { kind: "spot", cityId: city.id, index, name: spot.name, label: `${index + 1}. ${spot.name}`, category: spot.category || "景點", rating: spot.rating || "—", note: spot.note || "", approximate: false })
+        ? this.feature(`${city.id}-spot-${index}`, [spot.lng, spot.lat], { kind: "spot", cityId: city.id, index, name: spot.name, label: `${index + 1}. ${spot.name}`, category: spot.category || "景點", rating: spot.rating || "—", note: spot.note || "", isFeatured: spot.isFeatured === true, featuredRank: Number.isFinite(spot.featuredRank) ? spot.featuredRank : null, approximate: false })
         : null;
       this.citySpotMarkers.set(`${city.id}:${index}`, { feature, city, spot, index });
       this.syncSpotMapButton(city.id, index, Boolean(feature));
@@ -496,7 +525,7 @@ class MapManager {
     if (!this.map || !window.maplibregl) return;
     this.cityContextDomMarkers.forEach(marker => marker.remove());
     this.cityContextDomMarkers.clear();
-    const addMarker = (key, coordinates, className, content, title, onClick, markerType, category = "") => {
+    const addMarker = (key, coordinates, className, content, title, onClick, markerType, category = "", metadata = {}) => {
       const element = document.createElement("button");
       element.type = "button";
       element.className = `${className} map-context-landmark`;
@@ -504,6 +533,9 @@ class MapManager {
       element.setAttribute("aria-label", title);
       element.dataset.cityMarkerType = markerType;
       if (category) element.dataset.spotCategory = category;
+      if (metadata.spotIndex !== undefined) element.dataset.spotIndex = String(metadata.spotIndex);
+      if (metadata.featuredRank !== null && metadata.featuredRank !== undefined) element.dataset.featuredRank = String(metadata.featuredRank);
+      if (metadata.featured) element.dataset.featured = "true";
       element.innerHTML = content;
       element.addEventListener("click", event => {
         event.stopPropagation();
@@ -524,7 +556,7 @@ class MapManager {
     }, "center");
     this.geojson.spots.features.filter(feature => feature.properties.kind === "spot").forEach(feature => {
       const properties = feature.properties;
-      addMarker(String(feature.id), feature.geometry.coordinates, "map-spot-marker", `<span class="spot-pin-number"><b>${Number(properties.index) + 1}</b></span><span class="map-context-landmark-label">${this.escapePopupText(properties.name)}</span>`, properties.name, () => this.openSpotPopup(feature), "spot", properties.category || "景點");
+      addMarker(String(feature.id), feature.geometry.coordinates, "map-spot-marker", `<span class="spot-pin-number"><b>${Number(properties.index) + 1}</b></span><span class="map-context-landmark-label">${this.escapePopupText(properties.name)}</span>`, properties.name, () => this.openSpotPopup(feature), "spot", properties.category || "景點", { spotIndex: properties.index, featured: properties.isFeatured, featuredRank: properties.featuredRank });
     });
     this.geojson.airports.features.forEach(feature => {
       const properties = feature.properties;
@@ -556,6 +588,7 @@ class MapManager {
       element.hidden = !this.currentCityContext
         || (this.activeCitySpotCategory !== "all" && element.dataset.spotCategory !== this.activeCitySpotCategory);
     });
+    this.applyCitySpotDensity();
   }
   getAirportData(city) {
     if (!Array.isArray(city?.airports)) return [];
