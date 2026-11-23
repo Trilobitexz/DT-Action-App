@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="src/css/style.css?v=45">
+  <link rel="stylesheet" href="src/css/style.css?v=46">
 
 </head>
 <body>
@@ -46,7 +46,7 @@
             <div class="global-search-results" id="global-search-results" role="listbox" hidden></div>
           </div>
           <div class="auth-menu" id="auth-menu">
-            <button class="btn-auth auth-menu-trigger" id="auth-menu-trigger" type="button" aria-expanded="false" aria-controls="auth-menu-panel">
+            <button class="btn-auth auth-menu-trigger" id="auth-menu-trigger" type="button" aria-label="帳戶選單" title="登入或查看帳戶" aria-expanded="false" aria-controls="auth-menu-panel">
               <span class="auth-avatar" id="auth-avatar" aria-hidden="true">👤</span>
               <span id="auth-menu-label">登入</span>
               <span class="auth-menu-chevron" aria-hidden="true">⌄</span>
@@ -301,7 +301,7 @@
       window.mapLibreReady.catch(error => console.error(error));
     </script>
     <script src="src/js/map/geoContinents.js" defer></script>
-    <script src="src/js/map/mapManager.js?v=41" defer></script>
+    <script src="src/js/map/mapManager.js?v=43" defer></script>
 
     <!-- 載入資料庫與各洲資料模組 -->
     <script src="src/data/travelData.js" defer></script>
@@ -329,7 +329,7 @@
     <script src="src/js/modules/plannerView.js?v=8" defer></script>
     <script src="src/js/firebase-ai-config.js?v=2" defer></script>
     <script src="src/js/firebase.js?v=35" defer></script>
-    <script src="src/js/app.js?v=38" defer></script>
+    <script src="src/js/app.js?v=42" defer></script>
     <script src="src/js/pwa.js" defer></script>
   </div>
 </body>

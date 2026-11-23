@@ -110,6 +110,11 @@ class MapManager {
     });
     this.map.on("idle", () => {
       if (!this.layersReady) this.ensureLayersInstalled();
+      if (!this.globalCityDomMarkers.size && this.getGlobalCityList().some(city => city.lat !== null && city.lat !== undefined && Number.isFinite(Number(city.lat)) && Number.isFinite(Number(city.lng)))) {
+        this.renderCityMarkers();
+        this.renderGlobalCityDomMarkers(true);
+        this.renderOverviewDomMarkers(true);
+      }
     });
     this.map.on("moveend", () => {
       this.updateMarkersVisibility();
@@ -281,8 +286,9 @@ class MapManager {
   renderCityMarkers() {
     this.geojson.globalCities = this.emptyCollection();
     this.getGlobalCityList().forEach(city => {
-      const lat = city.lat;
-      const lng = city.lng;
+      if (city.lat === null || city.lat === undefined || city.lat === "" || city.lng === null || city.lng === undefined || city.lng === "") return;
+      const lat = Number(city.lat);
+      const lng = Number(city.lng);
       if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) this.geojson.globalCities.features.push(this.feature(city.id, [lng, lat], { kind: "global-city", cityId: city.id, label: `${city.flag || ""} ${city.name}`.trim(), name: city.name, country: city.countryName || "" }));
     });
     this.geojson.cities = this.emptyCollection();
@@ -306,6 +312,7 @@ class MapManager {
     this.globalCityDomMarkers.forEach(marker => marker.remove());
     this.globalCityDomMarkers.clear();
     cities.forEach(city => {
+      if (city.lat === null || city.lat === undefined || city.lat === "" || city.lng === null || city.lng === undefined || city.lng === "") return;
       const lat = Number(city.lat), lng = Number(city.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
       const element = document.createElement("button");
@@ -430,14 +437,15 @@ class MapManager {
     const cityMarkers = [...this.globalCityDomMarkers.values()].map(marker => ({ marker, element: marker.getElement() }))
       .sort((a, b) => Number(b.element.classList.contains("city-tier-major")) - Number(a.element.classList.contains("city-tier-major"))
         || String(a.element.dataset.cityId).localeCompare(String(b.element.dataset.cityId)));
-    const minDistance = zoom < 2.8 ? 74 : zoom < 3.5 ? 58 : zoom < 4.5 ? 40 : zoom < 5.5 ? 24 : 0;
+    // Show useful city coverage from the initial world view, then relax spacing as the user zooms in.
+    const minDistance = zoom < 2.8 ? 48 : zoom < 3.5 ? 40 : zoom < 4.5 ? 30 : zoom < 5.5 ? 18 : 0;
     const accepted = [];
     cityMarkers.forEach(({ marker, element }) => {
       const point = this.map.project(marker.getLngLat());
       const inViewport = point.x >= -20 && point.y >= -20 && point.x <= this.map.getContainer().clientWidth + 20 && point.y <= this.map.getContainer().clientHeight + 20;
       const overlaps = minDistance > 0 && accepted.some(other => (point.x - other.x) ** 2 + (point.y - other.y) ** 2 < minDistance ** 2);
       element.hidden = !world || !inViewport || overlaps;
-      element.classList.toggle("labels-visible", world && zoom >= 3.4 && !overlaps);
+      element.classList.toggle("labels-visible", world && zoom >= 3.0 && !overlaps);
       if (!element.hidden) accepted.push(point);
     });
   }
@@ -489,8 +497,10 @@ class MapManager {
   }
   flyToCity(lat, lng, zoom = 7, { animate = true } = {}) {
     if (!this.map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    this.map.stop(); const opts = { center: [lng, lat], zoom, duration: this.animateAllowed(animate) ? (this.isCoarsePointer ? 700 : 1000) : 0, essential: false };
-    if (opts.duration) this.map.flyTo(opts); else this.map.jumpTo(opts);
+    this.map.stop();
+    const options = { center: [lng, lat], zoom, speed: 1.2, curve: 1.4, essential: false };
+    if (this.animateAllowed(animate)) this.map.flyTo(options);
+    else this.map.jumpTo({ center: options.center, zoom, essential: false });
   }
   showCityContext(city, { animate = true, preserveView = false } = {}) {
     if (!this.map || !city || !Number.isFinite(city.lat) || !Number.isFinite(city.lng)
@@ -634,7 +644,14 @@ class MapManager {
       }
       element.addEventListener("click", event => {
         event.stopPropagation();
-        if (markerType === "spot") this.scrollToSpotCard(city.id, metadata.spotIndex);
+        if (markerType === "spot") {
+          this.scrollToSpotCard(city.id, metadata.spotIndex);
+          const zoom = this.activeLayerKey === "voyager" ? Math.max(14.2, this.map.getZoom()) : Math.max(13, this.map.getZoom());
+          const camera = { center: coordinates, zoom, pitch: this.activeLayerKey === "voyager" ? 45 : this.map.getPitch(), speed: 1.2, curve: 1.4, essential: false };
+          this.map.stop();
+          if (this.animateAllowed(true)) this.map.flyTo(camera);
+          else this.map.jumpTo({ center: coordinates, zoom, pitch: camera.pitch, essential: false });
+        }
         onClick?.();
       });
       const marker = new window.maplibregl.Marker({ element, anchor: "center", subpixelPositioning: true }).setLngLat(coordinates).addTo(this.map);
@@ -797,19 +814,20 @@ class MapManager {
     if (!entry?.feature || !this.map) return false;
     this.cityContextUserInteracted = true;
     const coordinates = entry.feature.geometry.coordinates;
-    const duration = this.animateAllowed(true) ? 500 : 0;
+    const zoom = this.activeLayerKey === "voyager" ? Math.max(14.2, this.map.getZoom()) : Math.max(13, this.map.getZoom());
+    const pitch = this.activeLayerKey === "voyager" ? 45 : this.map.getPitch();
     let popupOpened = false;
     const openPopup = () => {
       if (popupOpened) return;
       popupOpened = true;
       this.openSpotPopup(entry.feature);
     };
-    if (duration) {
+    if (this.animateAllowed(true)) {
       this.map.once("moveend", openPopup);
-      this.map.flyTo({ center: coordinates, zoom: Math.max(13, this.map.getZoom()), duration, essential: false });
-      window.setTimeout(openPopup, duration + 100);
+      this.map.flyTo({ center: coordinates, zoom, pitch, speed: 1.2, curve: 1.4, essential: false });
+      window.setTimeout(openPopup, 2400);
     } else {
-      this.map.jumpTo({ center: coordinates, zoom: Math.max(13, this.map.getZoom()) });
+      this.map.jumpTo({ center: coordinates, zoom, pitch, essential: false });
       window.requestAnimationFrame(openPopup);
     }
     return true;
@@ -844,7 +862,16 @@ class MapManager {
       return;
     }
     const bounds = points.reduce((b, point) => b.extend(point), new window.maplibregl.LngLatBounds(points[0], points[0]));
-    if (!bounds.isEmpty()) this.map.fitBounds(bounds, { padding: this.isCoarsePointer ? 48 : 68, maxZoom: 11, duration: this.animateAllowed(animate) ? 900 : 0, essential: false });
+    if (!bounds.isEmpty()) {
+      const padding = this.isCoarsePointer ? 48 : 68;
+      if (this.map.getZoom() < 6 && this.animateAllowed(animate)) {
+        const camera = this.map.cameraForBounds(bounds, { padding, maxZoom: 11 });
+        if (camera) {
+          this.map.stop();
+          this.map.flyTo({ ...camera, speed: 1.2, curve: 1.4, essential: false });
+        } else this.map.fitBounds(bounds, { padding, maxZoom: 11, duration: 900, essential: false });
+      } else this.map.fitBounds(bounds, { padding, maxZoom: 11, duration: this.animateAllowed(animate) ? 850 : 0, essential: false });
+    }
     else this.flyToCity(city.lat, city.lng, 11, { animate });
   }
   showFlightRoute(destination, hasDirect = false) {

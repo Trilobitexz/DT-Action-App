@@ -4,6 +4,7 @@
     spotCache: new Map(),
     spotRequests: new Map(),
     cityRequests: new Map(),
+    prebuiltCityRequests: new Map(),
     failedCityReads: new Map(),
     waitForFirestore: function () {
       if (window.firebaseFirestore) return Promise.resolve(window.firebaseFirestore);
@@ -114,6 +115,36 @@
       }
       return true;
     },
+    getCityContinentId: function (city) {
+      if (city?.continentId) return city.continentId;
+      const country = window.TRAVEL_DATA?.countries?.find(item => item.cities?.some(candidate => candidate.id === city?.id));
+      if (country?.continentId) return country.continentId;
+      const globalCity = window.TRAVEL_DATA?.globalCities?.find(item => item.id === city?.id);
+      const continent = window.TRAVEL_DATA?.continents?.find(item => item.name === globalCity?.continentName);
+      return continent?.id || "";
+    },
+    fetchPrebuiltSpots: function (city) {
+      const continentId = this.getCityContinentId(city);
+      if (!city?.id || !continentId) return Promise.resolve([]);
+      if (!this.prebuiltCityRequests.has(continentId)) {
+        const request = fetch(`src/data/city-spots/${encodeURIComponent(continentId)}.json`)
+          .then(response => response.ok ? response.json() : {})
+          .catch(error => {
+            console.warn(`無法載入${continentId}精選景點資料：`, error);
+            return {};
+          });
+        this.prebuiltCityRequests.set(continentId, request);
+      }
+      return this.prebuiltCityRequests.get(continentId).then(cities => {
+        const coordinates = { lat: Number(city.lat), lng: Number(city.lng) };
+        return (cities?.[city.id] || []).map(spot => ({
+          ...spot,
+          lat: Number(spot.lat), lng: Number(spot.lng),
+          tag: "城市精選", ratingSource: null,
+          isFeatured: true
+        })).filter(spot => this.hasValidSpotCoordinates(spot, coordinates));
+      });
+    },
     mergeSpots: function (...groups) {
       const merged = [];
       const names = new Set();
@@ -187,6 +218,14 @@
         }
 
         const cachedSpots = Array.isArray(saved?.spots) ? saved.spots : [];
+        const prebuiltSpots = await this.fetchPrebuiltSpots(city);
+        if (prebuiltSpots.length) {
+          const instantSpots = this.sortSpotsByQuality(this.mergeSpots(prebuiltSpots, city.spots || [], cachedSpots, city.spotCandidates || []));
+          city.spots = instantSpots;
+          city._spotCatalogReady = true;
+          city.spotsSource = "prebuilt";
+          if (typeof onCatalogReady === "function") onCatalogReady(instantSpots, { city: null, source: "prebuilt" });
+        }
         const cloudPromise = this.fetchCity(key).catch(error => {
           console.warn(`讀取 ${city.name || key} 雲端城市目錄失敗：`, error);
           return null;
@@ -260,7 +299,7 @@
         if (!spots.length) spots = this.createMapSearchSuggestions(city);
         city.spots = spots;
         city._spotCatalogReady = true;
-        city.spotsSource = cloudSpots.length ? "firestore" : liveSpots.length ? "live" : saved ? "cached" : "local-or-map-search";
+        city.spotsSource = cloudSpots.length ? "firestore" : liveSpots.length ? "live" : saved ? "cached" : prebuiltSpots.length ? "prebuilt" : "local-or-map-search";
         city.dataStatus = { ...(city.dataStatus || {}), spots: spots.some(spot => !spot.isSearchSuggestion) ? "available" : "map-search-fallback" };
         this.spotCache.set(key, spots);
         if (liveSpots.length) {

@@ -393,7 +393,8 @@ window.CountryView = {
           }
           currentCity.spots = publishedSpots;
           currentCity.attractions = publishedSpots.map(spot => spot.name);
-          currentCity.spotsSource = "firestore";
+          currentCity.spotsSource = publishedCatalog?.source === "prebuilt" ? "prebuilt" : "firestore";
+          catalogCity.spotsSource = currentCity.spotsSource;
           currentCity._spotCatalogReady = true;
           catalogCity._spotCatalogReady = true;
           if (publishedCatalog.city?.description && !currentCity.descriptionSource?.text) {

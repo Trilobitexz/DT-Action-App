@@ -131,13 +131,24 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
   });
-  // 地圖程式以非同步方式載入；先啟動一般介面與導覽，不讓地圖 CDN 延遲整個 App。
+  // 地圖程式以非同步方式載入；首輪樣式與資料就緒後再保險重繪城市點，避免首次載入時序讓城市圖層留空。
+  const initializeMap = () => {
+    mapManager.init();
+    const refreshMapDirectory = () => {
+      mapManager.renderCityMarkers();
+      mapManager.renderGlobalCityDomMarkers(true);
+      mapManager.renderOverviewDomMarkers(true);
+      mapManager.updateMarkersVisibility();
+    };
+    if (mapManager.map?.loaded()) refreshMapDirectory();
+    else mapManager.map?.once("load", refreshMapDirectory);
+  };
   if (window.mapLibreReady) {
-    window.mapLibreReady.then(() => mapManager.init()).catch(error => {
+    window.mapLibreReady.then(initializeMap).catch(error => {
       console.error("互動地圖無法初始化：", error);
     });
   } else {
-    mapManager.init();
+    initializeMap();
   }
   mapContextInfo?.addEventListener("change", event => {
     if (event.target?.id === "map-spot-category-filter") {
@@ -161,12 +172,31 @@ document.addEventListener("DOMContentLoaded", () => {
   const drawers = document.querySelectorAll(".side-drawer");
   const sidebar = document.querySelector(".app-sidebar");
   const sidebarCompactQuery = window.matchMedia?.("(max-width: 980px)");
+  const sidebarHoverQuery = window.matchMedia?.("(hover: hover) and (pointer: fine) and (min-width: 981px)");
   const syncSidebarLayout = () => {
-    document.body.classList.toggle("sidebar-collapsed", sidebarCompactQuery?.matches === true);
+    const compact = sidebarCompactQuery?.matches === true;
+    document.body.classList.toggle("sidebar-collapsed", compact || sidebarHoverQuery?.matches === true);
     if (sidebar) window.requestAnimationFrame(() => mapManager.invalidateSize());
   };
   syncSidebarLayout();
   sidebarCompactQuery?.addEventListener?.("change", syncSidebarLayout);
+  sidebarHoverQuery?.addEventListener?.("change", syncSidebarLayout);
+  if (sidebar && sidebarHoverQuery) {
+    sidebar.addEventListener("pointerenter", () => {
+      if (sidebarHoverQuery.matches) document.body.classList.remove("sidebar-collapsed");
+    });
+    sidebar.addEventListener("pointerleave", () => {
+      if (sidebarHoverQuery.matches && !sidebar.contains(document.activeElement)) document.body.classList.add("sidebar-collapsed");
+    });
+    sidebar.addEventListener("focusin", () => {
+      if (sidebarHoverQuery.matches) document.body.classList.remove("sidebar-collapsed");
+    });
+    sidebar.addEventListener("focusout", () => {
+      window.setTimeout(() => {
+        if (sidebarHoverQuery.matches && !sidebar.matches(":hover") && !sidebar.contains(document.activeElement)) document.body.classList.add("sidebar-collapsed");
+      }, 0);
+    });
+  }
   let drawerTrigger = null;
   const closeDrawers = () => {
     const restoreTarget = drawerTrigger;
