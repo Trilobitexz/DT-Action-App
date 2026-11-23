@@ -1,30 +1,30 @@
-const CACHE_NAME = "journey-atlas-shell-v58";
+const CACHE_NAME = "journey-atlas-shell-v59";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./src/css/style.css?v=44",
+  "./src/css/style.css?v=47",
   "./src/js/pwa.js",
-  "./src/js/app.js?v=38",
+  "./src/js/app.js?v=42",
   "./src/js/map/geoContinents.js",
-  "./src/js/map/mapManager.js?v=40",
+  "./src/js/map/mapManager.js?v=44",
   "./src/js/store/appStore.js",
   "./src/js/modules/continentView.js",
-  "./src/js/modules/countryView.js?v=44",
+  "./src/js/modules/countryView.js?v=46",
   "./src/js/modules/globalCitiesView.js",
-  "./src/js/modules/plannerView.js?v=7",
+  "./src/js/modules/plannerView.js?v=8",
   "./src/js/firebase.js?v=35",
   "./src/js/firebase-ai-config.js?v=2",
   "./src/js/services/currencyService.js",
   "./src/js/services/flightService.js",
-  "./src/js/services/spotService.js?v=44",
+  "./src/js/services/spotService.js?v=45",
   "./src/js/services/cityCatalogService.js?v=7",
   "./src/js/services/weatherService.js",
   "./src/data/travelData.js",
   "./src/data/globalCities.js",
-  "./src/data/cityCatalogExpansion.js",
-  "./src/data/cityGeonames.js",
-  "./src/data/cityEnrichment.js",
+  "./src/data/cityCatalogExpansion.js?v=1",
+  "./src/data/cityGeonames.js?v=1",
+  "./src/data/cityEnrichment.js?v=33",
   "./src/data/countries/asia.js",
   "./src/data/countries/europe.js",
   "./src/data/countries/others.js"
@@ -60,6 +60,21 @@ self.addEventListener("fetch", event => {
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
+    if (event.request.mode === "navigate") {
+      try {
+        const response = await fetch(event.request);
+        if (response && response.status === 200 && response.type === "basic") {
+          await cache.put(event.request, response.clone());
+        }
+        return response;
+      } catch (error) {
+        const offlinePage = await cache.match(event.request)
+          || await cache.match("./index.html")
+          || await cache.match("./");
+        if (offlinePage) return offlinePage;
+        throw error;
+      }
+    }
     const cachedResponse = await cache.match(event.request);
     if (cachedResponse) return cachedResponse;
     try {
