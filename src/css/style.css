@@ -431,6 +431,14 @@ body.sidebar-collapsed .sidebar-nav-item { grid-template-columns: 1fr; justify-i
   font-size: 0.78rem;
   font-weight: 700;
 }
+.map-feature-popup { display: flex; min-width: 190px; max-width: 280px; flex-direction: column; gap: .35rem; color: #33443f; font-size: .78rem; line-height: 1.45; }
+.map-feature-popup strong { color: #203a3c; font-size: .9rem; }
+.map-feature-popup > span { color: var(--primary); font-size: .72rem; font-weight: 750; }
+.map-feature-popup p { margin: 0; color: #63716d; }
+.map-feature-popup small { color: #7b8581; font-size: .65rem; }
+.map-feature-popup a, .map-feature-popup button { display: inline-flex; width: fit-content; align-items: center; min-height: 32px; padding: .3rem .55rem; border: 1px solid #e5e9e4; border-radius: 7px; background: #f8faf8; color: #236b5c; cursor: pointer; font: inherit; font-size: .72rem; font-weight: 700; text-decoration: none; }
+.map-feature-popup a:hover, .map-feature-popup button:hover { border-color: #a7cfc3; background: #eef8f4; }
+.map-feature-popup-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 
 .map-toolbar {
   padding: 1rem 1.5rem;
@@ -1187,6 +1195,7 @@ body.sidebar-collapsed .sidebar-nav-item { grid-template-columns: 1fr; justify-i
 
 .weather-badge {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   background: #f0fdf4;
@@ -1201,6 +1210,7 @@ body.sidebar-collapsed .sidebar-nav-item { grid-template-columns: 1fr; justify-i
 .weather-badge strong {
   color: #14532d;
 }
+.weather-air-quality { flex: 1 1 100%; min-width: 0; padding-top: .2rem; border-top: 1px solid rgba(63, 107, 78, .14); color: #52645b; font-size: .7rem; line-height: 1.5; }
 
 
 .search-input {
@@ -1541,13 +1551,20 @@ to { stroke-dashoffset: -40; }
 .comparison-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-end; }
 .comparison-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.8rem 0; }
 .compare-chip { padding: 0.35rem 0.6rem; border: 1px solid #e4d8ce; border-radius: 20px; background: #fff7f2; color: #8f4c38; cursor: pointer; font-size: 0.72rem; }
+.compare-chip span { margin-left: .2rem; color: #a36350; font-size: 1rem; }
+.compare-clear-btn { padding: .35rem .65rem; border: 1px solid #e5e7e4; border-radius: 999px; background: #fff; color: #64716d; cursor: pointer; font-size: .7rem; }
+.compare-clear-btn:hover { border-color: #bd7560; color: #8f4c38; }
 .comparison-empty { padding: 1rem; border: 1px dashed #d9d2c7; border-radius: 9px; color: var(--text-muted); font-size: 0.78rem; }
-.comparison-table-wrap { overflow-x: auto; }
-.comparison-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; font-size: 0.75rem; }
+.comparison-table-wrap { overflow-x: auto; overscroll-behavior-inline: contain; border: 1px solid #eeeae3; border-radius: 12px; }
+.comparison-table { width: 100%; min-width: 610px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 0.75rem; }
 .comparison-table th, .comparison-table td { padding: 0.65rem; border-bottom: 1px solid #eeeae3; text-align: left; vertical-align: top; }
 .comparison-table th, .comparison-table td { overflow-wrap: anywhere; word-break: break-word; }
-.comparison-table thead th { color: var(--primary); background: #fffaf6; font-weight: 800; }
-.comparison-table tbody th { width: 20%; color: #526064; }
+.comparison-table thead th { position: sticky; top: 0; z-index: 2; color: var(--primary); background: #fffaf6; font-weight: 800; }
+.comparison-table thead th:first-child, .comparison-table tbody th { position: sticky; left: 0; z-index: 1; width: 22%; color: #526064; background: #fff; }
+.comparison-table thead th:first-child { z-index: 3; background: #fffaf6; }
+.comparison-table tbody tr:nth-child(even) td { background: #fcfbf9; }
+.comparison-table tbody tr:last-child th, .comparison-table tbody tr:last-child td { border-bottom: 0; }
+.comparison-footnote { margin: .7rem .1rem 0; color: var(--text-muted); font-size: .68rem; line-height: 1.6; }
 .comparison-status { color: #278d78; font-size: 0.7rem; font-weight: 750; white-space: nowrap; }
 .data-status-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.45rem; }
 .data-source-badge { padding: 0.22rem 0.5rem; border: 1px solid #cde6df; border-radius: 999px; background: #f0faf7; color: #2d796b; font-size: 0.67rem; font-weight: 700; }

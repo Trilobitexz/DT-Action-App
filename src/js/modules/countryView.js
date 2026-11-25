@@ -238,25 +238,15 @@ window.CountryView = {
     }
     const chart = document.getElementById("city-insight-chart");
     if (chart) {
-      const facts = Array.isArray(currentCity.spots) ? currentCity.spots : [];
-      const verifiedSpotCount = facts.filter(spot => !spot.isSearchSuggestion
-        && Number.isFinite(spot.lat) && Number.isFinite(spot.lng) && spot.sourceUrl).length;
-      const searchSpotCount = facts.filter(spot => spot.isSearchSuggestion).length;
-      const airports = Array.isArray(currentCity.airports) ? currentCity.airports : [];
-      const metrics = [
-        ["城市介紹", currentCity.descriptionSource?.text ? 1 : 0, currentCity.descriptionSource?.text ? "附來源" : "百科摘要載入中"],
-        ["景點", Math.min(verifiedSpotCount, 5) / 5, `${verifiedSpotCount} 筆有座標來源${searchSpotCount ? `，另有 ${searchSpotCount} 個地圖搜尋入口` : ""}`],
-        ["機場", airports.length ? 1 : 0, airports.length ? `${airports.length} 個機場資訊` : "查看城市周邊資訊"],
-        ["座標", Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? 1 : 0, currentCity.coordinateSource?.provider || "城市位置參考"]
-      ];
-      chart.innerHTML = `<p class="city-data-completeness-label">目前可參考的旅行資訊（不代表旅遊評分）</p>` + metrics.map(([name, completeness, hint]) => `
-        <div class="insight-metric" data-insight="${name === "景點" ? "spots" : ""}" title="${hint}">
-          <div><strong>${name}</strong><span>${hint}</span>${name === "座標" && currentCity.coordinateSource?.sourceUrl ? `<a href="${currentCity.coordinateSource.sourceUrl}" target="_blank" rel="noopener noreferrer">查看來源</a>` : ""}</div>
-          <div class="insight-track"><i style="width:${completeness * 100}%"></i></div>
+      const coverage = window.PlannerView?.getCityDataCoverage(currentCity, country);
+      if (coverage) chart.innerHTML = `<p class="city-data-completeness-label">資料完整度 ${coverage.score}/${coverage.maxScore}（資料欄位覆蓋，不代表旅遊品質評分）</p>` + coverage.fields.map(field => `
+        <div class="insight-metric" data-insight="${field.key === "spots" ? "spots" : ""}" title="${escapeHtml(field.note)}">
+          <div><strong>${field.label} <small>${field.value}/${field.max}</small></strong><span>${escapeHtml(field.note)}</span></div>
+          <div class="insight-track"><i style="width:${field.value / field.max * 100}%"></i></div>
         </div>
       `).join("");
     }
-    window.PlannerView?.renderCityTools(currentCity, state);
+    window.PlannerView?.renderCityTools(currentCity, state, country);
 
     const resolvedSpots = Array.isArray(currentCity.spots) ? currentCity.spots : [];
     const candidates = Array.isArray(currentCity.spotCandidates) ? currentCity.spotCandidates : [];
@@ -563,7 +553,7 @@ window.CountryView = {
             storedCity.attractions = currentCity.attractions;
             storedCity.dataStatus = currentCity.dataStatus;
           }
-          window.PlannerView?.renderCityTools(currentCity, state);
+          window.PlannerView?.renderCityTools(currentCity, state, country);
         }
         if (!verifiedPlaces.length) {
           if (!spots.length) {
@@ -715,17 +705,49 @@ window.CountryView = {
     const weatherWidget = document.getElementById("city-weather-widget");
     if (!weatherWidget) return;
 
-    if (!city.lat || !city.lng || !window.WeatherService) {
+    const validCoordinates = Number.isFinite(city.lat) && Number.isFinite(city.lng)
+      && city.lat >= -90 && city.lat <= 90 && city.lng >= -180 && city.lng <= 180
+      && !(city.lat === 0 && city.lng === 0);
+    if (!validCoordinates || !window.WeatherService) {
       weatherWidget.style.display = "none";
       return;
     }
 
+    weatherWidget.dataset.cityId = cityId;
+    weatherWidget.dataset.countryId = countryId;
     weatherWidget.style.display = "inline-flex";
     weatherWidget.innerHTML = `🌤️ 載入即時天氣...`;
+    let weatherReady = false;
+    let airQuality = null;
+    const isCurrentCity = () => {
+      const activeCountryId = state.globalCityId ? `global-${state.globalCityId}` : state.selectedCountryId;
+      return activeCountryId === countryId && state.selectedCityId === cityId
+        && weatherWidget.dataset.cityId === cityId && weatherWidget.dataset.countryId === countryId;
+    };
+    const renderAirQuality = () => {
+      if (!weatherReady || !airQuality || !isCurrentCity()) return;
+      weatherWidget.querySelector("[data-air-quality]")?.remove();
+      const line = document.createElement("span");
+      line.dataset.airQuality = "true";
+      line.className = "weather-air-quality";
+      const particles = [
+        Number.isFinite(airQuality.pm25) ? `PM2.5 ${airQuality.pm25.toFixed(1)} μg/m³` : "",
+        Number.isFinite(airQuality.pm10) ? `PM10 ${airQuality.pm10.toFixed(1)} μg/m³` : ""
+      ].filter(Boolean).join(" · ");
+      line.textContent = `${airQuality.icon} 空氣品質 AQI ${airQuality.aqi} · ${airQuality.level}${particles ? ` · ${particles}` : ""}`;
+      line.title = `${airQuality.source}；全球模式估值，不是城市測站即時讀值。${airQuality.time ? ` 資料時間：${airQuality.time} ${airQuality.timezone}` : ""}`;
+      weatherWidget.appendChild(line);
+    };
+
+    if (typeof window.WeatherService.getCityAirQuality === "function") {
+      window.WeatherService.getCityAirQuality(city.lat, city.lng).then(result => {
+        airQuality = result;
+        renderAirQuality();
+      }).catch(error => console.warn("顯示空氣品質失敗：", error));
+    }
 
     window.WeatherService.getCityWeather(city.lat, city.lng).then(weather => {
-      const activeCountryId = state.globalCityId ? `global-${state.globalCityId}` : state.selectedCountryId;
-      if (activeCountryId !== countryId || state.selectedCityId !== cityId) return;
+      if (!isCurrentCity()) return;
       if (weather) {
         weatherWidget.innerHTML = `
           <span style="font-size:1.1rem; line-height:1;">${weather.icon}</span>
@@ -738,10 +760,13 @@ window.CountryView = {
       } else {
         weatherWidget.textContent = "目前無法取得天氣資料";
       }
+      weatherReady = true;
+      renderAirQuality();
     }).catch(error => {
-      const activeCountryId = state.globalCityId ? `global-${state.globalCityId}` : state.selectedCountryId;
-      if (activeCountryId === countryId && state.selectedCityId === cityId) {
+      if (isCurrentCity()) {
         weatherWidget.textContent = "目前無法取得天氣資料";
+        weatherReady = true;
+        renderAirQuality();
       }
       console.warn("顯示天氣失敗：", error);
     });

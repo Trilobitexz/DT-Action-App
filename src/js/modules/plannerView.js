@@ -222,6 +222,33 @@ window.PlannerView = {
     });
   },
 
+  getCityDataCoverage: function (city, suppliedCountry = null) {
+    const country = suppliedCountry || (window.TRAVEL_DATA.countries || []).find(item =>
+      item.id === city?.countryId || (city?.countryName && item.name === city.countryName)
+    );
+    const validCoordinates = place => Number.isFinite(Number(place?.lat)) && Number.isFinite(Number(place?.lng))
+      && Number(place.lat) >= -90 && Number(place.lat) <= 90
+      && Number(place.lng) >= -180 && Number(place.lng) <= 180
+      && !(Number(place.lat) === 0 && Number(place.lng) === 0);
+    const spotList = Array.isArray(city?.spots) ? city.spots : Array.isArray(city?.spotCandidates) ? city.spotCandidates : [];
+    const verifiedSpots = spotList.filter(spot => !spot?.isSearchSuggestion
+      && /^https?:\/\//i.test(String(spot?.sourceUrl || "")) && validCoordinates(spot));
+    const sourcedAirports = (Array.isArray(city?.airports) ? city.airports : []).filter(airport =>
+      /^https?:\/\//i.test(String(airport?.sourceUrl || "")) && validCoordinates(airport)
+    );
+    const price = city?.priceLevel || country?.priceLevel || null;
+    const flight = city?.flightInfo || country?.flightInfo || null;
+    const fields = [
+      { key: "coordinates", label: "城市座標", value: validCoordinates(city) ? 1 : 0, max: 1, note: validCoordinates(city) ? "有座標" : "尚無有效座標" },
+      { key: "description", label: "城市介紹", value: city?.descriptionSource?.text ? 1 : 0, max: 1, note: city?.descriptionSource?.text ? "附有來源" : "尚無來源介紹" },
+      { key: "spots", label: "景點資料", value: Math.min(verifiedSpots.length, 5), max: 5, note: `${verifiedSpots.length} 筆附來源與座標` },
+      { key: "airports", label: "機場資訊", value: sourcedAirports.length ? 1 : 0, max: 1, note: sourcedAirports.length ? `${sourcedAirports.length} 個有來源座標` : "尚無來源機場資料" },
+      { key: "price", label: "旅費參考", value: price && (price.dailyBudgetTwd || price.tier) && price.verified !== false ? 1 : 0, max: 1, note: price && (price.dailyBudgetTwd || price.tier) && price.verified !== false ? `${city?.priceLevel ? "城市" : "國家／地區"}級參考` : "尚無可比較參考" },
+      { key: "flight", label: "航線資訊", value: flight?.hasDirect === true || flight?.hasDirect === false ? 1 : 0, max: 1, note: flight?.hasDirect === true || flight?.hasDirect === false ? `${city?.flightInfo ? "城市" : "國家／地區"}級參考` : "尚無可比較資料" }
+    ];
+    return { fields, score: fields.reduce((sum, field) => sum + field.value, 0), maxScore: fields.reduce((sum, field) => sum + field.max, 0) };
+  },
+
   renderRecommendations: function (formData) {
     const result = document.getElementById("recommendation-results");
     if (!result) return;
@@ -284,11 +311,16 @@ window.PlannerView = {
   },
 
   toggleCompare: function (city) {
+    if (!city) return;
     const key = city.id || `${city.countryName}-${city.name}`;
     const exists = this.compareIds.indexOf(key);
     if (exists >= 0) this.compareIds.splice(exists, 1);
     else if (this.compareIds.length < 4) this.compareIds.push(key);
-    else return;
+    else {
+      const status = document.getElementById("comparison-drawer-status");
+      if (status) status.textContent = "比較清單已滿（最多 4 座），先移除一座再加入。";
+      return;
+    }
     try {
       const value = JSON.stringify(this.compareIds);
       localStorage.setItem("journey-atlas-compare", value);
@@ -309,28 +341,85 @@ window.PlannerView = {
     const panel = document.getElementById("comparison-panel");
     if (!panel) return;
     const cities = this.allCities().filter(city => this.compareIds.includes(city.id));
+    const getCountry = city => (window.TRAVEL_DATA.countries || []).find(country =>
+      country.id === city.countryId || (city.countryName && country.name === city.countryName)
+    );
+    const escape = escapePlannerText;
+    const cell = value => `<td>${escape(value || "—")}</td>`;
+    const getSpotStats = city => {
+      const spots = Array.isArray(city.spots) ? city.spots : Array.isArray(city.spotCandidates) ? city.spotCandidates : [];
+      const sourced = spots.filter(spot => spot && /^https?:\/\//i.test(String(spot.sourceUrl || ""))
+        && Number.isFinite(Number(spot.lat)) && Number(spot.lat) >= -90 && Number(spot.lat) <= 90
+        && Number.isFinite(Number(spot.lng)) && Number(spot.lng) >= -180 && Number(spot.lng) <= 180
+        && !(Number(spot.lat) === 0 && Number(spot.lng) === 0));
+      const rated = sourced.filter(spot => Number.isFinite(Number(spot.rating))
+        && Number(spot.rating) >= 0 && Number(spot.rating) <= 5 && String(spot.ratingSource || "").trim());
+      return { total: spots.length, sourced: sourced.length, rated };
+    };
+    const contexts = cities.map(city => {
+      const country = getCountry(city);
+      const stats = getSpotStats(city);
+      const price = city.priceLevel || country?.priceLevel || null;
+      const flight = city.flightInfo || country?.flightInfo || null;
+      const hasPrice = Boolean(price && (price.dailyBudgetTwd || price.tier) && price.verified !== false);
+      const hasFlight = flight?.hasDirect === true || flight?.hasDirect === false;
+      const coverage = this.getCityDataCoverage(city, country);
+      return { city, country, stats, price, flight, hasPrice, hasFlight, coverage };
+    });
     const statusText = cities.length
-      ? `已選 ${cities.length}/4 座城市，點擊查看`
+      ? `已選 ${cities.length}/4 座城市；至少選兩座即可比較`
       : "尚未選擇城市，請先從城市詳情加入比較。";
     document.querySelectorAll("#comparison-quick-status, #comparison-drawer-status").forEach(status => {
       status.textContent = statusText;
     });
     panel.innerHTML = `
-      <div class="comparison-heading"><div><span class="section-kicker">COMPARE SOURCE DATA</span><h2>城市資料比較</h2><p>最多比較 4 座城市；各欄位會顯示目前可用資料與來源狀態。</p></div><span class="destination-count">${cities.length}/4 已選</span></div>
-      <div class="comparison-actions">${cities.map(city => `<button type="button" class="compare-chip" data-remove="${city.id}">${city.flag || "🌍"} ${city.name} ×</button>`).join("")}</div>
+      <div class="comparison-heading"><div><span class="section-kicker">COMPARE DESTINATIONS</span><h2>城市比較</h2><p>用旅費、航線與景點資料一起評估；缺少來源的評分會標示未提供，不以估算分數代替。</p></div><span class="destination-count">${cities.length}/4 已選</span></div>
+      <div class="comparison-actions">${cities.map(city => `<button type="button" class="compare-chip" data-remove="${escape(city.id)}" aria-label="從比較清單移除${escape(city.name)}">${city.flag || "🌍"} ${escape(city.name)} <span aria-hidden="true">×</span></button>`).join("")}${cities.length ? '<button type="button" class="compare-clear-btn" id="btn-clear-comparison">清空清單</button>' : ""}</div>
       ${cities.length < 2 ? `<p class="comparison-empty">先在城市詳情頁按「加入比較」，至少選兩座城市就會出現比較表。</p>` : `
-        <div class="comparison-table-wrap"><table class="comparison-table"><thead><tr><th>比較面向</th>${cities.map(city => `<th>${city.flag || "🌍"} ${city.name}</th>`).join("")}</tr></thead><tbody>
-          <tr><th>國家／地區</th>${cities.map(city => `<td>${city.countryName || "—"}</td>`).join("")}</tr>
-          <tr><th>氣候</th>${cities.map(city => `<td>${city.climateSource ? escapePlannerText(city.climate) : "尚無核實資料"}</td>`).join("")}</tr>
-          <tr><th>文化與歷史</th>${cities.map(city => `<td>${city.historySource ? escapePlannerText(city.history) : "尚無核實資料"}</td>`).join("")}</tr>
-          <tr><th>來源資料</th>${cities.map(city => `<td>${city.coordinateSource ? "座標有來源" : "位置待核實"} · ${(city.spots || []).filter(spot => spot.sourceUrl && Number.isFinite(spot.lat) && Number.isFinite(spot.lng)).length} 筆景點</td>`).join("")}</tr>
-          <tr><th>規劃建議</th>${cities.map(city => `<td>${city.descriptionSource?.text ? escapePlannerText(city.descriptionSource.text) : "尚無來源資料"}</td>`).join("")}</tr>
+        <div class="comparison-table-wrap"><table class="comparison-table"><thead><tr><th scope="col">比較面向</th>${cities.map(city => `<th scope="col">${city.flag || "🌍"} ${escape(city.name)}</th>`).join("")}</tr></thead><tbody>
+          <tr><th scope="row">國家／地區</th>${contexts.map(({ city }) => cell(city.countryName)).join("")}</tr>
+          <tr><th scope="row">每日旅費參考</th>${contexts.map(({ city, country, price, hasPrice }) => {
+            if (!hasPrice) return cell("未提供可比較價格");
+            const budget = price.dailyBudgetTwd || price.tier || "價格級距已整理";
+            const regional = !city.priceLevel && Boolean(country?.priceLevel);
+            return cell(`${budget}${regional ? "（國家／地區參考）" : ""}`);
+          }).join("")}</tr>
+          <tr><th scope="row">台灣出發航線</th>${contexts.map(({ flight, hasFlight, city }) => cell(!hasFlight
+            ? "尚無可比較航線資料"
+            : `${flight.hasDirect ? "有直飛航線參考" : "目前資料為轉機航線"}${!city.flightInfo ? "（國家／地區層級，請查城市與日期）" : ""}`)).join("")}</tr>
+          <tr><th scope="row">景點資料</th>${contexts.map(({ stats }) => cell(`${stats.total} 筆目錄景點；${stats.sourced} 筆有來源與座標`)).join("")}</tr>
+          <tr><th scope="row">景點評分與評價</th>${contexts.map(({ city, stats }) => {
+            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${city.name} ${city.countryName || ""} 景點評價`)}`;
+            if (!stats.rated.length) return `<td>目前沒有收錄可核實的星等。<a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">到 Google 地圖查看即時評價 ↗</a></td>`;
+            const entries = stats.rated.slice(0, 4).map(spot =>
+              `${spot.name || "景點"} ★${Number(spot.rating).toFixed(1)}（${String(spot.ratingSource).trim()}）`
+            );
+            const more = stats.rated.length > entries.length ? `；另有 ${stats.rated.length - entries.length} 筆` : "";
+            return `<td>${escape(`${entries.join("；")}${more}`)}<br><a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">查看最新旅客評價 ↗</a></td>`;
+          }).join("")}</tr>
+          <tr><th scope="row">氣候與季節</th>${contexts.map(({ city }) => cell(city.climateSource ? `${city.climate || "有資料"}（附來源）` : "尚無附來源資料")).join("")}</tr>
+          <tr><th scope="row">文化與歷史</th>${contexts.map(({ city }) => cell(city.historySource ? `${city.history || "有資料"}（附來源）` : "尚無附來源資料")).join("")}</tr>
+          <tr><th scope="row">資料完整度</th>${contexts.map(({ coverage }) => cell(`${coverage.score}/${coverage.maxScore} 項`)).join("")}</tr>
         </tbody></table></div>
+        <p class="comparison-footnote">資料完整度依固定 10 項計算：城市座標 1、附來源城市介紹 1、附來源與座標的景點最多 5、附來源座標的機場 1、旅費參考 1、航線資訊 1。這是資料欄位完整度，不代表旅遊品質；國家／地區參考會在欄位內註明。</p>
       `}
     `;
     panel.querySelectorAll("[data-remove]").forEach(button => button.addEventListener("click", () => {
       this.toggleCompare(cities.find(city => city.id === button.dataset.remove));
     }));
+    panel.querySelector("#btn-clear-comparison")?.addEventListener("click", () => {
+      this.compareIds = [];
+      try {
+        localStorage.setItem("journey-atlas-compare", "[]");
+        window.FirebaseCloudData?.saveLocal("journey-atlas-compare", "[]");
+      } catch (error) { console.warn("無法清空城市比較清單。", error); }
+      const compareButton = document.getElementById("btn-compare-city");
+      if (compareButton) {
+        compareButton.textContent = "＋ 加入城市比較";
+        compareButton.setAttribute("aria-pressed", "false");
+      }
+      this.renderComparison();
+    });
   },
 
   renderCityTools: function (city, state) {
@@ -369,10 +458,12 @@ window.PlannerView = {
       this.renderBudgetChart(host);
       this.renderItinerary(city, this.itineraryDays);
     }));
+    let aiGenerationInFlight = false;
     host.querySelector("#btn-ai-itinerary")?.addEventListener("click", async event => {
       const button = event.currentTarget;
       const status = host.querySelector("#ai-itinerary-status");
       let cooldownActive = false;
+      if (aiGenerationInFlight) return;
       if (!window.firebaseAuth?.currentUser) {
         status.textContent = "請先使用 Google 帳戶登入。";
         const panel = document.getElementById("auth-menu-panel");
@@ -380,7 +471,10 @@ window.PlannerView = {
         if (panel && trigger) { panel.hidden = false; trigger.setAttribute("aria-expanded", "true"); }
         return;
       }
+      aiGenerationInFlight = true;
       button.disabled = true;
+      const dayButtons = Array.from(host.querySelectorAll("[data-days]"));
+      dayButtons.forEach(dayButton => { dayButton.disabled = true; });
       status.dataset.state = "pending";
       status.textContent = "正在連線 AI 規劃服務…";
       try {
@@ -389,6 +483,7 @@ window.PlannerView = {
         status.textContent = "正在整理城市景點資料…";
         // AI only needs the curated Firestore catalog. Avoid holding up generation
         // while slower live map providers finish their optional enrichment.
+        let usedCatalog = false;
         if (window.CityCatalogService?.fetchCity) {
           const catalog = await window.CityCatalogService.fetchCity(city.id);
           if (catalog?.spots?.length) {
@@ -396,13 +491,16 @@ window.PlannerView = {
             city.spots = merge
               ? merge(catalog.spots, city.spots || [], city.spotCandidates || [])
               : [...catalog.spots, ...(city.spots || [])];
+            usedCatalog = true;
           }
         }
         const planningSpots = this.getPlanningSpots(city).slice(0, this.itineraryDays * 2);
         if (!planningSpots.length) throw new Error("尚未取得可安排的景點，請確認網路後再試。");
         const spotSelect = host.querySelector("#itinerary-spot-select");
         if (spotSelect) spotSelect.innerHTML = planningSpots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}</option>`).join("");
-        status.textContent = "AI 正在依照景點與偏好安排行程…";
+        status.textContent = usedCatalog
+          ? "AI 正在依照城市景點與偏好安排行程…"
+          : "AI 正在依照目前已載入的景點與偏好安排行程…";
         const response = await window.FirebaseAIPlanner.generateItinerary({
           cityName: city.name,
           days: this.itineraryDays,
@@ -440,9 +538,13 @@ window.PlannerView = {
         }
         else if (error?.code === "ai/missing-app-check-site-key") status.textContent = "尚缺 App Check reCAPTCHA Enterprise 網站金鑰，請依設定說明完成啟用。";
         else if (error?.code === "ai/auth-required") status.textContent = "請先使用 Google 帳戶登入。";
+        else if (/quota|resource.?exhausted|429/i.test(String(error?.code || "") + " " + errorText)) status.textContent = "AI 目前的使用額度或請求頻率已達上限，請稍後再試。";
+        else if (/network|fetch|offline|unavailable/i.test(String(error?.code || "") + " " + errorText)) status.textContent = "目前連線不穩，請確認網路後再試；已載入的城市景點會保留。";
         else if (/AppCheck|app check|permission-denied/i.test(errorText)) status.textContent = "App Check 驗證失敗。請在 Firebase Console 確認這個 Web App 的 reCAPTCHA Enterprise 網站金鑰、允許網域與 App Check API 狀態。";
         else status.textContent = error?.message || "AI 暫時無法規劃，請稍後再試。";
       } finally {
+        aiGenerationInFlight = false;
+        dayButtons.forEach(dayButton => { dayButton.disabled = false; });
         if (!cooldownActive) button.disabled = false;
       }
     });

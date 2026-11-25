@@ -4,6 +4,11 @@ window.WeatherService = {
   storageKey: "journey-atlas-weather-cache",
   cacheDurationMs: 30 * 60 * 1000, // 快取 30 分鐘
   cacheRetentionMs: 7 * 24 * 60 * 60 * 1000, // 失敗時最多保留 7 天的離線備援
+  airQualityCache: {},
+  airQualityStorageKey: "journey-atlas-air-quality-v1",
+  airQualityCacheDurationMs: 60 * 60 * 1000,
+  airQualityRetentionMs: 24 * 60 * 60 * 1000,
+  airQualityRequests: {},
   maxCacheEntries: 100,
   requestTimeoutMs: 10000,
 
@@ -125,6 +130,82 @@ window.WeatherService = {
       }
       return null;
     }
+  },
+
+  // Open-Meteo Air Quality 全球模式估值，不是城市測站的即時讀值。
+  getCityAirQuality: async function(lat, lng) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+    const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
+    const now = Date.now();
+    const inMemory = this.airQualityCache[key];
+    if (inMemory && now - inMemory.timestamp < this.airQualityCacheDurationMs) return inMemory.data;
+
+    let stored = {};
+    try {
+      const parsed = JSON.parse(localStorage.getItem(this.airQualityStorageKey) || "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) stored = parsed;
+    } catch (error) { console.warn("讀取空氣品質快取失敗：", error); }
+    const cached = stored[key];
+    if (cached?.data && Number.isFinite(cached.timestamp) && now - cached.timestamp < this.airQualityCacheDurationMs) {
+      this.airQualityCache[key] = cached;
+      return cached.data;
+    }
+    if (this.airQualityRequests[key]) return this.airQualityRequests[key];
+
+    this.airQualityRequests[key] = (async () => {
+      try {
+        const params = new URLSearchParams({
+          latitude: String(lat), longitude: String(lng),
+          current: "us_aqi,pm2_5,pm10", timezone: "auto"
+        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6500);
+        let response;
+        try {
+          response = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${params}`, { signal: controller.signal });
+        } finally { clearTimeout(timeoutId); }
+        if (!response.ok) throw new Error(`空氣品質 API 回應異常 (${response.status})`);
+        const json = await response.json();
+        const current = json?.current;
+        if (!current || !Number.isFinite(current.us_aqi)) throw new Error("空氣品質 API 沒有有效的 AQI 資料");
+        const aqi = Math.max(0, Math.round(current.us_aqi));
+        const level = aqi <= 50 ? { label: "良好", icon: "🟢" }
+          : aqi <= 100 ? { label: "普通", icon: "🟡" }
+            : aqi <= 150 ? { label: "敏感族群留意", icon: "🟠" }
+              : aqi <= 200 ? { label: "不健康", icon: "🔴" }
+                : aqi <= 300 ? { label: "非常不健康", icon: "🟣" }
+                  : { label: "危害", icon: "🟤" };
+        const result = {
+          aqi,
+          level: level.label,
+          icon: level.icon,
+          pm25: Number.isFinite(current.pm2_5) ? current.pm2_5 : null,
+          pm10: Number.isFinite(current.pm10) ? current.pm10 : null,
+          time: current.time || "",
+          timezone: json.timezone || "",
+          source: "Open-Meteo Air Quality（全球模式估值）"
+        };
+        const entry = { data: result, timestamp: Date.now() };
+        this.airQualityCache[key] = entry;
+        stored[key] = entry;
+        const retained = Object.entries(stored)
+          .filter(([cacheKey, item]) => /^-?\d+(?:\.\d{1,2})?,-?\d+(?:\.\d{1,2})?$/.test(cacheKey)
+            && Number.isFinite(item?.timestamp) && Date.now() - item.timestamp <= this.airQualityRetentionMs && item.data)
+          .sort((a, b) => b[1].timestamp - a[1].timestamp).slice(0, 100);
+        try { localStorage.setItem(this.airQualityStorageKey, JSON.stringify(Object.fromEntries(retained))); }
+        catch (error) { console.warn("儲存空氣品質快取失敗：", error); }
+        return result;
+      } catch (error) {
+        console.warn("空氣品質資料暫時無法取得：", error);
+        if (cached?.data && Number.isFinite(cached.timestamp) && now - cached.timestamp < this.airQualityRetentionMs) {
+          const stale = { ...cached.data, source: "Open-Meteo Air Quality（舊快取估值）" };
+          this.airQualityCache[key] = { data: stale, timestamp: cached.timestamp };
+          return stale;
+        }
+        return null;
+      } finally { delete this.airQualityRequests[key]; }
+    })();
+    return this.airQualityRequests[key];
   },
 
   // WMO 天氣代碼對應表

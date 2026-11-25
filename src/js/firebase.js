@@ -125,6 +125,7 @@
             throw new Error("AI 回傳的行程天數不正確，請再試一次。");
           }
           var seen = new Set();
+          var overflow = [];
           var days = parsed.days.map(function (day) {
             if (!day || !Array.isArray(day.spotIndexes)) throw new Error("AI 回傳的景點安排格式不正確。");
             var indexes = day.spotIndexes.map(function (index) {
@@ -134,14 +135,22 @@
               seen.add(index);
               return index;
             });
+            overflow.push.apply(overflow, indexes.slice(2));
             return {
-              spotIndexes: indexes,
+              spotIndexes: indexes.slice(0, 2),
               theme: String(day.theme || "城市探索").slice(0, 60),
               note: String(day.note || "請預留交通與休息時間，並於出發前核對官方資訊。").slice(0, 180),
               routingRationale: String(day.routingRationale || "依景點清單安排；出發前請確認實際位置與交通。").slice(0, 180)
             };
           });
-          if (seen.size !== spots.length) throw new Error("AI 沒有安排到所有景點，請再試一次。");
+          for (var missingIndex = 0; missingIndex < spots.length; missingIndex++) {
+            if (!seen.has(missingIndex)) overflow.push(missingIndex);
+          }
+          overflow.forEach(function (index) {
+            var availableDay = days.find(function (day) { return day.spotIndexes.length < 2; });
+            if (!availableDay) throw new Error("景點數量超出每日安排上限，請減少景點或增加天數。");
+            availableDay.spotIndexes.push(index);
+          });
           return { days: days };
         }
       };

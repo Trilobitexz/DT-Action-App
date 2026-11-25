@@ -128,6 +128,7 @@ class MapManager {
       this.handleCityContextZoom(event);
     });
     this.map.on("click", event => this.handleMapClick(event));
+    this.map.on("mousemove", event => this.updateCityMapPointer(event));
     ["continent-symbols", "global-city-symbols", "global-city-labels", "global-city-clusters", "global-city-cluster-count"].forEach(layer => {
       this.map.on("mouseenter", layer, () => { this.map.getCanvas().style.cursor = "pointer"; });
       this.map.on("mouseleave", layer, () => { this.map.getCanvas().style.cursor = ""; });
@@ -162,9 +163,11 @@ class MapManager {
     }
     Object.keys(this.geojson).forEach(key => this.map.addSource(key, { type: "geojson", data: this.geojson[key], ...(key === "globalCities" ? { cluster: true, clusterMaxZoom: 4, clusterRadius: 42 } : {}) }));
     this.map.addLayer({ id: "route-lines", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["match", ["get", "kind"], "transit-flight", "#f59e0b", "airport-city", "#598b88", "#0f766e"], "line-width": ["match", ["get", "kind"], "transit-flight", 3, "airport-city", 2, 2.5], "line-opacity": ["match", ["get", "kind"], "airport-city", 0.55, 0.9], "line-dasharray": [2, 2] } });
+    this.map.addLayer({ id: "route-lines-hit-area", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 14, "line-opacity": 0.001 } });
     const dayColors = ["#b65337", "#247a78", "#6f62a8", "#bd7a24", "#3e789c", "#a44868", "#64783d"];
     const dayColorExpression = ["match", ["get", "dayIndex"], ...dayColors.flatMap((color, index) => [index, color]), "#b65337"];
     this.map.addLayer({ id: "itinerary-route-line", type: "line", source: "itinerary", filter: ["==", ["get", "kind"], "route"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": dayColorExpression, "line-width": 3, "line-opacity": 0.82, "line-dasharray": [2, 2] } });
+    this.map.addLayer({ id: "itinerary-route-hit-area", type: "line", source: "itinerary", filter: ["==", ["get", "kind"], "route"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 14, "line-opacity": 0.001 } });
     this.map.addLayer({ id: "itinerary-stop-circles", type: "circle", source: "itinerary", filter: ["==", ["get", "kind"], "stop"], paint: { "circle-radius": 13, "circle-color": dayColorExpression, "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
     this.map.addLayer({ id: "itinerary-stop-labels", type: "symbol", source: "itinerary", filter: ["==", ["get", "kind"], "stop"], layout: { "text-field": ["get", "number"], "text-size": 11, "text-font": ["Noto Sans Bold"], "text-allow-overlap": true }, paint: { "text-color": "#ffffff" } });
     this.map.addLayer({ id: "continent-symbols", type: "symbol", source: "continents", layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 13, "text-padding": 8, "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#173847", "text-halo-color": "#ffffff", "text-halo-width": 2.5 } });
@@ -208,9 +211,14 @@ class MapManager {
 
   handleMapClick(event) {
     if (!this.map) return;
-    const layers = ["continent-symbols", "city-circles", "city-symbols", "global-city-symbols", "global-city-labels", "global-city-clusters", "airport-circles"];
-    const feature = this.map.queryRenderedFeatures(event.point, { layers: layers.filter(id => this.map.getLayer(id)) })[0];
-    if (!feature) return;
+    const layers = ["itinerary-stop-circles", "itinerary-stop-labels", "spot-circles", "spot-labels", "airport-circles", "airport-labels", "city-center", "route-lines-hit-area", "itinerary-route-hit-area", "continent-symbols", "city-circles", "city-symbols", "global-city-symbols", "global-city-labels", "global-city-clusters", "global-city-cluster-count"];
+    const features = this.map.queryRenderedFeatures(event.point, { layers: layers.filter(id => this.map.getLayer(id)) });
+    const priority = ["stop", "spot", "airport", "center", "route", "airport-city", "direct-flight", "transit-flight", "continent", "local-city", "global-city"];
+    const feature = features.find(item => priority.includes(String(item.properties?.kind || ""))) || features[0] || null;
+    if (!feature) {
+      if (this.currentCityContext) this.openMapLocationPopup(event.lngLat, null);
+      return;
+    }
     const props = feature.properties || {};
     if (props.kind === "continent") { this.onContinentSelect(props.id); return; }
     if (props.kind === "local-city") { this.onCitySelect(props.continentId, props.countryId, props.cityId); return; }
@@ -221,7 +229,137 @@ class MapManager {
       }); return;
     }
     if (props.kind === "spot") this.openSpotPopup(feature);
-    if (props.kind === "airport") new window.maplibregl.Popup({ maxWidth: "280px" }).setLngLat(feature.geometry.coordinates).setHTML(`<strong>${this.escapePopupText(props.name)}</strong><p>城市交通節點，建議出發前確認航班與接駁方式。</p>`).addTo(this.map);
+    else if (props.kind === "airport") this.openAirportPopup(feature);
+    else if (props.kind === "center") this.openCityCenterPopup(feature, event.lngLat);
+    else if (props.kind === "stop") this.openItineraryStopPopup(feature);
+    else if (["route", "airport-city", "direct-flight", "transit-flight"].includes(props.kind)) this.openRoutePopup(feature, event.lngLat);
+    else if (this.currentCityContext) this.openMapLocationPopup(event.lngLat, this.findNamedBaseFeature(event.point));
+  }
+
+  updateCityMapPointer(event) {
+    if (!this.map || !this.currentCityContext || this.map.getZoom() < 10.5) return;
+    this.pendingPointerPoint = event.point;
+    if (this.pointerCheckTimer) return;
+    this.pointerCheckTimer = window.setTimeout(() => {
+      this.pointerCheckTimer = null;
+      if (!this.map || !this.currentCityContext || this.map.getZoom() < 10.5) return;
+      const point = this.pendingPointerPoint;
+      if (!point) return;
+      const clickableLayers = ["spot-circles", "airport-circles", "city-center", "itinerary-stop-circles", "route-lines-hit-area", "itinerary-route-hit-area"]
+        .filter(id => this.map.getLayer(id));
+      const hasAppFeature = clickableLayers.length && this.map.queryRenderedFeatures(point, { layers: clickableLayers }).length > 0;
+      const feature = hasAppFeature || this.findNamedBaseFeature(point);
+      this.map.getCanvas().style.cursor = feature ? "pointer" : "grab";
+    }, 90);
+  }
+
+  findNamedBaseFeature(point) {
+    if (!this.map || !point) return null;
+    const appSources = new Set(Object.keys(this.geojson));
+    const features = this.map.queryRenderedFeatures(point).filter(feature => {
+      if (appSources.has(feature.source)) return false;
+      const props = feature.properties || {};
+      return [props.name, props["name:zh-Hant"], props["name:zh"], props.name_zh, props.name_en, props["name:latin"]]
+        .some(value => typeof value === "string" && value.trim());
+    });
+    if (!features.length) return null;
+    const score = feature => {
+      const layer = String(feature.layer?.id || "").toLowerCase();
+      const sourceLayer = String(feature.sourceLayer || "").toLowerCase();
+      return (/poi|place|building|transportation_name|water_name/.test(`${layer} ${sourceLayer}`) ? 10 : 0)
+        + (feature.geometry?.type === "Point" ? 3 : 0)
+        + (feature.properties?.class || feature.properties?.subclass ? 1 : 0);
+    };
+    return features.sort((a, b) => score(b) - score(a))[0];
+  }
+
+  getMapFeatureName(properties = {}) {
+    return [properties["name:zh-Hant"], properties["name:zh"], properties.name_zh, properties.name, properties.name_en, properties["name:latin"]]
+      .find(value => typeof value === "string" && value.trim())?.trim() || "附近地圖位置";
+  }
+
+  getMapFeatureType(properties = {}, sourceLayer = "") {
+    const raw = String(properties.subclass || properties.class || properties.type || sourceLayer || "").toLowerCase();
+    const labels = {
+      attraction: "景點", museum: "博物館", monument: "紀念地標", memorial: "紀念地標", museum: "博物館",
+      park: "公園綠地", garden: "花園", restaurant: "餐廳", cafe: "咖啡館", fast_food: "速食",
+      hotel: "住宿", marketplace: "市場", shop: "商店", station: "車站", airport: "機場",
+      church: "教堂", temple: "寺廟", mosque: "清真寺", building: "建築物", highway: "道路",
+      water: "水域", river: "河川", park: "公園綠地", place: "地名", railway: "鐵路設施", aeroway: "航空設施"
+    };
+    if (labels[raw]) return labels[raw];
+    if (/poi/.test(raw)) return "地圖地點";
+    if (/building/.test(raw)) return "建築物";
+    if (/transportation|highway/.test(raw)) return "道路／交通設施";
+    return raw ? "地圖地點" : "地圖位置";
+  }
+
+  openMapLocationPopup(lngLat, feature) {
+    if (!this.map || !lngLat) return;
+    const properties = feature?.properties || {};
+    const name = this.getMapFeatureName(properties);
+    const type = feature ? this.getMapFeatureType(properties, feature.sourceLayer) : "附近位置";
+    const detail = [properties.address || properties["addr:street"], properties.operator || properties.brand]
+      .filter(value => typeof value === "string" && value.trim()).join(" · ");
+    const query = encodeURIComponent(`${name} ${this.currentCityContext?.name || ""} ${this.currentCityContext?.countryName || ""}`.trim());
+    const coordinateQuery = encodeURIComponent(`${Number(lngLat.lat).toFixed(6)},${Number(lngLat.lng).toFixed(6)}`);
+    const googleUrl = `https://www.google.com/maps/search/?api=1&query=${feature ? query : coordinateQuery}`;
+    const osmUrl = `https://www.openstreetmap.org/search?query=${coordinateQuery}`;
+    const html = `<div class="map-feature-popup"><strong>${this.escapePopupText(name)}</strong><span>${this.escapePopupText(type)}</span>${detail ? `<p>${this.escapePopupText(detail)}</p>` : `<p>座標 ${Number(lngLat.lat).toFixed(5)}, ${Number(lngLat.lng).toFixed(5)}</p>`}<div class="map-feature-popup-actions"><a href="${this.escapePopupText(googleUrl)}" target="_blank" rel="noopener noreferrer">Google 地圖搜尋</a><a href="${this.escapePopupText(osmUrl)}" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></div><small>地圖標籤僅供探索，請出發前確認地點資訊。</small></div>`;
+    new window.maplibregl.Popup({ closeButton: true, maxWidth: "320px" }).setLngLat(lngLat).setHTML(html).addTo(this.map);
+  }
+
+  openAirportPopup(feature) {
+    const properties = feature.properties || {};
+    const airport = this.getAirportData(this.currentCityContext).find(item => `${item.name} (${item.code})` === properties.name);
+    const links = airport?.sourceUrl ? `<a href="${this.escapePopupText(this.safeExternalUrl(airport.sourceUrl))}" target="_blank" rel="noopener noreferrer">查看機場資料來源</a>` : "";
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(properties.name || "機場")}`;
+    const html = `<div class="map-feature-popup"><strong>${this.escapePopupText(properties.name || "機場")}</strong><span>航空交通節點</span><p>航班與市區接駁請依出發日期確認。</p>${links}<a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">在 Google 地圖開啟</a></div>`;
+    new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates).setHTML(html).addTo(this.map);
+  }
+
+  openCityCenterPopup(feature, lngLat) {
+    const city = this.currentCityContext;
+    if (!city) return;
+    const sourceUrl = this.safeExternalUrl(city.coordinateSource?.sourceUrl);
+    const source = sourceUrl ? `<a href="${this.escapePopupText(sourceUrl)}" target="_blank" rel="noopener noreferrer">查看座標來源</a>` : "城市座標參考點";
+    const html = `<div class="map-feature-popup"><strong>${this.escapePopupText(city.name)} 市中心參考點</strong><span>城市位置</span>${source ? `<p>${source}</p>` : ""}<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${city.name} ${city.countryName || ""}`)}" target="_blank" rel="noopener noreferrer">在 Google 地圖搜尋</a></div>`;
+    new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(lngLat || feature.geometry.coordinates).setHTML(html).addTo(this.map);
+  }
+
+  openItineraryStopPopup(feature) {
+    const properties = feature.properties || {};
+    const dayNumber = Number(properties.dayIndex) + 1;
+    const stopNumber = Number(properties.number) || 1;
+    const city = this.currentCityContext;
+    const matching = [...this.citySpotMarkers.values()].find(entry => entry.city?.id === city?.id
+      && String(entry.spot?.name || "").normalize("NFKC").trim().toLowerCase() === String(properties.name || "").normalize("NFKC").trim().toLowerCase());
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${properties.name || "景點"} ${city?.name || ""}`)}`;
+    const cardButton = matching ? `<button type="button" data-map-focus-card="${matching.index}">在景點清單查看</button>` : "";
+    const popup = new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates)
+      .setHTML(`<div class="map-feature-popup"><strong>Day ${dayNumber} · 第 ${stopNumber} 站</strong><span>${this.escapePopupText(properties.name || "行程景點")}</span><p>此標記依目前行程順序排列。</p>${cardButton}<a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">在 Google 地圖搜尋</a></div>`).addTo(this.map);
+    popup.getElement().querySelector("[data-map-focus-card]")?.addEventListener("click", () => {
+      this.scrollToSpotCard(city.id, Number(matching.index));
+      popup.remove();
+    });
+  }
+
+  openRoutePopup(feature, lngLat) {
+    const properties = feature.properties || {};
+    let title = "地圖路線";
+    let description = "此線段依地圖資料繪製，僅供位置參考。";
+    if (properties.kind === "route") {
+      title = `Day ${Number(properties.dayIndex) + 1} 行程動線`;
+      description = "依行程景點順序連線，並非即時導航路線。";
+    } else if (properties.kind === "airport-city") {
+      title = "機場到市區參考線";
+      description = `地圖直線距離約 ${Number(properties.distanceKm) || "—"} 公里；實際交通路線與時間依交通方式和路況而異。`;
+    } else {
+      title = properties.kind === "direct-flight" ? "直飛航線示意" : "轉機航線示意";
+      description = "弧線為規劃示意，不代表即時航班航跡或目前班表。請查看航空公司資訊。";
+    }
+    const html = `<div class="map-feature-popup"><strong>${this.escapePopupText(title)}</strong><p>${this.escapePopupText(description)}</p></div>`;
+    new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(lngLat || feature.geometry.coordinates?.[0]).setHTML(html).addTo(this.map);
   }
 
   setTileLayer(layerKey) {
