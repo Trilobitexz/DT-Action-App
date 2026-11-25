@@ -346,6 +346,17 @@ window.PlannerView = {
     );
     const escape = escapePlannerText;
     const cell = value => `<td>${escape(value || "—")}</td>`;
+    const budgetValue = price => {
+      const values = String(price?.dailyBudgetTwd || "").match(/[\d,]+/g)?.map(value => Number(value.replaceAll(",", ""))).filter(Number.isFinite) || [];
+      return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+    };
+    const flightHours = flight => {
+      const text = String(flight?.flightTime || "");
+      const hours = text.match(/(\d+(?:\.\d+)?)(?:\s*[~～–-]\s*(\d+(?:\.\d+)?))?\s*(?:小時|小时|hours?|hrs?|h\b)/i);
+      if (hours) return (Number(hours[1]) + Number(hours[2] || hours[1])) / 2;
+      const minutes = text.match(/(\d+(?:\.\d+)?)\s*(?:分鐘|分钟|minutes?|mins?|min\b)/i);
+      return minutes ? Number(minutes[1]) / 60 : null;
+    };
     const getSpotStats = city => {
       const spots = Array.isArray(city.spots) ? city.spots : Array.isArray(city.spotCandidates) ? city.spotCandidates : [];
       const sourced = spots.filter(spot => spot && /^https?:\/\//i.test(String(spot.sourceUrl || ""))
@@ -372,9 +383,24 @@ window.PlannerView = {
     document.querySelectorAll("#comparison-quick-status, #comparison-drawer-status").forEach(status => {
       status.textContent = statusText;
     });
+    const comparableBudgets = contexts.map(context => ({ ...context, budgetValue: context.hasPrice ? budgetValue(context.price) : null }))
+      .filter(context => Number.isFinite(context.budgetValue));
+    const minBudget = comparableBudgets.length ? Math.min(...comparableBudgets.map(context => context.budgetValue)) : null;
+    const directCities = contexts.filter(context => context.hasFlight && context.flight.hasDirect === true);
+    const directWinner = directCities.map(context => context.city.id);
+    const timedFlights = contexts.map(context => ({ ...context, duration: context.city.flightInfo ? flightHours(context.flight) : null }))
+      .filter(context => Number.isFinite(context.duration));
+    const minDuration = timedFlights.length ? Math.min(...timedFlights.map(context => context.duration)) : null;
+    const decisionParts = [];
+    if (minBudget !== null) decisionParts.push(`💰 預算參考較省：${comparableBudgets.filter(context => context.budgetValue === minBudget).map(context => context.city.name).join("、")}`);
+    if (directCities.length) decisionParts.push(`✈️ 有直飛參考：${directCities.map(context => context.city.name).join("、")}`);
+    if (minDuration !== null) decisionParts.push(`⏱ 航程參考較短：${timedFlights.filter(context => context.duration === minDuration).map(context => context.city.name).join("、")}`);
+    const decisionSummary = cities.length >= 2
+      ? `<div class="comparison-decision"><strong>快速比較</strong><p>${decisionParts.length ? decisionParts.map(escape).join("　·　") : "目前欄位不足以作可靠排名；可先查看下方資料與來源。"}</p><small>只比較有數值或明確來源的欄位；預算取參考區間中點，航程為班表參考，皆非即時報價。氣候不做主觀勝負評分。</small></div>` : "";
     panel.innerHTML = `
       <div class="comparison-heading"><div><span class="section-kicker">COMPARE DESTINATIONS</span><h2>城市比較</h2><p>用旅費、航線與景點資料一起評估；缺少來源的評分會標示未提供，不以估算分數代替。</p></div><span class="destination-count">${cities.length}/4 已選</span></div>
       <div class="comparison-actions">${cities.map(city => `<button type="button" class="compare-chip" data-remove="${escape(city.id)}" aria-label="從比較清單移除${escape(city.name)}">${city.flag || "🌍"} ${escape(city.name)} <span aria-hidden="true">×</span></button>`).join("")}${cities.length ? '<button type="button" class="compare-clear-btn" id="btn-clear-comparison">清空清單</button>' : ""}</div>
+      ${decisionSummary}
       ${cities.length < 2 ? `<p class="comparison-empty">先在城市詳情頁按「加入比較」，至少選兩座城市就會出現比較表。</p>` : `
         <div class="comparison-table-wrap"><table class="comparison-table"><thead><tr><th scope="col">比較面向</th>${cities.map(city => `<th scope="col">${city.flag || "🌍"} ${escape(city.name)}</th>`).join("")}</tr></thead><tbody>
           <tr><th scope="row">國家／地區</th>${contexts.map(({ city }) => cell(city.countryName)).join("")}</tr>
@@ -382,11 +408,19 @@ window.PlannerView = {
             if (!hasPrice) return cell("未提供可比較價格");
             const budget = price.dailyBudgetTwd || price.tier || "價格級距已整理";
             const regional = !city.priceLevel && Boolean(country?.priceLevel);
-            return cell(`${budget}${regional ? "（國家／地區參考）" : ""}`);
+            const isWinner = minBudget !== null && budgetValue(price) === minBudget;
+            return `<td class="${isWinner ? "comparison-winner" : ""}">${escape(`${budget}${regional ? "（國家／地區參考）" : ""}`)}${isWinner ? '<small class="comparison-winner-badge">💰 預算參考較省</small>' : ""}</td>`;
           }).join("")}</tr>
-          <tr><th scope="row">台灣出發航線</th>${contexts.map(({ flight, hasFlight, city }) => cell(!hasFlight
-            ? "尚無可比較航線資料"
-            : `${flight.hasDirect ? "有直飛航線參考" : "目前資料為轉機航線"}${!city.flightInfo ? "（國家／地區層級，請查城市與日期）" : ""}`)).join("")}</tr>
+          <tr><th scope="row">台灣出發航線</th>${contexts.map(({ flight, hasFlight, city }) => {
+            if (!hasFlight) return cell("尚無可比較航線資料");
+            const duration = city.flightInfo?.flightTime ? `，${city.flightInfo.flightTime}` : "";
+            const label = `${flight.hasDirect ? "有直飛航線參考" : "目前資料為轉機航線"}${duration}${!city.flightInfo ? "（國家／地區層級，請查城市與日期）" : ""}`;
+            const directIsWinner = flight.hasDirect && directWinner.includes(city.id);
+            const timeIsWinner = minDuration !== null && city.flightInfo && flightHours(flight) === minDuration;
+            const winner = directIsWinner || timeIsWinner;
+            const badges = [directIsWinner ? "✈️ 支援直飛" : "", timeIsWinner ? "⏱ 航程參考較短" : ""].filter(Boolean).join(" · ");
+            return `<td class="${winner ? "comparison-winner" : ""}">${escape(label)}${badges ? `<small class="comparison-winner-badge">${badges}</small>` : ""}</td>`;
+          }).join("")}</tr>
           <tr><th scope="row">景點資料</th>${contexts.map(({ stats }) => cell(`${stats.total} 筆目錄景點；${stats.sourced} 筆有來源與座標`)).join("")}</tr>
           <tr><th scope="row">景點評分與評價</th>${contexts.map(({ city, stats }) => {
             const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${city.name} ${city.countryName || ""} 景點評價`)}`;
@@ -619,10 +653,11 @@ window.PlannerView = {
         ? custom[dayIndex].map(index => ({ index, spot: spots[index] })).filter(item => item.spot)
         : spots.map((spot, index) => ({ index, spot })).filter(item => !customSet.has(item.index) && item.index % days === dayIndex).slice(0, 3);
       daySpotLists[dayIndex] = orderedSpots;
+      const directionsUrl = this.googleMapsDayUrl(city, orderedSpots.map(item => item.spot), mode);
       const load = orderedSpots.length <= 2 ? "輕鬆" : orderedSpots.length <= 4 ? "適中" : "偏滿";
       return `<details class="itinerary-day-card" data-itinerary-day="${dayIndex}" ${dayIndex === 0 ? "open" : ""}>
         <summary class="itinerary-day-summary"><strong>Day ${dayIndex + 1}</strong><span>${escapePlannerText(aiDayPlans[dayIndex]?.theme || day.theme)}</span><small>${orderedSpots.length} 個景點・${load}</small></summary>
-        <div class="itinerary-day-content"><div class="itinerary-day-heading"><small>${escapePlannerText(aiDayPlans[dayIndex]?.note || day.note)}</small>${aiDayPlans[dayIndex]?.routingRationale ? `<small class="itinerary-planning-rationale">路線安排：${escapePlannerText(aiDayPlans[dayIndex].routingRationale)}</small>` : ""}</div>
+        <div class="itinerary-day-content"><div class="itinerary-day-heading"><small>${escapePlannerText(aiDayPlans[dayIndex]?.note || day.note)}</small>${aiDayPlans[dayIndex]?.routingRationale ? `<small class="itinerary-planning-rationale">路線安排：${escapePlannerText(aiDayPlans[dayIndex].routingRationale)}</small>` : ""}${directionsUrl ? `<a class="itinerary-google-route" href="${escapePlannerText(directionsUrl)}" target="_blank" rel="noopener noreferrer">🗺️ 在 Google Maps 開啟當日路線 ↗</a>` : ""}</div>
         <div class="itinerary-load ${load === "偏滿" ? "is-busy" : ""}">今日安排：${load}・${orderedSpots.length} 個景點 ${load === "偏滿" ? "— 建議移除或分配至其他天" : ""}</div>
         <div class="itinerary-schedule">
           ${orderedSpots.length ? orderedSpots.map(({ index, spot }, order) => {
@@ -652,7 +687,10 @@ window.PlannerView = {
       card.dataset.mapLinked = mappedCount ? "true" : "false";
     };
     dayCards.forEach((card, dayIndex) => card.addEventListener("toggle", () => {
-      if (card.open) syncDayMap(dayIndex);
+      if (card.open) {
+        dayCards.forEach((other, otherIndex) => { if (otherIndex !== dayIndex) other.open = false; });
+        syncDayMap(dayIndex);
+      }
       else if (!dayCards.some(item => item.open)) window.mapManager?.clearItineraryRoute?.();
     }));
     const initiallyOpenDay = dayCards.findIndex(card => card.open);
@@ -660,6 +698,13 @@ window.PlannerView = {
 
     let dragged = null;
     result.querySelectorAll(".itinerary-spot-card").forEach(card => {
+      const setHovered = active => window.mapManager?.setItineraryStopHover?.(
+        Number(card.dataset.dayIndex), Number(card.dataset.spotIndex), active
+      );
+      card.addEventListener("mouseenter", () => setHovered(true));
+      card.addEventListener("mouseleave", () => setHovered(false));
+      card.addEventListener("focus", () => setHovered(true));
+      card.addEventListener("blur", () => setHovered(false));
       card.addEventListener("dragstart", event => { dragged = card; card.classList.add("is-dragging"); event.dataTransfer.effectAllowed = "move"; });
       card.addEventListener("dragend", () => { card.classList.remove("is-dragging"); dragged = null; result.querySelectorAll(".itinerary-spot-card").forEach(item => item.classList.remove("drop-target")); });
       card.addEventListener("dragover", event => { event.preventDefault(); if (dragged && dragged !== card && dragged.dataset.dayIndex === card.dataset.dayIndex) card.classList.add("drop-target"); });
@@ -800,6 +845,19 @@ window.PlannerView = {
       const aiDay = aiDayPlans[index];
       return `Day ${index + 1}｜${aiDay?.theme || day.theme}\n${aiDay?.note || day.note}${aiDay?.routingRationale ? `\n路線安排：${aiDay.routingRationale}` : ""}\n${day.items.map(item => `【${item.title}】${item.transport ? `\n交通：${item.transport}` : ""}`).join("\n")}`;
     }).join("\n\n");
+  },
+
+  googleMapsDayUrl: function (city, orderedSpots, mode = "transit") {
+    const stops = (orderedSpots || []).filter(spot => spot && (spot.name || Number.isFinite(Number(spot.lat))));
+    if (!stops.length) return "";
+    const destinationText = spot => Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lng))
+      && spot.lat !== null && spot.lng !== null ? `${Number(spot.lat)},${Number(spot.lng)}` : `${spot.name}, ${city.name}`;
+    const origin = stops.length > 1 ? destinationText(stops[0]) : city.name;
+    const destination = destinationText(stops[stops.length - 1]);
+    const params = new URLSearchParams({ api: "1", origin, destination, travelmode: mode === "walking" ? "walking" : mode === "driving" ? "driving" : "transit" });
+    const waypoints = stops.slice(0, -1).slice(1, 10).map(destinationText);
+    if (waypoints.length) params.set("waypoints", waypoints.join("|"));
+    return `https://www.google.com/maps/dir/?${params.toString()}`;
   },
 
   copyItinerary: async function (city, days) {

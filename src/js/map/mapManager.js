@@ -135,6 +135,14 @@ class MapManager {
     });
     this.map.on("click", event => this.handleMapClick(event));
     this.map.on("mousemove", event => this.updateCityMapPointer(event));
+    this.map.on("mouseenter", "itinerary-stop-circles", event => {
+      const feature = event.features?.[0];
+      if (feature) this.setItineraryStopHover(feature.properties.dayIndex, feature.properties.spotIndex, true);
+    });
+    this.map.on("mouseleave", "itinerary-stop-circles", event => {
+      const feature = event.features?.[0];
+      if (feature) this.setItineraryStopHover(feature.properties.dayIndex, feature.properties.spotIndex, false);
+    });
     ["continent-symbols", "global-city-symbols", "global-city-labels", "global-city-clusters", "global-city-cluster-count"].forEach(layer => {
       this.map.on("mouseenter", layer, () => { this.map.getCanvas().style.cursor = "pointer"; });
       this.map.on("mouseleave", layer, () => { this.map.getCanvas().style.cursor = ""; });
@@ -167,14 +175,14 @@ class MapManager {
       this.layersReady = true;
       return;
     }
-    Object.keys(this.geojson).forEach(key => this.map.addSource(key, { type: "geojson", data: this.geojson[key], ...(key === "globalCities" ? { cluster: true, clusterMaxZoom: 4, clusterRadius: 42 } : {}) }));
+    Object.keys(this.geojson).forEach(key => this.map.addSource(key, { type: "geojson", data: this.geojson[key], ...(key === "globalCities" ? { cluster: true, clusterMaxZoom: 4.4, clusterRadius: 42 } : {}) }));
     this.map.addLayer({ id: "route-lines", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["match", ["get", "kind"], "transit-flight", "#f59e0b", "airport-city", "#598b88", "#0f766e"], "line-width": ["match", ["get", "kind"], "transit-flight", 3, "airport-city", 2, 2.5], "line-opacity": ["match", ["get", "kind"], "airport-city", 0.55, 0.9], "line-dasharray": [2, 2] } });
     this.map.addLayer({ id: "route-lines-hit-area", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 14, "line-opacity": 0.001 } });
     const dayColors = ["#b65337", "#247a78", "#6f62a8", "#bd7a24", "#3e789c", "#a44868", "#64783d"];
     const dayColorExpression = ["match", ["get", "dayIndex"], ...dayColors.flatMap((color, index) => [index, color]), "#b65337"];
     this.map.addLayer({ id: "itinerary-route-line", type: "line", source: "itinerary", filter: ["==", ["get", "kind"], "route"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": dayColorExpression, "line-width": 3, "line-opacity": 0.82, "line-dasharray": [2, 2] } });
     this.map.addLayer({ id: "itinerary-route-hit-area", type: "line", source: "itinerary", filter: ["==", ["get", "kind"], "route"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 14, "line-opacity": 0.001 } });
-    this.map.addLayer({ id: "itinerary-stop-circles", type: "circle", source: "itinerary", filter: ["==", ["get", "kind"], "stop"], paint: { "circle-radius": 13, "circle-color": dayColorExpression, "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
+    this.map.addLayer({ id: "itinerary-stop-circles", type: "circle", source: "itinerary", filter: ["==", ["get", "kind"], "stop"], paint: { "circle-radius": ["case", ["boolean", ["feature-state", "hovered"], false], 18, 13], "circle-color": ["case", ["boolean", ["feature-state", "hovered"], false], "#f2a900", dayColorExpression], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
     this.map.addLayer({ id: "itinerary-stop-labels", type: "symbol", source: "itinerary", filter: ["==", ["get", "kind"], "stop"], layout: { "text-field": ["get", "number"], "text-size": 11, "text-font": ["Noto Sans Bold"], "text-allow-overlap": true }, paint: { "text-color": "#ffffff" } });
     this.map.addLayer({ id: "continent-symbols", type: "symbol", source: "continents", layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 13, "text-padding": 8, "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#173847", "text-halo-color": "#ffffff", "text-halo-width": 2.5 } });
     this.map.addLayer({ id: "city-circles", type: "circle", source: "cities", layout: { visibility: "none" }, paint: { "circle-radius": 5, "circle-color": "#138b80", "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 } });
@@ -182,6 +190,7 @@ class MapManager {
     this.map.addLayer({ id: "global-city-clusters", type: "circle", source: "globalCities", filter: ["has", "point_count"], layout: { visibility: "none" }, paint: { "circle-color": "#176b5b", "circle-radius": ["step", ["get", "point_count"], 14, 10, 18, 30, 23], "circle-opacity": 0.9, "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
     this.map.addLayer({ id: "global-city-cluster-count", type: "symbol", source: "globalCities", filter: ["has", "point_count"], layout: { visibility: "none", "text-field": ["get", "point_count_abbreviated"], "text-size": 11 }, paint: { "text-color": "#ffffff" } });
     this.map.addLayer({ id: "global-city-symbols", type: "circle", source: "globalCities", filter: ["!", ["has", "point_count"]], layout: { visibility: "none" }, paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3, 5, 6, 9, 9], "circle-color": "#2563eb", "circle-opacity": 0.96, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.6 } });
+    this.map.addLayer({ id: "direct-flight-labels", type: "symbol", source: "routes", filter: ["==", ["get", "kind"], "direct-flight"], layout: { "symbol-placement": "line", "text-field": ["get", "label"], "text-size": 11, "text-font": ["Noto Sans Regular"], "text-allow-overlap": true }, paint: { "text-color": "#155e75", "text-halo-color": "#ffffff", "text-halo-width": 2 } });
     this.map.addLayer({ id: "global-city-labels", type: "symbol", source: "globalCities", filter: ["!", ["has", "point_count"]], layout: { visibility: "none", "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": ["step", ["zoom"], 0, 4.2, 9, 6, 11], "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true, "text-allow-overlap": false }, paint: { "text-color": "#1e3a8a", "text-halo-color": "#ffffff", "text-halo-width": 1.6 } });
     this.map.addLayer({ id: "spot-circles", type: "circle", source: "spots", filter: ["!=", ["get", "kind"], "center"], layout: { visibility: "none" }, paint: { "circle-radius": 8, "circle-color": "#d3483c", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
     this.map.addLayer({ id: "spot-labels", type: "symbol", source: "spots", filter: ["!=", ["get", "kind"], "center"], layout: { visibility: "none", "text-field": ["get", "label"], "text-size": 11, "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#7f2927", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
@@ -341,11 +350,23 @@ class MapManager {
     const matching = [...this.citySpotMarkers.values()].find(entry => entry.city?.id === city?.id
       && String(entry.spot?.name || "").normalize("NFKC").trim().toLowerCase() === String(properties.name || "").normalize("NFKC").trim().toLowerCase());
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${properties.name || "景點"} ${city?.name || ""}`)}`;
-    const cardButton = matching ? `<button type="button" data-map-focus-card="${matching.index}">在景點清單查看</button>` : "";
+    const itineraryCard = document.querySelector(`.itinerary-spot-card[data-day-index="${dayNumber - 1}"][data-spot-index="${Number(properties.spotIndex)}"]`);
+    const cardButton = itineraryCard
+      ? `<button type="button" data-map-focus-itinerary="${Number(properties.spotIndex)}">在當日行程查看</button>`
+      : matching ? `<button type="button" data-map-focus-card="${matching.index}">在景點清單查看</button>` : "";
     const popup = new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates)
       .setHTML(`<div class="map-feature-popup"><strong>Day ${dayNumber} · 第 ${stopNumber} 站</strong><span>${this.escapePopupText(properties.name || "行程景點")}</span><p>此標記依目前行程順序排列。</p>${cardButton}<a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">在 Google 地圖搜尋</a></div>`).addTo(this.map);
     popup.getElement().querySelector("[data-map-focus-card]")?.addEventListener("click", () => {
       this.scrollToSpotCard(city.id, Number(matching.index));
+      popup.remove();
+    });
+    popup.getElement().querySelector("[data-map-focus-itinerary]")?.addEventListener("click", event => {
+      const card = document.querySelector(`.itinerary-spot-card[data-day-index="${dayNumber - 1}"][data-spot-index="${Number(event.currentTarget.dataset.mapFocusItinerary)}"]`);
+      const day = card?.closest(".itinerary-day-card");
+      if (day) day.open = true;
+      card?.scrollIntoView({ behavior: this.prefersReducedMotion ? "auto" : "smooth", block: "center" });
+      card?.classList.add("is-map-hovered");
+      window.setTimeout(() => card?.classList.remove("is-map-hovered"), 1600);
       popup.remove();
     });
   }
@@ -477,6 +498,13 @@ class MapManager {
       element.setAttribute("aria-label", `前往${city.countryName || ""}${city.name}`);
       element.dataset.cityId = city.id;
       element.innerHTML = `<span class="map-global-city-dot" aria-hidden="true"></span><span class="map-global-city-label">${this.escapePopupText(city.name)}</span>`;
+      const flightInfo = city.flightInfo || this.getGlobalCityFlightInfo(city.id);
+      if (flightInfo?.hasDirect === true || city.directFlight === true) {
+        const routeDestination = { ...city, flightInfo: flightInfo || {} };
+        element.title = `${city.name}｜台北直飛參考：${flightInfo?.flightTime || "航程時間請依航班查詢"}`;
+        element.addEventListener("mouseenter", () => this.showFlightRoute(routeDestination, true));
+        element.addEventListener("mouseleave", () => { if (!this.currentCityContext) this.clearFlightPreview(); });
+      }
       element.addEventListener("click", event => {
         event.stopPropagation();
         this.onGlobalCitySelect(city.id);
@@ -488,6 +516,15 @@ class MapManager {
   }
   getGlobalCityList() {
     return window.TRAVEL_DATA?.globalCityLists?.nameSorted || window.TRAVEL_DATA?.globalCities || [];
+  }
+  getGlobalCityFlightInfo(cityId) {
+    const matches = (window.TRAVEL_DATA?.countries || []).flatMap(country => (country.cities || []).map(city => ({ country, city })));
+    const match = matches.find(({ city }) => city.id === cityId);
+    return match?.city?.flightInfo || (match?.city?.directFlight === true ? { hasDirect: true } : null);
+  }
+  clearFlightPreview() {
+    this.geojson.routes = this.emptyCollection();
+    this.syncSource("routes");
   }
   normalizeCityIdentity(value) {
     return String(value || "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
@@ -564,7 +601,7 @@ class MapManager {
     this.updateCityBuildingView();
     this.map.getLayer("continent-symbols")?.setLayoutProperty("visibility", world && zoom < 2.8 ? "visible" : "none");
     ["city-circles", "city-symbols"].forEach(id => this.map.getLayer(id)?.setLayoutProperty("visibility", "none"));
-    const showClusters = false;
+    const showClusters = world && zoom < 4.4;
     const showGlobalCities = false;
     this.map.getLayer("global-city-clusters")?.setLayoutProperty("visibility", showClusters ? "visible" : "none");
     this.map.getLayer("global-city-cluster-count")?.setLayoutProperty("visibility", showClusters ? "visible" : "none");
@@ -599,7 +636,7 @@ class MapManager {
       const point = this.map.project(marker.getLngLat());
       const inViewport = point.x >= -20 && point.y >= -20 && point.x <= this.map.getContainer().clientWidth + 20 && point.y <= this.map.getContainer().clientHeight + 20;
       const overlaps = minDistance > 0 && accepted.some(other => (point.x - other.x) ** 2 + (point.y - other.y) ** 2 < minDistance ** 2);
-      element.hidden = !world || !inViewport || overlaps;
+      element.hidden = !world || zoom < 4.4 || !inViewport || overlaps;
       element.classList.toggle("labels-visible", world && zoom >= 3.0 && !overlaps);
       if (!element.hidden) accepted.push(point);
     });
@@ -756,19 +793,22 @@ class MapManager {
     const valid = (lat, lng) => lat !== null && lat !== undefined && lat !== "" && lng !== null && lng !== undefined && lng !== ""
       && Number.isFinite(Number(lat)) && Number(lat) >= -90 && Number(lat) <= 90
       && Number.isFinite(Number(lng)) && Number(lng) >= -180 && Number(lng) <= 180;
-    const stops = (itinerarySpots || []).map(item => {
+    const stops = (itinerarySpots || []).map((item, index) => {
       const spot = item?.spot || item;
       let lat = Number(spot?.lat), lng = Number(spot?.lng);
-      if (!valid(lat, lng)) {
+      const hasCoordinates = spot?.lat !== null && spot?.lat !== undefined && spot?.lat !== ""
+        && spot?.lng !== null && spot?.lng !== undefined && spot?.lng !== "";
+      if (!hasCoordinates || !valid(lat, lng)) {
+        lat = NaN; lng = NaN;
         const entry = [...this.citySpotMarkers.values()].find(candidate => candidate.city?.id === city.id && normalize(candidate.spot?.name) === normalize(spot?.name) && candidate.feature);
         if (entry) [lng, lat] = entry.feature.geometry.coordinates;
       }
-      return valid(lat, lng) ? { name: spot.name || "景點", coordinates: [lng, lat] } : null;
+      return valid(lat, lng) ? { name: spot.name || "景點", coordinates: [lng, lat], spotIndex: Number.isInteger(item?.index) ? item.index : index } : null;
     }).filter(Boolean);
     this.geojson.itinerary = this.emptyCollection();
     if (!stops.length) { this.syncSource("itinerary"); return 0; }
     dayIndex = Math.max(0, Number(dayIndex) || 0);
-    this.geojson.itinerary.features = stops.map((stop, index) => this.feature(`itinerary-stop-${index}`, stop.coordinates, { kind: "stop", number: String(index + 1), name: stop.name, dayIndex }));
+    this.geojson.itinerary.features = stops.map((stop, index) => this.feature(`itinerary-stop-${dayIndex}-${index}`, stop.coordinates, { kind: "stop", number: String(index + 1), name: stop.name, spotIndex: stop.spotIndex, dayIndex }));
     if (stops.length > 1) this.geojson.itinerary.features.unshift(this.lineFeature("itinerary-day-route", stops.map(stop => stop.coordinates), { kind: "route", dayIndex }));
     this.syncSource("itinerary");
     const bounds = stops.reduce((box, stop) => box.extend(stop.coordinates), new window.maplibregl.LngLatBounds(stops[0].coordinates, stops[0].coordinates));
@@ -777,6 +817,14 @@ class MapManager {
     return stops.length;
   }
   clearItineraryRoute() { this.geojson.itinerary = this.emptyCollection(); this.syncSource("itinerary"); }
+  setItineraryStopHover(dayIndex, spotIndex, active) {
+    const feature = this.geojson.itinerary.features.find(item => item.properties?.kind === "stop"
+      && Number(item.properties.dayIndex) === Number(dayIndex) && Number(item.properties.spotIndex) === Number(spotIndex));
+    if (!feature) return;
+    this.map?.setFeatureState({ source: "itinerary", id: feature.id }, { hovered: Boolean(active) });
+    document.querySelectorAll(`.itinerary-spot-card[data-day-index="${Number(dayIndex)}"][data-spot-index="${Number(spotIndex)}"]`)
+      .forEach(card => card.classList.toggle("is-map-hovered", Boolean(active)));
+  }
   renderCityContextDomMarkers() {
     if (!this.map || !window.maplibregl) return;
     this.cityContextDomMarkers.forEach(marker => marker.remove());
@@ -1043,7 +1091,8 @@ class MapManager {
       const coordinates = this.createFlightArc(stops[segment], stops[segment + 1]);
       routeFeatures.push(this.lineFeature(`flight-route-${segment}`, coordinates, {
         kind: hasDirect ? "direct-flight" : "transit-flight",
-        segment: segment + 1
+        segment: segment + 1,
+        label: hasDirect && destination.flightInfo?.flightTime ? `TPE → ${destination.name} · ${destination.flightInfo.flightTime}` : ""
       }));
     }
     this.geojson.routes.features = routeFeatures;

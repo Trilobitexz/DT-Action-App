@@ -1911,6 +1911,16 @@ body {
   .footer-inner > p { order: 3; flex-basis: 100%; }
 }
 
+.itinerary-spot-card.is-map-hovered { border-color: #d99413; background: #fff9e9; box-shadow: 0 0 0 2px rgba(242, 169, 0, .22); }
+.itinerary-google-route { display: inline-flex; width: fit-content; align-items: center; margin-top: .4rem; padding: .42rem .66rem; border: 1px solid #d9e7df; border-radius: 999px; background: #f0f7f2; color: #245b49; font-size: .72rem; font-weight: 750; text-decoration: none; }
+.itinerary-google-route:hover { border-color: #98c4a8; background: #e2f1e6; }
+.comparison-decision { margin: .85rem 0; padding: .85rem 1rem; border: 1px solid #dbe9de; border-radius: 14px; background: linear-gradient(120deg, #f2f8f3, #fbfcf8); }
+.comparison-decision strong { color: #245b49; }
+.comparison-decision p { margin: .35rem 0; color: #374740; font-size: .9rem; font-weight: 700; line-height: 1.6; }
+.comparison-decision small { color: #77827c; font-size: .72rem; }
+.comparison-winner { background: #f2f8f3; }
+.comparison-winner-badge { display: block; margin-top: .35rem; color: #246247; font-size: .72rem; font-weight: 750; }
+
 @media (max-width: 980px) and (min-width: 761px) {
   .app-header { padding-inline: 1rem; }
   .header-inner { gap: 0.65rem 1rem; }
