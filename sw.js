@@ -1,4 +1,4 @@
-const CACHE_NAME = "journey-atlas-shell-v73";
+const CACHE_NAME = "journey-atlas-shell-v74";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -62,7 +62,7 @@ self.addEventListener("fetch", event => {
     const cache = await caches.open(CACHE_NAME);
     if (event.request.mode === "navigate") {
       try {
-        const response = await fetch(event.request);
+        const response = await fetch(event.request, { cache: "no-cache" });
         if (response && response.status === 200 && response.type === "basic") {
           await cache.put(event.request, response.clone());
         }
