@@ -211,8 +211,13 @@
         const localKey = `journey-atlas-city-spots-v2-${key}`;
         let saved = null;
         try {
-          saved = JSON.parse(localStorage.getItem(localKey) || "null");
-          if (!Array.isArray(saved?.spots) || Date.now() - saved.fetchedAt > 14 * 24 * 60 * 60 * 1000) saved = null;
+          const rawCache = localStorage.getItem(localKey);
+          saved = JSON.parse(rawCache || "null");
+          if (!Array.isArray(saved?.spots) || !Number.isFinite(saved?.fetchedAt)
+            || Date.now() - saved.fetchedAt > 14 * 24 * 60 * 60 * 1000) {
+            saved = null;
+            if (rawCache) localStorage.removeItem(localKey);
+          }
         } catch (error) {
           console.warn("城市景點快取無法讀取：", error);
         }

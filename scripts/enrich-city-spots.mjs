@@ -118,7 +118,8 @@ async function fetchWikipediaSpots(city, language) {
     ggscoord: `${city.lat}|${city.lng}`, ggsradius: "10000", ggslimit: "100", ggsnamespace: "0",
     prop: "coordinates|extracts|pageimages|categories|info", exintro: "1", explaintext: "1",
     exsentences: "3", cllimit: "30", clshow: "!hidden", piprop: "thumbnail", pithumbsize: "600",
-    inprop: "url", format: "json", formatversion: "2", origin: "*"
+    inprop: "url", format: "json", formatversion: "2", origin: "*",
+    ...(language === "zh" ? { variant: "zh-tw" } : {})
   });
   const data = await requestJson(`https://${language}.wikipedia.org/w/api.php?${params}`, `${language} Wikipedia`);
   if (data.error) throw new Error(`Wikipedia API ${data.error.code}: ${data.error.info}`);

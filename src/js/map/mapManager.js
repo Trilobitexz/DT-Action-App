@@ -886,14 +886,15 @@ class MapManager {
     const hasRating = spot.rating !== null && spot.rating !== undefined && spot.rating !== ""
       && Number.isFinite(Number(spot.rating)) && Number(spot.rating) >= 0 && Number(spot.rating) <= 5
       && Boolean(String(spot.ratingSource || "").trim());
-    const rating = hasRating ? `★ ${Number(spot.rating).toFixed(1)} · ${spot.ratingSource}` : "評分資料未提供";
+    const rating = hasRating ? `★ ${Number(spot.rating).toFixed(1)} · ${this.escapePopupText(spot.ratingSource)}` : "";
+    const ratingLink = hasRating ? "" : `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${spot.name || "景點"}, ${city.name || ""}`)}" target="_blank" rel="noopener noreferrer">查看地圖評價 ↗</a>`;
     const sourceUrl = this.safeExternalUrl(spot.sourceUrl);
     const sourceLink = sourceUrl ? `<a href="${this.escapePopupText(sourceUrl)}" target="_blank" rel="noopener noreferrer">${this.escapePopupText(spot.sourceLabel || "資料來源")}</a>` : "";
     const address = spot.address ? `<span>地址：${this.escapePopupText(spot.address)}</span>` : "";
     const openingHours = spot.openingHours ? `<span>開放時間：${this.escapePopupText(spot.openingHours)}</span>` : "";
     const websiteUrl = this.safeExternalUrl(spot.website);
     const website = websiteUrl ? `<a href="${this.escapePopupText(websiteUrl)}" target="_blank" rel="noopener noreferrer">官方網站／資訊</a>` : "";
-    return `<div class="map-spot-popup"><strong>#${index + 1} ${this.escapePopupText(detail?.title || spot.name)}</strong><span>${this.escapePopupText(spot.category || "景點")} · ${this.escapePopupText(rating)}</span><p>${this.escapePopupText(detail?.extract || spot.note || "尚無補充說明")}</p>${address}${openingHours}${website}${sourceLink}<button type="button" data-map-spot-index="${index}">查看景點詳細資訊</button></div>`;
+    return `<div class="map-spot-popup"><strong>#${index + 1} ${this.escapePopupText(detail?.title || spot.name)}</strong><span>${this.escapePopupText(spot.category || "景點")}${rating ? ` · ${rating}` : ""}</span>${ratingLink}<p>${this.escapePopupText(detail?.extract || spot.note || "尚無補充說明")}</p>${address}${openingHours}${website}${sourceLink}<button type="button" data-map-spot-index="${index}">查看景點詳細資訊</button></div>`;
   }
   openSpotPopup(feature) {
     const p = feature.properties || {}, entry = this.citySpotMarkers.get(`${p.cityId}:${p.index}`); if (!entry) return;
