@@ -269,6 +269,11 @@ document.addEventListener("DOMContentLoaded", () => {
       setSidebarActive(action);
       window.PlannerView?.renderComparison();
       openDrawer("comparison-drawer", item);
+    } else if (action === "highlights") {
+      setSidebarActive(action);
+      if (sidebarHint) sidebarHint.textContent = "瀏覽世界奇蹟、經典博物館與古文明名錄。";
+      window.WorldHighlightsView?.render();
+      openDrawer("world-highlights-drawer", item);
     } else if (action === "planner") {
       if (state.currentView === "country" && openPlannerForCity(item)) return;
       const recent = window.PlannerView?.getRecentDestinations?.()[0];
@@ -338,7 +343,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (btn) {
       btn.setAttribute("aria-pressed", String(cfg.layerKey === "voyager"));
       btn.addEventListener("click", () => {
-        mapManager.setTileLayer(cfg.layerKey);
+        if (mapManager.setTileLayer(cfg.layerKey) === false) return;
         document.querySelectorAll(".map-layer-btn").forEach(b => {
           b.classList.remove("active");
           b.setAttribute("aria-pressed", "false");
@@ -363,12 +368,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
   projectionButtons.mercator?.addEventListener("click", () => {
-    mapManager.setProjection("mercator");
+    if (mapManager.setProjection("mercator") === false) return;
     syncProjectionButtons("mercator");
     window.trackFirebaseEvent?.("map_projection_changed", { projection: "2d" });
   });
   projectionButtons.globe?.addEventListener("click", () => {
-    mapManager.setProjection("globe");
+    if (mapManager.setProjection("globe") === false) return;
     syncProjectionButtons("globe");
     window.trackFirebaseEvent?.("map_projection_changed", { projection: "3d" });
   });

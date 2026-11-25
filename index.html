@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="src/css/style.css?v=61">
+  <link rel="stylesheet" href="src/css/style.css?v=62">
 
 </head>
 <body>
@@ -26,6 +26,7 @@
       <button type="button" class="sidebar-nav-item" data-sidebar-action="cities" aria-label="城市目錄" aria-controls="city-rankings-drawer" aria-expanded="false"><span>🏙️</span><small>城市目錄</small></button>
       <button type="button" class="sidebar-nav-item" data-sidebar-action="planner" aria-label="行程規劃" aria-controls="planner-drawer" aria-expanded="false"><span>🧭</span><small>行程規劃</small></button>
       <button type="button" class="sidebar-nav-item" data-sidebar-action="compare" aria-label="城市比較" aria-controls="comparison-drawer" aria-expanded="false"><span>⚖️</span><small>城市比較</small></button>
+      <button type="button" class="sidebar-nav-item" data-sidebar-action="highlights" aria-label="世界之最" aria-controls="world-highlights-drawer" aria-expanded="false"><span>🏛️</span><small>世界之最</small></button>
     </nav>
     <p class="sidebar-hint" id="sidebar-hint" role="status" aria-live="polite">選擇一項功能開始</p>
   </aside>
@@ -82,9 +83,9 @@
             <div class="map-control-cluster map-style-cluster">
               <span class="map-control-caption">底圖風格</span>
               <div class="map-layer-selector" role="group" aria-label="選擇底圖風格">
-                <button type="button" class="map-btn map-layer-btn active" id="btn-layer-voyager" title="探索地圖" aria-label="探索彩色地圖圖層" aria-pressed="true">🗺️ 探索</button>
-                <button type="button" class="map-btn map-layer-btn" id="btn-layer-light" title="簡約地圖" aria-label="簡約淺色地圖圖層" aria-pressed="false">⚪ 簡約</button>
-                <button type="button" class="map-btn map-layer-btn" id="btn-layer-satellite" title="衛星航照" aria-label="衛星航照地圖圖層" aria-pressed="false">🛰️ 衛星</button>
+                <button type="button" class="map-btn map-layer-btn active" id="btn-layer-voyager" title="探索地圖" aria-label="探索彩色地圖圖層" aria-pressed="true"><span class="map-layer-icon" aria-hidden="true">🗺️</span><span class="map-layer-label">探索</span></button>
+                <button type="button" class="map-btn map-layer-btn" id="btn-layer-light" title="簡約地圖" aria-label="簡約淺色地圖圖層" aria-pressed="false"><span class="map-layer-icon" aria-hidden="true">⚪</span><span class="map-layer-label">簡約</span></button>
+                <button type="button" class="map-btn map-layer-btn" id="btn-layer-satellite" title="衛星航照" aria-label="衛星航照地圖圖層" aria-pressed="false"><span class="map-layer-icon" aria-hidden="true">🛰️</span><span class="map-layer-label">衛星</span></button>
               </div>
             </div>
             <div class="map-control-cluster map-tools-cluster">
@@ -273,6 +274,12 @@
         <section id="comparison-panel" class="comparison-panel" aria-label="城市比較"></section>
       </div>
     </aside>
+    <aside class="side-drawer world-highlights-drawer" id="world-highlights-drawer" aria-labelledby="world-highlights-title" aria-hidden="true" inert>
+      <div class="drawer-content">
+        <div class="drawer-header"><div><span class="section-kicker">WORLD HIGHLIGHTS</span><h2 id="world-highlights-title">世界之最</h2><p>從古文明、世界奇蹟到經典博物館，展開一份靈感名錄。</p></div><button type="button" class="drawer-close" data-close-drawer aria-label="關閉世界之最">×</button></div>
+        <div id="world-highlights-list" class="world-highlights-list"></div>
+      </div>
+    </aside>
     <aside class="side-drawer planner-drawer" id="planner-drawer" aria-labelledby="planner-drawer-title" aria-hidden="true" inert>
       <div class="drawer-content">
         <div class="drawer-header"><div><span class="section-kicker">PLAN YOUR JOURNEY</span><h2 id="planner-drawer-title">行程與預算規劃</h2><p>規劃工具會依目前選取的城市更新。</p></div><button type="button" class="drawer-close" data-close-drawer aria-label="關閉行程規劃">×</button></div>
@@ -310,7 +317,7 @@
       window.mapLibreReady.catch(error => console.error(error));
     </script>
     <script src="src/js/map/geoContinents.js" defer></script>
-    <script src="src/js/map/mapManager.js?v=49" defer></script>
+    <script src="src/js/map/mapManager.js?v=52" defer></script>
 
     <!-- 載入資料庫與各洲資料模組 -->
     <script src="src/data/travelData.js" defer></script>
@@ -339,9 +346,10 @@
     <script src="src/js/modules/countryView.js?v=52" defer></script>
     <script src="src/js/modules/globalCitiesView.js?v=3" defer></script>
     <script src="src/js/modules/plannerView.js?v=13" defer></script>
+    <script src="src/js/modules/worldHighlightsView.js?v=2" defer></script>
     <script src="src/js/firebase-ai-config.js?v=2" defer></script>
     <script src="src/js/firebase.js?v=36" defer></script>
-    <script src="src/js/app.js?v=42" defer></script>
+    <script src="src/js/app.js?v=43" defer></script>
     <script src="src/js/pwa.js" defer></script>
   </div>
 </body>

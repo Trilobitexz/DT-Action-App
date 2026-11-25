@@ -48,6 +48,7 @@ class MapManager {
         name: "衛星航照",
         style: {
           version: 8,
+          glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
           sources: {
             "satellite-imagery": {
               type: "raster",
@@ -416,9 +417,11 @@ class MapManager {
     this.showMapPopup(key, new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(lngLat || feature.geometry.coordinates?.[0]).setHTML(html));
   }
 
-  setTileLayer(layerKey) {
-    if (!this.map) return;
+  setTileLayer(layerKey, { suppressTimeoutFallback = false } = {}) {
+    if (!this.map) return false;
     layerKey = this.tileProviders[layerKey] ? layerKey : "voyager";
+    if (layerKey === this.activeLayerKey) return true;
+    const previousLayerKey = this.activeLayerKey || "voyager";
     const config = this.tileProviders[layerKey]; this.activeLayerKey = layerKey;
     this.styleLoadGeneration = (this.styleLoadGeneration || 0) + 1;
     const generation = this.styleLoadGeneration;
@@ -427,19 +430,41 @@ class MapManager {
     const status = document.getElementById("map-load-status"); if (status) status.textContent = `${config.name}樣式載入中…`;
     this.layersReady = false;
     this.layerInstallAttempts = 0;
-    this.map.setStyle(config.style, { diff: false });
-    this.styleLoadTimer = window.setTimeout(() => {
-      if (generation === this.styleLoadGeneration && status) {
-        status.textContent = `${config.name}底圖連線逾時；請切換其他底圖或稍後重試。`;
-      }
-    }, 12000);
-    this.map.once("style.load", () => {
+    const onStyleLoad = () => {
       if (generation !== this.styleLoadGeneration || this.activeLayerKey !== layerKey) return;
       window.clearTimeout(this.styleLoadTimer);
       this.layersReady = false;
       this.ensureLayersInstalled();
+      try { this.map.setProjection({ type: this.projectionMode || "mercator" }); } catch (error) { console.warn("目前底圖不支援所選地圖投影：", error); }
       if (status) status.textContent = "";
-    });
+    };
+    this.map.once("style.load", onStyleLoad);
+    this.styleLoadTimer = window.setTimeout(() => {
+      if (generation !== this.styleLoadGeneration) return;
+      if (suppressTimeoutFallback) {
+        if (status) status.textContent = `${config.name}底圖仍未載入，請檢查網路後重試。`;
+        return;
+      }
+      if (status) status.textContent = `${config.name}底圖逾時，正在切回原圖層…`;
+      document.querySelectorAll(".map-layer-btn").forEach(button => {
+        const selected = button.id === `btn-layer-${previousLayerKey}`;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-pressed", String(selected));
+      });
+      this.setTileLayer(previousLayerKey, { suppressTimeoutFallback: true });
+    }, 12000);
+    try {
+      this.map.setStyle(config.style, { diff: false });
+    } catch (error) {
+      window.clearTimeout(this.styleLoadTimer);
+      this.map.off("style.load", onStyleLoad);
+      this.activeLayerKey = previousLayerKey;
+      this.map.getContainer().dataset.mapTheme = previousLayerKey;
+      if (status) status.textContent = `${config.name}無法切換，已保留原底圖。`;
+      console.warn("地圖底圖切換失敗：", error);
+      return false;
+    }
+    return true;
   }
 
   configureCityBuildings() {
@@ -1169,9 +1194,25 @@ class MapManager {
     this.map.stop(); if (options.duration) this.map.flyTo(options); else this.map.jumpTo(options);
   }
   setProjection(mode) {
-    if (!this.map) return;
-    const type = mode === "globe" ? "globe" : "mercator"; this.map.setProjection({ type }); this.tiltedView = type === "globe";
+    if (!this.map) return false;
+    const type = mode === "globe" ? "globe" : "mercator";
+    try { this.map.setProjection({ type }); } catch (error) { console.warn("切換地圖投影失敗：", error); return false; }
+    this.projectionMode = type; this.tiltedView = type === "globe";
     this.map.easeTo({ pitch: 0, bearing: 0, duration: this.animateAllowed(true) ? 450 : 0 });
+    return true;
+  }
+  focusCoordinates(latitude, longitude, zoom = 8.5, label = "") {
+    const lat = Number(latitude), lng = Number(longitude);
+    if (!this.map || !Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+    this.map.stop();
+    this.map.flyTo({ center: [lng, lat], zoom: Math.max(2, Math.min(13, Number(zoom) || 8.5)), pitch: 0, speed: 1.2, curve: 1.4, essential: false });
+    if (label && window.maplibregl?.Popup) {
+      const safeLabel = this.escapePopupText(label);
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${label} ${lat},${lng}`)}`;
+      this.showMapPopup("world-highlight", new window.maplibregl.Popup({ closeButton: true, maxWidth: "280px" }).setLngLat([lng, lat])
+        .setHTML(`<div class="map-feature-popup"><strong>${safeLabel}</strong><p>名錄位置為探索參考；部分歷史遺址座標為近似位置。</p><a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">在 Google 地圖開啟</a></div>`));
+    }
+    return true;
   }
   toggleProjection() { this.setProjection(this.tiltedView ? "mercator" : "globe"); return this.tiltedView; }
   zoomIn() {
