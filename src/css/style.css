@@ -3098,3 +3098,40 @@ body.sidebar-collapsed .app-sidebar { width: 100%; }
   .app-container { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   .spot-rating-link { display: inline-flex; min-height: 38px; align-items: center; color: #356b55; font-weight: 650; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 }
+
+/* Final map layout overrides: continent shortcuts stay in the map's lower-right corner. */
+#map-hero-card .map-continent-chips,
+#view-country #map-context-info:not([hidden]) ~ .map-continent-chips {
+  position: absolute !important;
+  inset: auto .65rem .65rem auto !important;
+  z-index: 30;
+  width: max-content;
+  max-width: min(78%, 680px);
+  min-height: 0;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: .25rem;
+  margin: 0;
+  padding: .35rem;
+  overflow-x: auto;
+  border: 1px solid rgba(255,255,255,.82);
+  border-radius: 999px;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 5px 18px rgba(27,46,42,.16);
+  backdrop-filter: blur(12px);
+  transform: none;
+}
+#map-hero-card .map-continent-chips .continent-chip-btn { min-height: 38px; padding: .38rem .62rem; }
+#map-context-info { gap: .4rem .55rem; padding: .55rem .75rem; }
+#map-context-info > small { margin-top: .1rem; color: #78847e; font-size: .7rem; line-height: 1.4; }
+#map-context-info .city-map-key { gap: .35rem .5rem; }
+.maplibregl-popup-content { padding: .8rem .9rem; border-radius: 14px; box-shadow: 0 10px 32px rgba(24,42,37,.2); }
+.maplibregl-popup-close-button { width: 32px; height: 32px; border-radius: 50%; color: #53645b; font-size: 22px; }
+@media (max-width: 760px) {
+  #map-hero-card .map-continent-chips,
+  #view-country #map-context-info:not([hidden]) ~ .map-continent-chips { inset: auto .4rem .45rem auto !important; max-width: calc(100% - .8rem); }
+  #map-hero-card .map-continent-chips .continent-chip-btn { min-height: 40px; padding-inline: .55rem; font-size: .68rem; }
+  #map-context-info { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; }
+  #map-context-info > strong, #map-context-info > small, #map-context-info .city-map-key { grid-column: 1 / -1; }
+  #map-context-info .city-map-filter { justify-self: start; }
+}

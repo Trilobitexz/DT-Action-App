@@ -20,6 +20,8 @@ class MapManager {
     this.globalCityMarkerSignature = "";
     this.overviewMarkerSignature = "";
     this.currentCityContext = null;
+    this.activeMapPopup = null;
+    this.activeMapPopupKey = "";
     this.cityContextRequestId = 0;
     this.cityContextExitZoom = 5.8;
     this.cityContextExitPending = false;
@@ -67,6 +69,26 @@ class MapManager {
   lineFeature(id, coordinates, properties = {}) { return { type: "Feature", id: String(id), properties, geometry: { type: "LineString", coordinates } }; }
   sourceData(key) { return this.map?.getSource(key); }
   syncSource(key) { this.sourceData(key)?.setData(this.geojson[key]); }
+  showMapPopup(key, popup) {
+    if (!this.map || !popup) return null;
+    if (this.activeMapPopup && this.activeMapPopupKey === key) {
+      this.activeMapPopup.remove();
+      this.activeMapPopup = null;
+      this.activeMapPopupKey = "";
+      return null;
+    }
+    this.activeMapPopup?.remove();
+    this.activeMapPopup = popup;
+    this.activeMapPopupKey = key;
+    popup.on("close", () => {
+      if (this.activeMapPopup === popup) {
+        this.activeMapPopup = null;
+        this.activeMapPopupKey = "";
+      }
+    });
+    popup.addTo(this.map);
+    return popup;
+  }
   syncAllSources() { Object.keys(this.geojson).forEach(key => this.syncSource(key)); }
 
   init() {
@@ -321,7 +343,8 @@ class MapManager {
     const googleUrl = `https://www.google.com/maps/search/?api=1&query=${feature ? query : coordinateQuery}`;
     const osmUrl = `https://www.openstreetmap.org/search?query=${coordinateQuery}`;
     const html = `<div class="map-feature-popup"><strong>${this.escapePopupText(name)}</strong><span>${this.escapePopupText(type)}</span>${detail ? `<p>${this.escapePopupText(detail)}</p>` : `<p>座標 ${Number(lngLat.lat).toFixed(5)}, ${Number(lngLat.lng).toFixed(5)}</p>`}<div class="map-feature-popup-actions"><a href="${this.escapePopupText(googleUrl)}" target="_blank" rel="noopener noreferrer">Google 地圖搜尋</a><a href="${this.escapePopupText(osmUrl)}" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></div><small>地圖標籤僅供探索，請出發前確認地點資訊。</small></div>`;
-    new window.maplibregl.Popup({ closeButton: true, maxWidth: "320px" }).setLngLat(lngLat).setHTML(html).addTo(this.map);
+    const key = `map-feature:${feature?.id || `${name}:${type}`}:${Number(lngLat.lng).toFixed(3)}:${Number(lngLat.lat).toFixed(3)}`;
+    this.showMapPopup(key, new window.maplibregl.Popup({ closeButton: true, maxWidth: "320px" }).setLngLat(lngLat).setHTML(html));
   }
 
   openAirportPopup(feature) {
@@ -330,7 +353,7 @@ class MapManager {
     const links = airport?.sourceUrl ? `<a href="${this.escapePopupText(this.safeExternalUrl(airport.sourceUrl))}" target="_blank" rel="noopener noreferrer">查看機場資料來源</a>` : "";
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(properties.name || "機場")}`;
     const html = `<div class="map-feature-popup"><strong>${this.escapePopupText(properties.name || "機場")}</strong><span>航空交通節點</span><p>航班與市區接駁請依出發日期確認。</p>${links}<a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">在 Google 地圖開啟</a></div>`;
-    new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates).setHTML(html).addTo(this.map);
+    this.showMapPopup(`airport:${properties.name || "airport"}`, new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates).setHTML(html));
   }
 
   openCityCenterPopup(feature, lngLat) {
@@ -339,7 +362,7 @@ class MapManager {
     const sourceUrl = this.safeExternalUrl(city.coordinateSource?.sourceUrl);
     const source = sourceUrl ? `<a href="${this.escapePopupText(sourceUrl)}" target="_blank" rel="noopener noreferrer">查看座標來源</a>` : "城市座標參考點";
     const html = `<div class="map-feature-popup"><strong>${this.escapePopupText(city.name)} 市中心參考點</strong><span>城市位置</span>${source ? `<p>${source}</p>` : ""}<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${city.name} ${city.countryName || ""}`)}" target="_blank" rel="noopener noreferrer">在 Google 地圖搜尋</a></div>`;
-    new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(lngLat || feature.geometry.coordinates).setHTML(html).addTo(this.map);
+    this.showMapPopup(`city-center:${city.id}`, new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(lngLat || feature.geometry.coordinates).setHTML(html));
   }
 
   openItineraryStopPopup(feature) {
@@ -354,8 +377,9 @@ class MapManager {
     const cardButton = itineraryCard
       ? `<button type="button" data-map-focus-itinerary="${Number(properties.spotIndex)}">在當日行程查看</button>`
       : matching ? `<button type="button" data-map-focus-card="${matching.index}">在景點清單查看</button>` : "";
-    const popup = new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates)
-      .setHTML(`<div class="map-feature-popup"><strong>Day ${dayNumber} · 第 ${stopNumber} 站</strong><span>${this.escapePopupText(properties.name || "行程景點")}</span><p>此標記依目前行程順序排列。</p>${cardButton}<a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">在 Google 地圖搜尋</a></div>`).addTo(this.map);
+    const popup = this.showMapPopup(`itinerary:${dayNumber}:${properties.spotIndex ?? stopNumber}`, new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates)
+      .setHTML(`<div class="map-feature-popup"><strong>Day ${dayNumber} · 第 ${stopNumber} 站</strong><span>${this.escapePopupText(properties.name || "行程景點")}</span><p>此標記依目前行程順序排列。</p>${cardButton}<a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">在 Google 地圖搜尋</a></div>`));
+    if (!popup) return;
     popup.getElement().querySelector("[data-map-focus-card]")?.addEventListener("click", () => {
       this.scrollToSpotCard(city.id, Number(matching.index));
       popup.remove();
@@ -386,7 +410,8 @@ class MapManager {
       description = "弧線為規劃示意，不代表即時航班航跡或目前班表。請查看航空公司資訊。";
     }
     const html = `<div class="map-feature-popup"><strong>${this.escapePopupText(title)}</strong><p>${this.escapePopupText(description)}</p></div>`;
-    new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(lngLat || feature.geometry.coordinates?.[0]).setHTML(html).addTo(this.map);
+    const key = `route:${properties.kind || "route"}:${properties.dayIndex ?? properties.segment ?? 0}`;
+    this.showMapPopup(key, new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(lngLat || feature.geometry.coordinates?.[0]).setHTML(html));
   }
 
   setTileLayer(layerKey) {
@@ -868,7 +893,7 @@ class MapManager {
       ? `<a href="${this.escapePopupText(coordinateSourceUrl)}" target="_blank" rel="noopener noreferrer">${this.escapePopupText(coordinateSourceLabel)} 來源資料</a>`
       : "座標來源由城市目錄提供";
     addMarker(`${city.id}-center`, [city.lng, city.lat], "map-city-center-marker", `<span class="city-center-pin">●</span>`, `${city.name} ${placeLabel}`, () => {
-      new window.maplibregl.Popup({ maxWidth: "260px" }).setLngLat([city.lng, city.lat]).setHTML(`<strong>${this.escapePopupText(city.name)} ${placeLabel}</strong><p>${coordinateSource}</p>`).addTo(this.map);
+      this.showMapPopup(`city-center:${city.id}`, new window.maplibregl.Popup({ maxWidth: "260px" }).setLngLat([city.lng, city.lat]).setHTML(`<strong>${this.escapePopupText(city.name)} ${placeLabel}</strong><p>${coordinateSource}</p>`));
     }, "center");
     this.geojson.spots.features.filter(feature => feature.properties.kind === "spot").forEach(feature => {
       const properties = feature.properties;
@@ -878,7 +903,7 @@ class MapManager {
       const properties = feature.properties;
       const distance = this.distanceKm([city.lng, city.lat], feature.geometry.coordinates);
       addMarker(String(feature.id), feature.geometry.coordinates, "map-airport-marker", `<span class="airport-pin">✈</span><span class="map-context-landmark-label">${this.escapePopupText(properties.name)}</span>`, properties.name, () => {
-        new window.maplibregl.Popup({ maxWidth: "280px" }).setLngLat(feature.geometry.coordinates).setHTML(`<strong>${this.escapePopupText(properties.name)}</strong><p>距城市地標直線約 ${distance.toFixed(0)} 公里。實際進城方式與時間依交通工具及路況而異。</p>`).addTo(this.map);
+        this.showMapPopup(`airport:${properties.name}`, new window.maplibregl.Popup({ maxWidth: "280px" }).setLngLat(feature.geometry.coordinates).setHTML(`<strong>${this.escapePopupText(properties.name)}</strong><p>距城市地標直線約 ${distance.toFixed(0)} 公里。實際進城方式與時間依交通工具及路況而異。</p>`));
       }, "airport");
     });
     this.refreshCitySpotCategoryFilter();
@@ -946,7 +971,8 @@ class MapManager {
   }
   openSpotPopup(feature) {
     const p = feature.properties || {}, entry = this.citySpotMarkers.get(`${p.cityId}:${p.index}`); if (!entry) return;
-    const popup = new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates).setHTML(this.createSpotPopup(entry.city, entry.spot, entry.index, entry.detail)).addTo(this.map);
+    const popup = this.showMapPopup(`spot:${p.cityId}:${p.index}`, new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates).setHTML(this.createSpotPopup(entry.city, entry.spot, entry.index, entry.detail)));
+    if (!popup) return;
     popup.getElement().querySelector("[data-map-spot-index]")?.addEventListener("click", () => {
       const card = document.querySelector(`[data-city-id="${entry.city.id}"][data-spot-index="${entry.index}"]`);
       card?.scrollIntoView({ behavior: this.prefersReducedMotion ? "auto" : "smooth", block: "center" }); card?.classList.add("spot-item-map-focus");

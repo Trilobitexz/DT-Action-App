@@ -1,13 +1,13 @@
-const CACHE_NAME = "journey-atlas-shell-v76";
+const CACHE_NAME = "journey-atlas-shell-v77";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./src/css/style.css?v=59",
+  "./src/css/style.css?v=60",
   "./src/js/pwa.js",
   "./src/js/app.js?v=42",
   "./src/js/map/geoContinents.js",
-  "./src/js/map/mapManager.js?v=47",
+  "./src/js/map/mapManager.js?v=48",
   "./src/js/store/appStore.js",
   "./src/js/modules/continentView.js",
   "./src/js/modules/countryView.js?v=51",
