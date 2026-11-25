@@ -18,14 +18,14 @@ window.CurrencyService = {
       // 呼叫免金鑰開放 API；靜態網頁使用時須能連線至外部服務。
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
-      let res;
+      let json;
       try {
-        res = await fetch("https://open.er-api.com/v6/latest/TWD", { signal: controller.signal });
+        const res = await fetch("https://open.er-api.com/v6/latest/TWD", { signal: controller.signal });
+        if (!res.ok) throw new Error(`匯率 API 回應異常 (${res.status})`);
+        json = await res.json();
       } finally {
         clearTimeout(timeoutId);
       }
-      if (!res.ok) throw new Error(`匯率 API 回應異常 (${res.status})`);
-      const json = await res.json();
       if (json.result !== "success" || !json.rates || !Number.isFinite(json.rates.JPY)) {
         throw new Error("匯率 API 回傳資料格式不正確");
       }

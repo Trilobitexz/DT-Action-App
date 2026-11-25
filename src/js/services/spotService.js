@@ -55,14 +55,13 @@ window.SpotService = {
   runRequest: async function (url, timeoutMs = this.requestTimeoutMs) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    let res;
     try {
-      res = await fetch(url, { headers: { "Accept": "application/json" }, signal: controller.signal });
+      const res = await fetch(url, { headers: { "Accept": "application/json" }, signal: controller.signal });
+      if (!res.ok) throw new Error(`旅遊資料 API 回應異常 (${res.status})`);
+      return await res.json();
     } finally {
       clearTimeout(timeoutId);
     }
-    if (!res.ok) throw new Error(`旅遊資料 API 回應異常 (${res.status})`);
-    return res.json();
   },
 
   trimCache: function () {

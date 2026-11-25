@@ -84,6 +84,11 @@ class MapManager {
       renderWorldCopies: true, attributionControl: false,
       canvasContextAttributes: { antialias: false, preserveDrawingBuffer: false }, fadeDuration: 0
     });
+    this.initialMapLoadTimer = window.setTimeout(() => {
+      if (!this.map?.isStyleLoaded?.() && status) {
+        status.textContent = "地圖底圖載入逾時；請檢查網路，或切換底圖後再試。";
+      }
+    }, 12000);
     this.lastMapZoom = this.map.getZoom();
     this.cityContextZoomDirection = "in";
     this.map.on("zoom", event => {
@@ -98,6 +103,7 @@ class MapManager {
     this.map.addControl(new window.maplibregl.AttributionControl({ compact: true }), "bottom-right");
     this.map.on("error", event => { if (event?.error) console.warn("MapLibre map/tile error:", event.error); });
     this.map.on("load", () => {
+      window.clearTimeout(this.initialMapLoadTimer);
       this.layersReady = false;
       this.ensureLayersInstalled();
       if (status) status.textContent = "";
@@ -366,13 +372,22 @@ class MapManager {
     if (!this.map) return;
     layerKey = this.tileProviders[layerKey] ? layerKey : "voyager";
     const config = this.tileProviders[layerKey]; this.activeLayerKey = layerKey;
+    this.styleLoadGeneration = (this.styleLoadGeneration || 0) + 1;
+    const generation = this.styleLoadGeneration;
+    window.clearTimeout(this.styleLoadTimer);
     this.map.getContainer().dataset.mapTheme = layerKey;
     const status = document.getElementById("map-load-status"); if (status) status.textContent = `${config.name}樣式載入中…`;
     this.layersReady = false;
     this.layerInstallAttempts = 0;
     this.map.setStyle(config.style, { diff: false });
+    this.styleLoadTimer = window.setTimeout(() => {
+      if (generation === this.styleLoadGeneration && status) {
+        status.textContent = `${config.name}底圖連線逾時；請切換其他底圖或稍後重試。`;
+      }
+    }, 12000);
     this.map.once("style.load", () => {
-      if (this.activeLayerKey !== layerKey) return;
+      if (generation !== this.styleLoadGeneration || this.activeLayerKey !== layerKey) return;
+      window.clearTimeout(this.styleLoadTimer);
       this.layersReady = false;
       this.ensureLayersInstalled();
       if (status) status.textContent = "";

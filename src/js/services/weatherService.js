@@ -82,14 +82,14 @@ window.WeatherService = {
       });
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
-      let res;
+      let json;
       try {
-        res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: controller.signal });
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: controller.signal });
+        if (!res.ok) throw new Error(`天氣 API 回應異常 (${res.status})`);
+        json = await res.json();
       } finally {
         clearTimeout(timeoutId);
       }
-      if (!res.ok) throw new Error(`天氣 API 回應異常 (${res.status})`);
-      const json = await res.json();
       if (json.error || !json.current) throw new Error(json.reason || "天氣 API 缺少目前資料");
       const requiredValues = [json.current.temperature_2m, json.current.relative_humidity_2m, json.current.weather_code, json.current.wind_speed_10m];
       if (!requiredValues.every(Number.isFinite)) throw new Error("天氣 API 回傳的目前資料不完整");
@@ -160,12 +160,12 @@ window.WeatherService = {
         });
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 6500);
-        let response;
+        let json;
         try {
-          response = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${params}`, { signal: controller.signal });
+          const response = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${params}`, { signal: controller.signal });
+          if (!response.ok) throw new Error(`空氣品質 API 回應異常 (${response.status})`);
+          json = await response.json();
         } finally { clearTimeout(timeoutId); }
-        if (!response.ok) throw new Error(`空氣品質 API 回應異常 (${response.status})`);
-        const json = await response.json();
         const current = json?.current;
         if (!current || !Number.isFinite(current.us_aqi)) throw new Error("空氣品質 API 沒有有效的 AQI 資料");
         const aqi = Math.max(0, Math.round(current.us_aqi));
