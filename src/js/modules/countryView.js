@@ -41,25 +41,26 @@ window.CountryView = {
     const visaEl = document.getElementById("detail-currency-visa");
     visaEl.innerHTML = `幣別：${country.currency} ｜ 簽證：${country.visa} <span id="live-rate-tag" style="color:var(--primary); font-size:0.8rem; margin-left:6px;">(匯率載入中...)</span>`;
 
-    if (window.CurrencyService) {
+    const currencyCode = country.currency.match(/\(([A-Z]{3})\)/)?.[1];
+    const rateTag = document.getElementById("live-rate-tag");
+    if (!currencyCode) {
+      if (rateTag) {
+        rateTag.textContent = " · 幣別資料待確認";
+        rateTag.title = "全球城市目錄尚未提供已核實的幣別代碼，請以當地官方資訊為準。";
+      }
+    } else if (window.CurrencyService) {
       const rateCountryId = globalCity ? globalCity.id : country.id;
       window.CurrencyService.getExchangeRates().then(rateRes => {
         const activeRateTarget = state.globalCityId || state.selectedCountryId;
         if (activeRateTarget !== rateCountryId) return;
-        const currencyCode = country.currency.match(/\(([A-Z]{3})\)/)?.[1];
-        const rateTag = document.getElementById("live-rate-tag");
-        if (!rateTag) return;
-        if (!currencyCode) {
-          rateTag.textContent = " · 幣別資料待確認";
-          rateTag.title = "全球城市目錄尚未提供已核實的幣別代碼，請以當地官方資訊為準。";
-          return;
-        }
+        const activeRateTag = document.getElementById("live-rate-tag");
+        if (!activeRateTag) return;
         const formatted = rateRes?.data && window.CurrencyService.formatRate(currencyCode, rateRes.data);
         if (formatted) {
           const sourceText = rateRes.source === "live" ? "最新" : rateRes.source === "cache" ? "快取" : "備援";
-          rateTag.textContent = ` · ${sourceText}匯率：${formatted}（${rateRes.updateTime || "來源時間未提供"}）`;
+          activeRateTag.textContent = ` · ${sourceText}匯率：${formatted}（${rateRes.updateTime || "來源時間未提供"}）`;
         } else {
-          rateTag.textContent = " · 匯率暫時無法取得";
+          activeRateTag.textContent = " · 匯率暫時無法取得";
         }
       }).catch(error => console.warn("顯示匯率失敗：", error));
     } else {
