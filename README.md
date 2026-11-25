@@ -50,7 +50,7 @@ flowchart LR
 | `src/js/modules/globalCitiesView.js` | 全球城市目錄、搜尋和分批呈現。 |
 | `src/js/modules/plannerView.js` | 側邊工作區中的收藏、比較、預算、行程、AI 生成及本機／雲端同步介面。 |
 | `src/js/map/mapManager.js`、`geoContinents.js` | MapLibre 地圖、圖層、投影、標記和地圖上下文。 |
-| `src/js/services/` | 景點、城市目錄、天氣、匯率和航班資料的請求、快取與 fallback。 |
+| `src/js/services/` | 景點、城市目錄、天氣、匯率、航班、國家行前資訊、歷史氣候及道路路線請求、快取與 fallback。 |
 | `src/data/` | 隨網站發布的城市、國家、座標及景點初始資料。 |
 | `src/js/firebase.js`、`firebase-ai-config.js` | Firebase Web 初始化、帳戶／Firestore 雲端同步，以及 Firebase AI Logic/App Check 公開設定。 |
 | `sw.js`、`manifest.json`、`src/js/pwa.js` | PWA 安裝資訊、Service Worker 更新與同源靜態資源快取。 |
@@ -63,6 +63,14 @@ flowchart LR
 4. 預算、收藏、比較、最近瀏覽及行程先存在目前瀏覽器的本機儲存空間。Google 登入成功後，Firebase Auth UID 作為使用者識別，資料同步至 `users/{uid}/appData/{dataId}`；Firestore 規則只允許該 UID 存取自己的受限資料文件。
 5. AI 行程由已載入的候選景點產生，Firebase AI Logic 呼叫 Gemini；App Check 使用 reCAPTCHA Enterprise 驗證應用程式。AI 不寫入公開城市目錄；使用者的行程保存仍透過個人資料同步流程。
 6. Service Worker 快取同源網站殼層，以便離線開啟已下載資源；地圖底圖、Firebase 與即時外部資料仍需要網路。
+
+### 新增公開資料來源與降級方式
+
+- **REST Countries** 提供官方語言、時區、駕駛方向與國際電話區碼；國家名稱無法匹配或服務逾時時，保留既有國家與城市資料。
+- **Nager.Date** 依選定出發日提示全國國定假日；不涵蓋地方節日，服務不可用時提醒使用者查官方公告。
+- **Open-Meteo Historical Weather API** 以最近十個完整年度的逐日資料計算 1–12 月平均氣溫與月降雨量；這是氣候參考，不是天氣預報。城市座標無效或服務失敗時不顯示氣候卡。
+- **OSRM 公開示範路由服務** 僅在行程交通方式選擇「開車」時查詢道路路線；使用行程景點座標依序規劃，逾時、無路徑或服務不可用時保留地圖上的虛線行程示意。距離與時間不含即時路況保證。公開服務有使用政策與容量限制，不應大量或高頻請求。
+- 上述服務均由瀏覽器直接呼叫並設有逾時處理，非本專案自營 API；可用性、涵蓋範圍、資料更新及服務條款依各提供者為準。
 
 ### Firebase 與維運邊界
 

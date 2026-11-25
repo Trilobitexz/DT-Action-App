@@ -1377,6 +1377,12 @@ body.sidebar-collapsed .sidebar-nav-item { grid-template-columns: 1fr; justify-i
 .city-detail-facts > div { padding: 0.8rem; border: 1px solid #eeeae3; border-radius: 10px; background: #fcfbf9; }
 .city-detail-facts strong { color: var(--primary); font-size: 0.82rem; }
 .city-detail-facts p { margin-top: 0.3rem; color: #5f6b6d; font-size: 0.78rem; line-height: 1.55; }
+#city-climate-panel { grid-column: 1 / -1; padding: 0.9rem 1rem; border: 1px solid #eeeae3; border-radius: 12px; background: #fcfbf9; }
+#city-climate-panel p { margin: 0.45rem 0; line-height: 1.8; }
+#city-climate-panel small { color: var(--text-muted); }
+.itinerary-date-control { display: grid; gap: 0.35rem; max-width: 22rem; margin: 0.7rem 0 0.35rem; color: var(--text-main); font-size: 0.75rem; font-weight: 650; }
+.itinerary-date-control input { min-height: 42px; padding: 0.55rem 0.7rem; border: 1px solid var(--border-color); border-radius: 10px; background: #fff; color: var(--text-main); }
+#itinerary-holiday-note { margin: 0 0 0.8rem; }
 .city-insight-panel { margin: 1rem 0; padding: 1rem; border: 1px solid #eeeae3; border-radius: 12px; background: linear-gradient(135deg, #fffdfb, #f8f6f1); }
 .city-insight-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
 .city-insight-header h4 { margin-top: 0.25rem; font-size: 1rem; }

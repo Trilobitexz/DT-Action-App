@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="src/css/style.css?v=60">
+  <link rel="stylesheet" href="src/css/style.css?v=61">
 
 </head>
 <body>
@@ -231,6 +231,7 @@
           <div id="city-weather-widget" class="weather-badge" style="display:none;"></div>
         </div>
         <div id="city-detail-facts" class="city-detail-facts" aria-label="城市深度資料"></div>
+        <section id="city-climate-panel" class="city-detail-facts" aria-label="歷史氣候參考" hidden></section>
         <details class="city-reference-details">
           <summary>資料完整度與來源</summary>
           <div class="city-insight-panel">
@@ -244,7 +245,9 @@
             <strong>資料來源與使用提醒</strong>
             <span>• 景點與座標：OpenStreetMap、Wikipedia 與 Wikidata；各景點卡可開啟原始來源。</span>
             <span>• 城市介紹與圖片：Wikivoyage、Wikipedia、Wikimedia Commons。</span>
-            <span>• 天氣與空氣品質：<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a>；空氣品質為全球模式估值，並非測站即時讀值。</span>
+            <span>• 天氣與空氣品質：<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a>；空氣品質為全球模式估值，並非測站即時讀值；月氣候為近十年歷史平均。</span>
+            <span>• 國家行前資訊：<a href="https://restcountries.com/" target="_blank" rel="noopener noreferrer">REST Countries</a>；國定假日：<a href="https://date.nager.at/" target="_blank" rel="noopener noreferrer">Nager.Date</a>，未涵蓋地方節日。</span>
+            <span>• 開車路線：<a href="https://project-osrm.org/" target="_blank" rel="noopener noreferrer">OSRM</a>／OpenStreetMap；路況與車程僅供參考，服務無回應時顯示行程示意線。</span>
             <small>航班、價格、天氣與空氣品質會變動；請以出發當日的官方或服務提供者資訊為準。資料完整度不是旅遊品質評分。</small>
           </div>
         </details>
@@ -307,7 +310,7 @@
       window.mapLibreReady.catch(error => console.error(error));
     </script>
     <script src="src/js/map/geoContinents.js" defer></script>
-    <script src="src/js/map/mapManager.js?v=48" defer></script>
+    <script src="src/js/map/mapManager.js?v=49" defer></script>
 
     <!-- 載入資料庫與各洲資料模組 -->
     <script src="src/data/travelData.js" defer></script>
@@ -320,6 +323,9 @@
     <script src="src/data/cityEnrichment.js?v=33" defer></script>
     <!-- 載入資料層與即時 API 服務 (階段二) -->
     <script src="src/js/services/currencyService.js" defer></script>
+    <script src="src/js/services/nationalInfoService.js?v=1" defer></script>
+    <script src="src/js/services/climateService.js?v=1" defer></script>
+    <script src="src/js/services/roadRouteService.js?v=1" defer></script>
     <script src="src/js/services/weatherService.js?v=1" defer></script>
     <script src="src/js/services/flightService.js" defer></script>
     <script src="src/js/services/spotService.js?v=45" defer></script>
@@ -330,9 +336,9 @@
 
     <!-- 載入視圖模組 -->
     <script src="src/js/modules/continentView.js" defer></script>
-    <script src="src/js/modules/countryView.js?v=51" defer></script>
+    <script src="src/js/modules/countryView.js?v=52" defer></script>
     <script src="src/js/modules/globalCitiesView.js?v=3" defer></script>
-    <script src="src/js/modules/plannerView.js?v=12" defer></script>
+    <script src="src/js/modules/plannerView.js?v=13" defer></script>
     <script src="src/js/firebase-ai-config.js?v=2" defer></script>
     <script src="src/js/firebase.js?v=36" defer></script>
     <script src="src/js/app.js?v=42" defer></script>

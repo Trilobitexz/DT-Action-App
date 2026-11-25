@@ -401,7 +401,9 @@ class MapManager {
     let description = "此線段依地圖資料繪製，僅供位置參考。";
     if (properties.kind === "route") {
       title = `Day ${Number(properties.dayIndex) + 1} 行程動線`;
-      description = "依行程景點順序連線，並非即時導航路線。";
+      description = properties.routeSource === "OSRM"
+        ? `OSRM 開車路線參考：${(Number(properties.distanceMeters) / 1000).toFixed(1)} 公里，約 ${Math.max(1, Math.round(Number(properties.durationSeconds) / 60))} 分鐘；時間依實際路況而異。`
+        : "依行程景點順序連線，並非即時導航路線。";
     } else if (properties.kind === "airport-city") {
       title = "機場到市區參考線";
       description = `地圖直線距離約 ${Number(properties.distanceKm) || "—"} 公里；實際交通路線與時間依交通方式和路況而異。`;
@@ -812,7 +814,7 @@ class MapManager {
     this.syncSource("spots"); this.syncSource("airports");
     this.clearItineraryRoute();
   }
-  showItineraryDay(city, itinerarySpots, dayIndex = 0) {
+  showItineraryDay(city, itinerarySpots, dayIndex = 0, travelMode = "transit") {
     if (!this.map || !city?.id || this.currentCityContext?.id !== city.id) return 0;
     const normalize = value => String(value || "").normalize("NFKC").trim().toLocaleLowerCase();
     const valid = (lat, lng) => lat !== null && lat !== undefined && lat !== "" && lng !== null && lng !== undefined && lng !== ""
@@ -830,18 +832,29 @@ class MapManager {
       }
       return valid(lat, lng) ? { name: spot.name || "景點", coordinates: [lng, lat], spotIndex: Number.isInteger(item?.index) ? item.index : index } : null;
     }).filter(Boolean);
+    const requestToken = this.itineraryRouteToken = (this.itineraryRouteToken || 0) + 1;
     this.geojson.itinerary = this.emptyCollection();
     if (!stops.length) { this.syncSource("itinerary"); return 0; }
     dayIndex = Math.max(0, Number(dayIndex) || 0);
     this.geojson.itinerary.features = stops.map((stop, index) => this.feature(`itinerary-stop-${dayIndex}-${index}`, stop.coordinates, { kind: "stop", number: String(index + 1), name: stop.name, spotIndex: stop.spotIndex, dayIndex }));
     if (stops.length > 1) this.geojson.itinerary.features.unshift(this.lineFeature("itinerary-day-route", stops.map(stop => stop.coordinates), { kind: "route", dayIndex }));
     this.syncSource("itinerary");
+    if (travelMode === "driving" && stops.length > 1 && window.RoadRouteService) {
+      window.RoadRouteService.getDrivingRoute(stops.map(stop => stop.coordinates)).then(route => {
+        if (!route || requestToken !== this.itineraryRouteToken || this.currentCityContext?.id !== city.id) return;
+        const line = this.geojson.itinerary.features.find(feature => feature.properties?.kind === "route");
+        if (!line) return;
+        line.geometry = { type: "LineString", coordinates: route.coordinates };
+        line.properties = { ...line.properties, routeSource: "OSRM", distanceMeters: route.distanceMeters, durationSeconds: route.durationSeconds };
+        this.syncSource("itinerary");
+      });
+    }
     const bounds = stops.reduce((box, stop) => box.extend(stop.coordinates), new window.maplibregl.LngLatBounds(stops[0].coordinates, stops[0].coordinates));
     if (stops.length === 1) this.map.flyTo({ center: stops[0].coordinates, zoom: Math.max(13, this.map.getZoom()), duration: this.animateAllowed(true) ? 650 : 0, essential: false });
     else this.map.fitBounds(bounds, { padding: this.isCoarsePointer ? 56 : 84, maxZoom: 14, duration: this.animateAllowed(true) ? 700 : 0, essential: false });
     return stops.length;
   }
-  clearItineraryRoute() { this.geojson.itinerary = this.emptyCollection(); this.syncSource("itinerary"); }
+  clearItineraryRoute() { this.itineraryRouteToken = (this.itineraryRouteToken || 0) + 1; this.geojson.itinerary = this.emptyCollection(); this.syncSource("itinerary"); }
   setItineraryStopHover(dayIndex, spotIndex, active) {
     const feature = this.geojson.itinerary.features.find(item => item.properties?.kind === "stop"
       && Number(item.properties.dayIndex) === Number(dayIndex) && Number(item.properties.spotIndex) === Number(spotIndex));

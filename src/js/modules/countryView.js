@@ -246,6 +246,39 @@ window.CountryView = {
         <div><strong>📚 深度資料</strong><p>${currentCity.climateSource ? currentCity.climate : "旅遊指南、百科摘要與公開地圖資料正在載入，取得後會附上原始來源。"}</p></div>
       `;
     }
+    if (detail && window.NationalInfoService && country.englishName) {
+      const facts = document.createElement("div");
+      facts.className = "country-live-facts";
+      facts.innerHTML = "<strong>🧳 行前資訊</strong><p>正在載入國家官方語言、時區與駕駛方向…</p>";
+      detail.appendChild(facts);
+      window.NationalInfoService.getCountry(country.englishName).then(info => {
+        if (!info || !facts.isConnected || state.selectedCityId !== currentCity.id) return;
+        const languages = info.languages.length ? info.languages.join("、") : "未提供";
+        const timezone = info.timezones.length ? info.timezones.slice(0, 3).join("、") + (info.timezones.length > 3 ? "…" : "") : "未提供";
+        facts.replaceChildren();
+        const heading = document.createElement("strong"); heading.textContent = "🧳 行前資訊";
+        const text = document.createElement("p");
+        text.textContent = `官方語言：${languages} · 時區：${timezone} · 靠${info.drivingSide === "left" ? "左" : info.drivingSide === "right" ? "右" : "未提供"}行駛 · 國際電話：${info.callingCode || "未提供"}`;
+        facts.append(heading, text);
+      });
+    }
+    const climatePanel = document.getElementById("city-climate-panel");
+    if (climatePanel) {
+      climatePanel.hidden = false;
+      climatePanel.textContent = "正在載入歷史氣候平均…";
+      const cityId = currentCity.id;
+      window.ClimateService?.getMonthlyNormals(currentCity.lat, currentCity.lng).then(months => {
+        if (state.selectedCityId !== cityId || !months) {
+          if (state.selectedCityId === cityId && !months) climatePanel.hidden = true;
+          return;
+        }
+        const heading = document.createElement("strong"); heading.textContent = "🌦️ 每月氣候參考（近十年歷史平均）";
+        const summary = document.createElement("p");
+        summary.textContent = months.map(item => `${item.month}月 ${item.temperatureC === null ? "—" : `${item.temperatureC}°C`}, 雨量 ${item.precipitationMm === null ? "—" : `${item.precipitationMm} mm/月`}`).join("　·　");
+        const note = document.createElement("small"); note.textContent = "歷史氣候平均僅供季節規劃參考，不是出發日天氣預報。資料來源：Open-Meteo Historical Weather API。";
+        climatePanel.replaceChildren(heading, summary, note);
+      }).catch(() => { climatePanel.hidden = true; });
+    }
     const chart = document.getElementById("city-insight-chart");
     if (chart) {
       const coverage = window.PlannerView?.getCityDataCoverage(currentCity, country);
