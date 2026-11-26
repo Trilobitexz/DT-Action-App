@@ -1,6 +1,6 @@
 // MapLibre GL JS 單一地圖引擎：Mercator 與 globe 投影共用向量圖層及互動狀態。
 class MapManager {
-  static MAX_CITY_SPOT_MARKERS = 50;
+  static MAX_CITY_SPOT_MARKERS = 100;
 
   constructor(containerId, options = {}) {
     this.containerId = containerId;
@@ -698,7 +698,7 @@ class MapManager {
     // Keep every location reachable while reducing overlapping pins at city scale.
     // At neighborhood zoom all pins return; at wider zoom keep a stable, spatially
     // distributed subset, recalculated as the map moves or zooms.
-    const minDistance = zoom < 8 ? 64 : zoom < 9 ? 44 : zoom < 10 ? 28 : zoom < 11 ? 14 : 0;
+    const minDistance = zoom < 8 ? 48 : zoom < 9 ? 32 : zoom < 10 ? 18 : zoom < 11 ? 8 : 0;
     const pins = [...this.cityContextDomMarkers.values()]
       .map(marker => ({ marker, element: marker.getElement() }))
       .filter(item => item.element.dataset.cityMarkerType === "spot"
@@ -771,7 +771,7 @@ class MapManager {
         })
         .catch(error => console.warn(`無法定位「${spot.name}」：`, error));
     });
-    window.SpotService?.fetchNearbyPlaces(city, { radius: 20000, limit: 50 }).then(places => {
+    window.SpotService?.fetchNearbyPlaces(city, { radius: 20000, limit: MapManager.MAX_CITY_SPOT_MARKERS }).then(places => {
       if (requestId !== this.cityContextRequestId || this.currentCityContext?.id !== city.id || !Array.isArray(places)) return;
       const normalizeName = value => String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
       const knownNames = new Set(sourceSpots.map(spot => normalizeName(spot.name)));
@@ -911,14 +911,6 @@ class MapManager {
       }
       element.addEventListener("click", event => {
         event.stopPropagation();
-        if (markerType === "spot") {
-          this.scrollToSpotCard(city.id, metadata.spotIndex);
-          const zoom = this.activeLayerKey === "voyager" ? Math.max(14.2, this.map.getZoom()) : Math.max(13, this.map.getZoom());
-          const camera = { center: coordinates, zoom, pitch: this.activeLayerKey === "voyager" ? 45 : this.map.getPitch(), speed: 1.2, curve: 1.4, essential: false };
-          this.map.stop();
-          if (this.animateAllowed(true)) this.map.flyTo(camera);
-          else this.map.jumpTo({ center: coordinates, zoom, pitch: camera.pitch, essential: false });
-        }
         onClick?.();
       });
       const marker = new window.maplibregl.Marker({ element, anchor: "center", subpixelPositioning: true }).setLngLat(coordinates).addTo(this.map);

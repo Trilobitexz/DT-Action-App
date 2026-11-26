@@ -1142,6 +1142,15 @@ body.sidebar-collapsed .sidebar-nav-item { grid-template-columns: 1fr; justify-i
   font-weight: 700;
 }
 .spot-list-toggle:hover { background: #eaf4ec; }
+.spot-item[hidden] { display: none !important; }
+.spot-extra-links { position: relative; font-size: .7rem; }
+.spot-extra-links > summary { padding: .3rem .45rem; border-radius: 7px; color: #68766f; cursor: pointer; list-style: none; }
+.spot-extra-links > summary::-webkit-details-marker { display: none; }
+.spot-extra-links > summary::after { content: "＋"; margin-left: .3rem; color: #71857a; }
+.spot-extra-links[open] > summary::after { content: "−"; }
+.spot-extra-links > div { position: absolute; right: 0; z-index: 3; display: grid; min-width: 145px; gap: .4rem; padding: .55rem; border: 1px solid #e4e9e3; border-radius: 10px; background: #fff; box-shadow: 0 8px 22px rgba(28,43,35,.12); }
+.spot-extra-links a { color: #416b5a; text-decoration: none; }
+.spot-extra-links a:hover { text-decoration: underline; }
 
 .spot-main h5 {
   font-size: 1.05rem;
@@ -1163,6 +1172,11 @@ body.sidebar-collapsed .sidebar-nav-item { grid-template-columns: 1fr; justify-i
 .spot-note {
   font-size: 0.875rem;
   color: var(--text-muted);
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-height: 1.55;
 }
 
 .spot-source-attribution {

@@ -349,12 +349,13 @@ window.SpotService = {
 
   fetchNearbyPlaces: async function (city, { radius = 20000, limit = 250 } = {}) {
     if (!Number.isFinite(city?.lat) || !Number.isFinite(city?.lng)) return [];
-    const cacheKey = `journey-atlas-verified-places-v4-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
+    const cacheKey = `journey-atlas-verified-places-v5-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
     const cacheTtl = 7 * 24 * 60 * 60 * 1000;
     try {
       const legacyCacheKey = `journey-atlas-osm-places-v3-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
       localStorage.removeItem(legacyCacheKey);
       localStorage.removeItem(legacyCacheKey.replace("-v3-", "-v2-"));
+      localStorage.removeItem(`journey-atlas-verified-places-v4-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`);
       const saved = JSON.parse(localStorage.getItem(cacheKey) || "null");
       const savedTtl = saved?.places?.length
         && (saved.places.length >= Math.min(12, limit) || saved.wikidataChecked === true)

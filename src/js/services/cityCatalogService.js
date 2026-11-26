@@ -38,7 +38,7 @@
         try {
         const read = Promise.all([
           db.collection("cities").doc(key).get(),
-          db.collection("cities").doc(key).collection("spots").orderBy("index").limit(40).get()
+          db.collection("cities").doc(key).collection("spots").orderBy("index").limit(100).get()
         ]);
         let timeoutId;
         const [citySnapshot, spotSnapshot] = await Promise.race([
@@ -127,7 +127,7 @@
       const continentId = this.getCityContinentId(city);
       if (!city?.id || !continentId) return Promise.resolve([]);
       if (!this.prebuiltCityRequests.has(continentId)) {
-        const request = fetch(`src/data/city-spots/${encodeURIComponent(continentId)}.json?v=93`)
+        const request = fetch(`src/data/city-spots/${encodeURIComponent(continentId)}.json?v=94`)
           .then(response => response.ok ? response.json() : {})
           .catch(error => {
             console.warn(`無法載入${continentId}精選景點資料：`, error);
@@ -197,7 +197,7 @@
         };
       });
     },
-    ensureSpots: function (city, { radius = 20000, limit = 50, onCatalogReady = null } = {}) {
+    ensureSpots: function (city, { radius = 20000, limit = 100, onCatalogReady = null } = {}) {
       if (!city?.id) return Promise.resolve([]);
       const key = String(city.id);
       if (this.spotCache.has(key)) {
@@ -271,7 +271,7 @@
         // Three database landmarks are enough for a fast first paint, but a city
         // guide should keep enriching toward a fuller selection in the background.
         const locatedSpotCount = preferredSpots.filter(spot => this.hasValidSpotCoordinates(spot, city)).length;
-        const shouldEnrichWithLivePlaces = locatedSpotCount < Math.min(24, limit);
+        const shouldEnrichWithLivePlaces = locatedSpotCount < Math.min(40, limit);
         let liveSpots = [];
         if (shouldEnrichWithLivePlaces && window.SpotService) {
           let coordinates = Number.isFinite(city.lat) && Number.isFinite(city.lng)
