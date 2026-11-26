@@ -61,5 +61,11 @@ window.SpotTextService = (() => {
     });
     return normalized;
   }
-  return { toTraditional, normalizeSpot };
+  // Encyclopedia event pages can be close to city coordinates but are not
+  // visitable attractions. Keep them out of cards, maps, and AI itineraries.
+  function isTravelAttraction(spot) {
+    const text = `${spot?.name || ""} ${spot?.englishName || ""} ${spot?.category || ""}`;
+    return !/(?:墜機|坠机|空難|空难|恐攻|恐怖襲擊|恐怖袭击|襲擊事件|袭击事件|爆炸事件|槍擊事件|枪击事件|軍事行動|军事行动|火山爆發|火山爆发|事故|disaster|terrorist attack|air crash|military operation)/iu.test(text);
+  }
+  return { toTraditional, normalizeSpot, isTravelAttraction };
 })();

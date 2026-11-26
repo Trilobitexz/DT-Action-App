@@ -45,3 +45,11 @@
 - 檢查城市詳情渲染順序：統計在景點資料整理後由 `renderCityTools` 產生，會跟目前城市的景點目錄同步更新。
 - `node --check`（`plannerView.js`、`countryView.js`）及 `git diff --check` 通過。
 - 尚未登入個人帳戶；此變更為前端呈現與統計，不涉及 Firestore 寫入或外部 API。
+
+## v102 景點內容品質守門
+
+- 新增離線目錄稽核器，檢視 6 份 JSON、596 筆景點：缺座標 0、缺來源 0、無圖片 44、短介紹 4。
+- 從本地精選目錄移除空難、恐攻、軍事行動與火山爆發事件頁；前端另加共同排除條件，涵蓋 Firestore 與即時來源，避免事件百科誤當可造訪景點。
+- 開羅塔摘要改用開羅市政府旅遊頁核對高度、位置、觀景台與餐廳資訊；未補寫非官方票價或營業時間。
+- `node scripts/audit-city-spots.mjs`、JavaScript 語法檢查、資料 JSON 解析與 `git diff --check` 通過。
+- Firebase 官方支援模型清單確認 `gemini-3.8-flash` 仍為可用穩定模型；未登入 Google 帳戶，因此沒有觸發真實 AI 付費請求或 OAuth 登入流程。

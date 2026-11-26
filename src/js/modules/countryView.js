@@ -350,14 +350,15 @@ window.CountryView = {
       `).join("");
     }
     const resolvedSpots = Array.isArray(currentCity.spots)
-      ? currentCity.spots.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot).filter(spot => !isCityItself(spot)) : [];
+      ? currentCity.spots.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot)
+        .filter(spot => !isCityItself(spot) && (window.SpotTextService?.isTravelAttraction(spot) ?? true)) : [];
     const candidates = Array.isArray(currentCity.spotCandidates) ? currentCity.spotCandidates : [];
     const candidateNames = new Set(resolvedSpots.map(spot => String(spot.name || "").normalize("NFKC").trim().toLocaleLowerCase()));
     const availableSpots = [
       ...resolvedSpots,
       ...candidates.map(candidate => window.SpotTextService?.normalizeSpot(candidate) || candidate).filter(candidate => {
         const name = String(candidate.name || "").normalize("NFKC").trim().toLocaleLowerCase();
-        if (!name || isCityItself(candidate) || candidateNames.has(name)) return false;
+        if (!name || isCityItself(candidate) || !(window.SpotTextService?.isTravelAttraction(candidate) ?? true) || candidateNames.has(name)) return false;
         candidateNames.add(name);
         return true;
       }).map(candidate => ({ ...candidate, ratingSource: null, lat: null, lng: null }))
@@ -501,7 +502,7 @@ window.CountryView = {
               sourceUrl: catalogCityData.coordinateSourceUrl || ""
             };
           }
-          publishedSpots = publishedSpots.filter(spot => !isCityItself(spot));
+          publishedSpots = publishedSpots.filter(spot => !isCityItself(spot) && (window.SpotTextService?.isTravelAttraction(spot) ?? true));
           currentCity.spots = publishedSpots;
           currentCity.attractions = publishedSpots.map(spot => spot.name);
           currentCity.spotsSource = publishedCatalog?.source === "prebuilt" ? "prebuilt" : "firestore";
@@ -607,7 +608,7 @@ window.CountryView = {
         const merged = [...spots];
         published.spots.forEach(publishedSpot => {
           const name = normalizeName(publishedSpot.name);
-          if (!name || isCityItself(publishedSpot)) return;
+          if (!name || isCityItself(publishedSpot) || !(window.SpotTextService?.isTravelAttraction(publishedSpot) ?? true)) return;
           if (existing.has(name)) {
             const index = existing.get(name);
             merged[index] = { ...merged[index], ...publishedSpot };
@@ -643,7 +644,7 @@ window.CountryView = {
         const availableMapSlots = Math.max(0, (window.MapManager?.MAX_CITY_SPOT_MARKERS || 100) - spots.length);
         const verifiedPlaces = places.filter(place => {
           const name = normalizeName(place.name);
-          if (!name || isCityItself(place) || knownNames.has(name)) return false;
+          if (!name || isCityItself(place) || !(window.SpotTextService?.isTravelAttraction(place) ?? true) || knownNames.has(name)) return false;
           knownNames.add(name);
           return true;
         }).slice(0, availableMapSlots);

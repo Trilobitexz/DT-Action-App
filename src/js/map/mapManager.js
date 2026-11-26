@@ -782,6 +782,7 @@ class MapManager {
         if (!Number.isFinite(spot?.lat) || !Number.isFinite(spot?.lng) || spot.lat === 0 || spot.lng === 0
           || spot.lat < -90 || spot.lat > 90 || spot.lng < -180 || spot.lng > 180) return;
         spot = window.SpotTextService?.normalizeSpot(spot) || spot;
+        if (!(window.SpotTextService?.isTravelAttraction(spot) ?? true)) return;
         const name = normalizeName(spot.name);
         if (!name || knownNames.has(name)) return;
         knownNames.add(name);
@@ -971,7 +972,8 @@ class MapManager {
       && Boolean(this.safeExternalUrl(airport.sourceUrl)));
   }
   getCitySpots(city) {
-    const normalize = items => items.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot).filter(spot => {
+    const normalize = items => items.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot)
+      .filter(spot => window.SpotTextService?.isTravelAttraction(spot) ?? true).filter(spot => {
       const normalizeName = value => (window.SpotTextService?.toTraditional(value) || String(value || ""))
         .normalize("NFKC").toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
       const cityName = normalizeName(city?.name);
