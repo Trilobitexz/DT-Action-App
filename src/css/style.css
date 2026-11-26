@@ -1452,6 +1452,7 @@ body.sidebar-collapsed .sidebar-nav-item { grid-template-columns: 1fr; justify-i
 .rankings-drawer .global-city-card { padding: 0.7rem; }
 html, body { max-width: 100%; overflow-x: clip; }
 body.drawer-open { overflow: hidden; }
+body.drawer-open .mobile-nav-toggle { visibility: hidden; pointer-events: none; }
 @keyframes drawer-content-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 .flight-route-line {
@@ -3160,6 +3161,11 @@ body.sidebar-collapsed .app-sidebar { width: 100%; }
   #map-context-info { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; }
   #map-context-info > strong, #map-context-info > small, #map-context-info .city-map-key { grid-column: 1 / -1; }
   #map-context-info .city-map-filter { justify-self: start; }
+}
+@media (max-width: 380px) {
+  #map-context-info { grid-template-columns: minmax(0, 1fr); }
+  #map-context-info .city-map-filter { width: 100%; justify-content: space-between; gap: .6rem; }
+  #map-context-info .city-map-filter select { flex: 1; min-width: 0; }
 }
 
 /* Curated world highlights drawer and stable map layer controls. */

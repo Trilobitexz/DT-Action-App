@@ -198,7 +198,7 @@ class MapManager {
       this.layersReady = true;
       return;
     }
-    Object.keys(this.geojson).forEach(key => this.map.addSource(key, { type: "geojson", data: this.geojson[key], ...(key === "globalCities" ? { cluster: true, clusterMaxZoom: 4.4, clusterRadius: 42 } : {}) }));
+    Object.keys(this.geojson).forEach(key => this.map.addSource(key, { type: "geojson", data: this.geojson[key], ...(key === "globalCities" ? { cluster: true, clusterMaxZoom: 4, clusterRadius: 42 } : {}) }));
     this.map.addLayer({ id: "route-lines", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["match", ["get", "kind"], "transit-flight", "#f59e0b", "airport-city", "#598b88", "#0f766e"], "line-width": ["match", ["get", "kind"], "transit-flight", 3, "airport-city", 2, 2.5], "line-opacity": ["match", ["get", "kind"], "airport-city", 0.55, 0.9], "line-dasharray": [2, 2] } });
     this.map.addLayer({ id: "route-lines-hit-area", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 14, "line-opacity": 0.001 } });
     const dayColors = ["#b65337", "#247a78", "#6f62a8", "#bd7a24", "#3e789c", "#a44868", "#64783d"];
@@ -962,6 +962,7 @@ class MapManager {
         || (this.activeCitySpotCategory !== "all" && element.dataset.spotCategory !== this.activeCitySpotCategory);
     });
     this.applyCitySpotDensity();
+    if (this.currentCityContext) this.updateCitySpotCount(this.currentCityContext.id);
   }
   getAirportData(city) {
     if (!Array.isArray(city?.airports)) return [];
@@ -970,7 +971,14 @@ class MapManager {
       && Boolean(this.safeExternalUrl(airport.sourceUrl)));
   }
   getCitySpots(city) {
-    const normalize = items => items.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot);
+    const normalize = items => items.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot).filter(spot => {
+      const normalizeName = value => (window.SpotTextService?.toTraditional(value) || String(value || ""))
+        .normalize("NFKC").toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+      const cityName = normalizeName(city?.name);
+      const englishName = normalizeName(city?.englishName);
+      const spotName = normalizeName(spot?.name);
+      return spot?.category !== "city" && spotName && spotName !== cityName && spotName !== englishName;
+    });
     if (Array.isArray(city?.spots) && city.spots.length) return normalize(city.spots);
     if (Array.isArray(city?.spotCandidates) && city.spotCandidates.length) return normalize(city.spotCandidates);
     if (Array.isArray(city?.attractions) && city.attractions.length) {
@@ -1109,9 +1117,16 @@ class MapManager {
   }
   updateCitySpotCount(cityId) {
     if (this.currentCityContext?.id !== cityId) return;
-    const count = this.geojson.spots.features.filter(feature => feature.properties?.kind === "spot").length;
+    const spots = this.geojson.spots.features.filter(feature => feature.properties?.kind === "spot");
+    const count = spots.length;
+    const visibleCount = this.activeCitySpotCategory === "all"
+      ? count
+      : spots.filter(feature => String(feature.properties.category || "景點") === this.activeCitySpotCategory).length;
     const label = document.querySelector("#map-context-info .map-context-spot-count");
-    if (label) label.textContent = count ? `🔴 地圖景點 ${count} 個` : "🔴 尚無已核實座標的景點";
+    if (!label) return;
+    if (!count) label.textContent = "🔴 尚無已核實座標的景點";
+    else if (this.activeCitySpotCategory !== "all") label.textContent = `🔴 顯示 ${visibleCount} / ${count} 個景點`;
+    else label.textContent = `🔴 地圖景點 ${count} 個`;
   }
   fitCityContext(city, animate = true) {
     if (!this.map || this.currentCityContext?.id !== city.id) return;

@@ -25,10 +25,19 @@ window.SpotTextService = (() => {
     "后後", "纪紀", "届屆", "术術", "岛島", "众眾", "医醫", "药藥", "营營", "处處", "随隨", "达達",
     "连連", "续續", "对對", "应應", "实實", "际際", "时時", "间間", "还還", "这這", "从從", "过過",
     "办辦", "权權", "动動", "员員", "产產", "声聲", "显顯", "现現", "况況", "见見", "转轉", "为為",
-    "边邊", "际際", "阶階", "级級", "门門", "户戶", "状狀", "态態", "质質", "数數", "线線", "标標"
+    "边邊", "际際", "阶階", "级級", "门門", "户戶", "状狀", "态態", "质質", "数數", "线線", "标標",
+    "萨薩", "圣聖", "献獻", "筑築", "计計", "协協", "机機", "视視", "范範", "并並",
+    "离離", "据據", "决決", "择擇", "滨濱", "齐齊", "欢歡", "摆擺", "广廣", "经經",
+    "给給", "尔爾", "补補", "强強", "坛壇", "达達", "际際", "围圍", "亿億", "费費",
+    "后後", "图圖", "线線", "数數", "观觀", "历歷", "达達", "业業", "录錄", "将將"
   ];
   const chars = new Map(pairs.map(pair => [pair[0], pair[1]]));
   const phrases = new Map([
+    ["卡萨布兰卡露德圣母堂", "卡薩布蘭卡露德聖母堂"],
+    ["卡萨布兰卡圣心主教座堂", "卡薩布蘭卡聖心主教座堂"],
+    ["卡萨布兰卡主教座堂", "卡薩布蘭卡主教座堂"],
+    ["卡萨布兰卡", "卡薩布蘭卡"],
+    ["卡萨布兰加", "卡薩布蘭加"],
     ["先贤祠", "先賢祠"],
     ["明治神宫", "明治神宮"],
     ["博物馆", "博物館"],
@@ -47,7 +56,7 @@ window.SpotTextService = (() => {
   function normalizeSpot(spot) {
     if (!spot || typeof spot !== "object") return spot;
     const normalized = { ...spot };
-    ["name", "englishName", "category", "tag", "note", "description", "address", "sourceLabel"].forEach(key => {
+    ["name", "englishName", "category", "tag", "note", "summary", "description", "address", "sourceLabel"].forEach(key => {
       if (typeof normalized[key] === "string") normalized[key] = toTraditional(normalized[key]);
     });
     return normalized;

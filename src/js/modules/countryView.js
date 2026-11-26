@@ -190,6 +190,11 @@ window.CountryView = {
 
     const currentCity = country.cities.find(ci => ci.id === state.selectedCityId) || country.cities[0];
     if (!currentCity) return;
+    const normalizePlaceName = value => (window.SpotTextService?.toTraditional(value) || String(value || ""))
+      .normalize("NFKC").toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+    const cityNames = new Set([currentCity.name, currentCity.englishName, currentCity.nameEn]
+      .map(normalizePlaceName).filter(Boolean));
+    const isCityItself = spot => spot?.category === "city" || cityNames.has(normalizePlaceName(spot?.name));
     spotsContainer.onmouseover = event => {
       const card = event.target.closest(".spot-item[data-spot-index]");
       if (card && !card.contains(event.relatedTarget)) window.mapManager?.setSpotCardHighlight?.(card.dataset.cityId, Number(card.dataset.spotIndex), true);
@@ -338,17 +343,15 @@ window.CountryView = {
         </div>
       `).join("");
     }
-    window.PlannerView?.renderCityTools(currentCity, state, country);
-
     const resolvedSpots = Array.isArray(currentCity.spots)
-      ? currentCity.spots.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot) : [];
+      ? currentCity.spots.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot).filter(spot => !isCityItself(spot)) : [];
     const candidates = Array.isArray(currentCity.spotCandidates) ? currentCity.spotCandidates : [];
     const candidateNames = new Set(resolvedSpots.map(spot => String(spot.name || "").normalize("NFKC").trim().toLocaleLowerCase()));
     const availableSpots = [
       ...resolvedSpots,
       ...candidates.map(candidate => window.SpotTextService?.normalizeSpot(candidate) || candidate).filter(candidate => {
         const name = String(candidate.name || "").normalize("NFKC").trim().toLocaleLowerCase();
-        if (!name || candidateNames.has(name)) return false;
+        if (!name || isCityItself(candidate) || candidateNames.has(name)) return false;
         candidateNames.add(name);
         return true;
       }).map(candidate => ({ ...candidate, ratingSource: null, lat: null, lng: null }))
@@ -358,6 +361,7 @@ window.CountryView = {
     const spots = sortSpotsByQuality(availableSpots.length ? availableSpots : fallbackSuggestions);
     currentCity.spots = spots;
     currentCity.attractions = spots.map(spot => spot.name);
+    window.PlannerView?.renderCityTools(currentCity, state, country);
     const visibleSpotCount = 5;
     const skeletonCount = currentCity._spotCatalogReady
       ? 0
@@ -491,6 +495,7 @@ window.CountryView = {
               sourceUrl: catalogCityData.coordinateSourceUrl || ""
             };
           }
+          publishedSpots = publishedSpots.filter(spot => !isCityItself(spot));
           currentCity.spots = publishedSpots;
           currentCity.attractions = publishedSpots.map(spot => spot.name);
           currentCity.spotsSource = publishedCatalog?.source === "prebuilt" ? "prebuilt" : "firestore";
@@ -596,7 +601,7 @@ window.CountryView = {
         const merged = [...spots];
         published.spots.forEach(publishedSpot => {
           const name = normalizeName(publishedSpot.name);
-          if (!name) return;
+          if (!name || isCityItself(publishedSpot)) return;
           if (existing.has(name)) {
             const index = existing.get(name);
             merged[index] = { ...merged[index], ...publishedSpot };
@@ -632,7 +637,7 @@ window.CountryView = {
         const availableMapSlots = Math.max(0, (window.MapManager?.MAX_CITY_SPOT_MARKERS || 100) - spots.length);
         const verifiedPlaces = places.filter(place => {
           const name = normalizeName(place.name);
-          if (!name || knownNames.has(name)) return false;
+          if (!name || isCityItself(place) || knownNames.has(name)) return false;
           knownNames.add(name);
           return true;
         }).slice(0, availableMapSlots);
