@@ -242,7 +242,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.classList.add("drawer-open");
     drawer.querySelector(".drawer-close")?.focus();
   };
-  document.querySelectorAll("[aria-controls]:not([data-sidebar-action])").forEach(button => {
+  // Only explicit buttons open drawers; inputs such as the global search also use aria-controls.
+  document.querySelectorAll("button[aria-controls]:not([data-sidebar-action])").forEach(button => {
     button.addEventListener("click", () => {
       const drawerId = button.getAttribute("aria-controls");
       if (drawerId === "city-rankings-drawer") setSidebarActive("cities");
