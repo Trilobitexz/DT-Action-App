@@ -1,4 +1,4 @@
-const CACHE_NAME = "journey-atlas-shell-v84";
+const CACHE_NAME = "journey-atlas-shell-v85";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,17 +8,18 @@ const APP_SHELL = [
   "./src/js/pwa.js",
   "./src/js/app.js?v=46",
   "./src/js/map/geoContinents.js",
-  "./src/js/map/mapManager.js?v=52",
+  "./src/js/map/mapManager.js?v=53",
   "./src/js/store/appStore.js",
   "./src/js/modules/continentView.js",
-  "./src/js/modules/countryView.js?v=53",
+  "./src/js/modules/countryView.js?v=54",
   "./src/js/modules/globalCitiesView.js?v=3",
   "./src/js/modules/plannerView.js?v=14",
   "./src/js/modules/worldHighlightsView.js?v=3",
   "./src/js/firebase.js?v=36",
   "./src/js/firebase-ai-config.js?v=2",
   "./src/js/services/currencyService.js",
-  "./src/js/services/nationalInfoService.js?v=1",
+  "./src/js/services/spotTextService.js?v=85",
+  "./src/js/services/nationalInfoService.js?v=2",
   "./src/js/services/climateService.js?v=1",
   "./src/js/services/roadRouteService.js?v=1",
   "./src/js/services/flightService.js",

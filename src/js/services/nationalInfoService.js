@@ -19,7 +19,7 @@ window.NationalInfoService = {
     const request = this.requestJson(`https://restcountries.com/v3.1/name/${encodeURIComponent(name)}?fullText=true&fields=name,cca2,idd,currencies,timezones,languages,car,capital`)
       .then(items => {
         const item = Array.isArray(items) ? items[0] : null;
-        if (!item?.cca2) return null;
+        if (!item?.cca2) throw new Error("找不到國家行前資料");
         return {
           code: item.cca2,
           callingCode: item.idd?.root || "",
@@ -30,9 +30,17 @@ window.NationalInfoService = {
           capitals: item.capital || []
         };
       })
-      .catch(error => { console.warn("國家基本資訊暫時無法取得：", error); return null; });
+      .catch(error => {
+        console.warn("國家基本資訊暫時無法取得：", error);
+        this.countryCache.delete(key);
+        return null;
+      });
     this.countryCache.set(key, request);
     return request;
+  },
+  retryCountry: function(name) {
+    this.countryCache.delete(String(name || "").trim().toLocaleLowerCase());
+    return this.getCountry(name);
   },
   getPublicHolidays: function(countryCode, year) {
     const code = String(countryCode || "").toUpperCase();

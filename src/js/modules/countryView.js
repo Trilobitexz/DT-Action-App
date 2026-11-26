@@ -223,7 +223,11 @@ window.CountryView = {
       }
       const button = event.target.closest("[data-map-focus-spot]");
       if (!button || button.disabled) return;
-      window.mapManager?.focusSpot(button.dataset.cityId, Number(button.dataset.spotIndex));
+      const focused = window.mapManager?.focusSpot(button.dataset.cityId, Number(button.dataset.spotIndex));
+      if (!focused) {
+        const query = `${button.dataset.spotName || "景點"}, ${currentCity.name}, ${currentCity.countryName || country.name}`;
+        window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`, "_blank", "noopener,noreferrer");
+      }
     };
 
     const cityDescription = document.getElementById("city-description-text");
@@ -251,15 +255,39 @@ window.CountryView = {
       facts.className = "country-live-facts";
       facts.innerHTML = "<strong>🧳 行前資訊</strong><p>正在載入國家官方語言、時區與駕駛方向…</p>";
       detail.appendChild(facts);
-      window.NationalInfoService.getCountry(country.englishName).then(info => {
-        if (!info || !facts.isConnected || state.selectedCityId !== currentCity.id) return;
+      const renderCountryFacts = info => {
         const languages = info.languages.length ? info.languages.join("、") : "未提供";
         const timezone = info.timezones.length ? info.timezones.slice(0, 3).join("、") + (info.timezones.length > 3 ? "…" : "") : "未提供";
         facts.replaceChildren();
         const heading = document.createElement("strong"); heading.textContent = "🧳 行前資訊";
         const text = document.createElement("p");
-        text.textContent = `官方語言：${languages} · 時區：${timezone} · 靠${info.drivingSide === "left" ? "左" : info.drivingSide === "right" ? "右" : "未提供"}行駛 · 國際電話：${info.callingCode || "未提供"}`;
+        text.textContent = `官方語言：${languages} · 時區：${timezone} · 靠${info.drivingSide === "left" ? "左" : info.drivingSide === "right" ? "右" : "未提供"}行駛 · 國際電話：${info.callingCode || "未提供"} · 幣別：${(info.currencies || []).join("、") || country.currency || "未提供"}`;
         facts.append(heading, text);
+      };
+      window.NationalInfoService.getCountry(country.englishName).then(info => {
+        if (!facts.isConnected || state.selectedCityId !== currentCity.id) return;
+        if (info) { renderCountryFacts(info); return; }
+        facts.replaceChildren();
+        const heading = document.createElement("strong"); heading.textContent = "🧳 行前資訊";
+        const text = document.createElement("p");
+        text.textContent = `暫時無法連線取得官方語言、時區及駕駛方向。幣別參考：${country.currency || "請依目的地確認"}。${country.visa ? ` 簽證參考：${country.visa}` : ""}`;
+        const retry = document.createElement("button");
+        retry.type = "button"; retry.className = "country-facts-retry"; retry.textContent = "重新載入行前資訊";
+        retry.addEventListener("click", () => {
+          retry.disabled = true; retry.textContent = "重新連線中…";
+          window.NationalInfoService.retryCountry(country.englishName).then(nextInfo => {
+            if (!facts.isConnected || state.selectedCityId !== currentCity.id) return;
+            if (nextInfo) renderCountryFacts(nextInfo);
+            else { retry.disabled = false; retry.textContent = "再試一次"; }
+          }).catch(error => {
+            console.warn("重新載入行前資訊失敗：", error);
+            if (facts.isConnected) { retry.disabled = false; retry.textContent = "再試一次"; }
+          });
+        });
+        facts.append(heading, text, retry);
+      }).catch(error => {
+        console.warn("顯示國家行前資訊失敗：", error);
+        if (facts.isConnected) facts.textContent = `行前資訊暫時無法載入。幣別參考：${country.currency || "請依目的地確認"}。`;
       });
     }
     const climatePanel = document.getElementById("city-climate-panel");
@@ -291,12 +319,13 @@ window.CountryView = {
     }
     window.PlannerView?.renderCityTools(currentCity, state, country);
 
-    const resolvedSpots = Array.isArray(currentCity.spots) ? currentCity.spots : [];
+    const resolvedSpots = Array.isArray(currentCity.spots)
+      ? currentCity.spots.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot) : [];
     const candidates = Array.isArray(currentCity.spotCandidates) ? currentCity.spotCandidates : [];
     const candidateNames = new Set(resolvedSpots.map(spot => String(spot.name || "").normalize("NFKC").trim().toLocaleLowerCase()));
     const availableSpots = [
       ...resolvedSpots,
-      ...candidates.filter(candidate => {
+      ...candidates.map(candidate => window.SpotTextService?.normalizeSpot(candidate) || candidate).filter(candidate => {
         const name = String(candidate.name || "").normalize("NFKC").trim().toLocaleLowerCase();
         if (!name || candidateNames.has(name)) return false;
         candidateNames.add(name);
@@ -306,6 +335,8 @@ window.CountryView = {
     const fallbackSuggestions = (currentCity._spotCatalogReady || !window.CityCatalogService?.ensureSpots)
       ? (window.CityCatalogService?.createMapSearchSuggestions(currentCity) || []) : [];
     const spots = sortSpotsByQuality(availableSpots.length ? availableSpots : fallbackSuggestions);
+    currentCity.spots = spots;
+    currentCity.attractions = spots.map(spot => spot.name);
     const visibleSpotCount = 6;
     const skeletonCount = currentCity._spotCatalogReady
       ? 0
@@ -325,8 +356,8 @@ window.CountryView = {
             <div class="spot-note" id="spot-note-${idx}">${escapeHtml(spot.note || "")}</div>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.4rem;">
-            <div class="spot-score">${hasSourcedRating(spot) ? `★ ${Number(spot.rating).toFixed(1)} · ${escapeHtml(spot.ratingSource)}` : `<a class="spot-rating-link" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${spot.name}, ${currentCity.name}, ${currentCity.countryName || country.name}`)}" target="_blank" rel="noopener noreferrer">查看地圖評價 ↗</a>`}</div>
-            <button type="button" class="spot-map-focus" data-map-focus-spot data-city-id="${currentCity.id}" data-spot-index="${idx}" ${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 50) || (!Number.isFinite(spot.lat) || !Number.isFinite(spot.lng)) ? "disabled" : ""} title="${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 50) ? "目前地圖景點數量已達上限" : "在城市地圖查看位置"}">🗺️ 在地圖查看</button>
+            <div class="spot-score">${hasSourcedRating(spot) ? `★ ${Number(spot.rating).toFixed(1)} · ${escapeHtml(spot.ratingSource)}` : `<a class="spot-rating-link" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${spot.name}, ${currentCity.name}, ${currentCity.countryName || country.name}`)}" target="_blank" rel="noopener noreferrer">前往 Google 地圖查看評價 ↗</a>`}</div>
+            <button type="button" class="spot-map-focus" data-map-focus-spot data-city-id="${currentCity.id}" data-spot-index="${idx}" data-spot-name="${escapeHtml(spot.name)}" title="${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 50) ? "地圖標記已達上限，將改用 Google 地圖搜尋" : (!hasCoordinates(spot) ? "座標尚未核實，點擊後改用 Google 地圖搜尋" : "在城市地圖查看位置")}">🗺️ 在地圖查看</button>
             <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${spot.name}, ${currentCity.name}, ${currentCity.countryName || country.name}`)}" target="_blank" rel="noopener noreferrer" class="spot-source-link spot-google-map">在 Google 地圖查看地點</a>
             ${safeHttpUrl(spot.sourceUrl) ? `<a href="${safeHttpUrl(spot.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="spot-source-link">查看來源資料</a>` : ""}
             ${safeHttpUrl(spot.website) ? `<a href="${safeHttpUrl(spot.website)}" target="_blank" rel="noopener noreferrer" class="spot-source-link">官方網站／資訊</a>` : ""}

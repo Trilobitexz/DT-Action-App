@@ -949,10 +949,9 @@ class MapManager {
   refreshCitySpotCategoryFilter() {
     const select = document.getElementById("map-spot-category-filter");
     if (!select) return;
-    const categories = [...new Set([...this.cityContextDomMarkers.values()]
-      .map(marker => marker.getElement())
-      .filter(element => element.dataset.cityMarkerType === "spot")
-      .map(element => element.dataset.spotCategory)
+    const categories = [...new Set(this.geojson.spots.features
+      .filter(feature => feature.properties?.kind === "spot")
+      .map(feature => String(feature.properties.category || "景點").trim())
       .filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-Hant"));
     const selected = categories.includes(this.activeCitySpotCategory) ? this.activeCitySpotCategory : "all";
     select.replaceChildren(new Option("全部", "all"), ...categories.map(category => new Option(category, category)));
