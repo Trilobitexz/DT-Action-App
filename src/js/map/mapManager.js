@@ -1177,12 +1177,12 @@ class MapManager {
     const nearestAirport = this.getAirportData(destination).map(airport => ({ airport, distance: this.distanceKm([destination.lng, destination.lat], [airport.lng, airport.lat]) })).sort((a, b) => a.distance - b.distance)[0];
     if (nearestAirport) routeFeatures.push(this.lineFeature("airport-city-context", [[destination.lng, destination.lat], [nearestAirport.airport.lng, nearestAirport.airport.lat]], { kind: "airport-city", distanceKm: Math.round(nearestAirport.distance) }));
     for (let segment = 0; segment < stops.length - 1; segment += 1) {
-      const coordinates = this.createFlightArc(stops[segment], stops[segment + 1]);
-      routeFeatures.push(this.lineFeature(`flight-route-${segment}`, coordinates, {
+      const arcParts = this.createFlightArc(stops[segment], stops[segment + 1]);
+      arcParts.forEach((coordinates, partIndex) => routeFeatures.push(this.lineFeature(`flight-route-${segment}-${partIndex}`, coordinates, {
         kind: hasDirect ? "direct-flight" : "transit-flight",
         segment: segment + 1,
-        label: hasDirect && destination.flightInfo?.flightTime ? `TPE → ${destination.name} · ${destination.flightInfo.flightTime}` : ""
-      }));
+        label: partIndex === 0 && hasDirect && destination.flightInfo?.flightTime ? `TPE → ${destination.name} · ${destination.flightInfo.flightTime}` : ""
+      })));
     }
     this.geojson.routes.features = routeFeatures;
     this.syncSource("routes");
@@ -1197,19 +1197,42 @@ class MapManager {
     return [-6.125, 106.655]; // Jakarta
   }
   createFlightArc(from, to) {
-    const delta = to[1] - from[1];
-    const mid = [(from[0] + to[0]) / 2 + Math.min(18, Math.max(7, Math.abs(delta) * 0.08)), from[1] + delta / 2];
-    const coordinates = [];
+    const fromLat = Number(from?.[0]), fromLng = Number(from?.[1]);
+    const toLat = Number(to?.[0]), toLng = Number(to?.[1]);
+    if (![fromLat, fromLng, toLat, toLng].every(Number.isFinite)) return [];
+    const latitudeDelta = toLat - fromLat;
+    const longitudeDelta = ((toLng - fromLng + 540) % 360) - 180;
+    const unwrappedEndLng = fromLng + longitudeDelta;
+    const mid = [
+      (fromLat + toLat) / 2 + Math.min(18, Math.max(7, Math.abs(latitudeDelta) * 0.08)),
+      (fromLng + unwrappedEndLng) / 2
+    ];
+    const points = [];
     for (let i = 0; i <= 24; i += 1) {
       const x = i / 24;
       const y = 1 - x;
-      const lat = y * y * from[0] + 2 * y * x * mid[0] + x * x * to[0];
-      let lng = y * y * from[1] + 2 * y * x * mid[1] + x * x * to[1];
-      if (lng > 180) lng -= 360;
-      if (lng < -180) lng += 360;
-      coordinates.push([lng, lat]);
+      const lat = y * y * fromLat + 2 * y * x * mid[0] + x * x * toLat;
+      const lng = y * y * fromLng + 2 * y * x * mid[1] + x * x * unwrappedEndLng;
+      points.push({ lng, lat });
     }
-    return coordinates;
+    const normalizeLongitude = lng => ((lng + 180) % 360 + 360) % 360 - 180;
+    const parts = [[[normalizeLongitude(points[0].lng), points[0].lat]]];
+    for (let index = 1; index < points.length; index += 1) {
+      const previous = points[index - 1], current = points[index];
+      const previousWorld = Math.floor((previous.lng + 180) / 360);
+      const currentWorld = Math.floor((current.lng + 180) / 360);
+      if (previousWorld === currentWorld) {
+        parts[parts.length - 1].push([normalizeLongitude(current.lng), current.lat]);
+        continue;
+      }
+      const eastbound = current.lng > previous.lng;
+      const boundary = eastbound ? 180 + previousWorld * 360 : -180 + previousWorld * 360;
+      const ratio = (boundary - previous.lng) / (current.lng - previous.lng);
+      const crossingLatitude = previous.lat + ratio * (current.lat - previous.lat);
+      parts[parts.length - 1].push([eastbound ? 180 : -180, crossingLatitude]);
+      parts.push([[eastbound ? -180 : 180, crossingLatitude], [normalizeLongitude(current.lng), current.lat]]);
+    }
+    return parts.filter(part => part.length > 1);
   }
   clearFlightRoute() { this.geojson.routes = this.emptyCollection(); this.syncSource("routes"); }
   flyToWorld({ animate = true } = {}) {
