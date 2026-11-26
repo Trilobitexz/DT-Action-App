@@ -763,6 +763,37 @@ window.PlannerView = {
       ? items.map(item => `<div class="budget-bar"><span>${item.name}</span><i><b style="width:${(item.value / total) * 100}%"></b></i><strong>NT$ ${item.value.toLocaleString()}</strong></div>`).join("")
       : `<p class="itinerary-help">輸入任一項金額，即可查看預算分配。</p>`;
   },
+  loadDrivingRouteEstimate: async function (city, dayIndex, orderedSpots) {
+    const status = document.getElementById(`itinerary-driving-route-${dayIndex}`);
+    if (!status) return;
+    const coordinates = orderedSpots.map(({ spot }) => {
+      if (spot?.lng === null || spot?.lng === undefined || spot?.lng === "" || spot?.lat === null || spot?.lat === undefined || spot?.lat === "") return null;
+      const lng = Number(spot.lng), lat = Number(spot.lat);
+      return Number.isFinite(lng) && Number.isFinite(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90 ? [lng, lat] : null;
+    });
+    if (coordinates.length < 2 || coordinates.some(point => !point)) {
+      status.textContent = "部分景點缺少座標，暫時無法估算完整駕車路線。";
+      return;
+    }
+    if (!window.RoadRouteService?.getDrivingRoute) {
+      status.textContent = "道路路線服務目前無法使用；地圖仍保留行程示意線。";
+      return;
+    }
+    status.textContent = "正在估算道路距離與時間…";
+    const route = await window.RoadRouteService.getDrivingRoute(coordinates);
+    if (!status.isConnected || document.getElementById(`itinerary-driving-route-${dayIndex}`) !== status) return;
+    if (!route) {
+      status.textContent = "道路路線暫時無法取得；地圖仍保留行程示意線。";
+      return;
+    }
+    const kilometers = route.distanceMeters / 1000;
+    const distance = kilometers < 10 ? `${kilometers.toFixed(1)} 公里` : `${Math.round(kilometers)} 公里`;
+    const totalMinutes = Math.max(1, Math.round(route.durationSeconds / 60));
+    const duration = totalMinutes >= 60
+      ? `${Math.floor(totalMinutes / 60)} 小時${totalMinutes % 60 ? ` ${totalMinutes % 60} 分` : ""}`
+      : `${totalMinutes} 分`;
+    status.textContent = `🚗 道路估算：${distance}・約 ${duration}（OSRM，非即時路況）`;
+  },
   renderItinerary: function (city, days) {
     const result = document.getElementById("itinerary-result");
     if (!result) return;
@@ -787,7 +818,7 @@ window.PlannerView = {
       const load = orderedSpots.length <= 2 ? "輕鬆" : orderedSpots.length <= 4 ? "適中" : "偏滿";
       return `<details class="itinerary-day-card" data-itinerary-day="${dayIndex}" ${dayIndex === 0 ? "open" : ""}>
         <summary class="itinerary-day-summary"><strong>Day ${dayIndex + 1}</strong><span>${escapePlannerText(aiDayPlans[dayIndex]?.theme || day.theme)}</span><small>${orderedSpots.length} 個景點・${load}</small></summary>
-        <div class="itinerary-day-content"><div class="itinerary-day-heading"><small>${escapePlannerText(aiDayPlans[dayIndex]?.note || day.note)}</small>${aiDayPlans[dayIndex]?.routingRationale ? `<small class="itinerary-planning-rationale">路線安排：${escapePlannerText(aiDayPlans[dayIndex].routingRationale)}</small>` : ""}${directionsUrl ? `<a class="itinerary-google-route" href="${escapePlannerText(directionsUrl)}" target="_blank" rel="noopener noreferrer">🗺️ 在 Google Maps 開啟當日路線 ↗</a>` : ""}</div>
+        <div class="itinerary-day-content"><div class="itinerary-day-heading"><small>${escapePlannerText(aiDayPlans[dayIndex]?.note || day.note)}</small>${aiDayPlans[dayIndex]?.routingRationale ? `<small class="itinerary-planning-rationale">路線安排：${escapePlannerText(aiDayPlans[dayIndex].routingRationale)}</small>` : ""}${mode === "driving" && orderedSpots.length > 1 ? `<small class="itinerary-driving-estimate" id="itinerary-driving-route-${dayIndex}" role="status" aria-live="polite">等待估算駕車路線…</small>` : ""}${directionsUrl ? `<a class="itinerary-google-route" href="${escapePlannerText(directionsUrl)}" target="_blank" rel="noopener noreferrer">🗺️ 在 Google Maps 開啟當日路線 ↗</a>` : ""}</div>
         <div class="itinerary-load ${load === "偏滿" ? "is-busy" : ""}">今日安排：${load}・${orderedSpots.length} 個景點 ${load === "偏滿" ? "— 建議移除或分配至其他天" : ""}</div>
         <div class="itinerary-schedule">
           ${orderedSpots.length ? orderedSpots.map(({ index, spot }, order) => {
@@ -816,6 +847,7 @@ window.PlannerView = {
       if (!card?.open) { window.mapManager?.clearItineraryRoute?.(); return; }
       const mappedCount = window.mapManager?.showItineraryDay?.(city, daySpotLists[dayIndex], dayIndex, mode) || 0;
       card.dataset.mapLinked = mappedCount ? "true" : "false";
+      if (mode === "driving" && daySpotLists[dayIndex]?.length > 1) this.loadDrivingRouteEstimate(city, dayIndex, daySpotLists[dayIndex]);
     };
     dayCards.forEach((card, dayIndex) => card.addEventListener("toggle", () => {
       if (card.open) {

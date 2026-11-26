@@ -1646,6 +1646,7 @@ to { stroke-dashoffset: -40; }
 .itinerary-day-heading strong { grid-row: span 2; color: var(--primary); font-size: 0.8rem; }
 .itinerary-day-heading span { color: #4d5d61; font-size: 0.75rem; font-weight: 750; }
 .itinerary-day-heading small { color: var(--text-muted); font-size: 0.64rem; }
+.itinerary-day-heading .itinerary-driving-estimate { color: #35645e; font-size: 0.68rem; font-weight: 650; }
 .itinerary-schedule { display: grid; gap: 0.4rem; padding-top: 0.45rem; }
 .itinerary-slot { display: grid; grid-template-columns: 1fr; gap: 0.45rem; align-items: start; font-size: 0.68rem; }
 .itinerary-slot div { display: grid; gap: 0.12rem; }
