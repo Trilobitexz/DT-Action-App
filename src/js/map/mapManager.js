@@ -13,6 +13,7 @@ class MapManager {
     this.isCoarsePointer = window.matchMedia?.("(pointer: coarse)").matches === true;
     this.tiltedView = false;
     this.citySpotMarkers = new Map();
+    this.itineraryDomMarkers = new Map();
     this.globalCityDomMarkers = new Map();
     this.cityContextDomMarkers = new Map();
     this.continentDomMarkers = new Map();
@@ -201,12 +202,12 @@ class MapManager {
     Object.keys(this.geojson).forEach(key => this.map.addSource(key, { type: "geojson", data: this.geojson[key], ...(key === "globalCities" ? { cluster: true, clusterMaxZoom: 4, clusterRadius: 42 } : {}) }));
     this.map.addLayer({ id: "route-lines", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["match", ["get", "kind"], "transit-flight", "#f59e0b", "airport-city", "#598b88", "#0f766e"], "line-width": ["match", ["get", "kind"], "transit-flight", 3, "airport-city", 2, 2.5], "line-opacity": ["match", ["get", "kind"], "airport-city", 0.55, 0.9], "line-dasharray": [2, 2] } });
     this.map.addLayer({ id: "route-lines-hit-area", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 14, "line-opacity": 0.001 } });
-    const dayColors = ["#b65337", "#247a78", "#6f62a8", "#bd7a24", "#3e789c", "#a44868", "#64783d"];
+    const dayColors = ["#4f46a5", "#16836f", "#c17a21", "#337da0", "#a74867", "#64783d", "#7254a6"];
     const dayColorExpression = ["match", ["get", "dayIndex"], ...dayColors.flatMap((color, index) => [index, color]), "#b65337"];
     this.map.addLayer({ id: "itinerary-route-line", type: "line", source: "itinerary", filter: ["==", ["get", "kind"], "route"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": dayColorExpression, "line-width": 3, "line-opacity": 0.82, "line-dasharray": [2, 2] } });
     this.map.addLayer({ id: "itinerary-route-hit-area", type: "line", source: "itinerary", filter: ["==", ["get", "kind"], "route"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 14, "line-opacity": 0.001 } });
-    this.map.addLayer({ id: "itinerary-stop-circles", type: "circle", source: "itinerary", filter: ["==", ["get", "kind"], "stop"], paint: { "circle-radius": ["case", ["boolean", ["feature-state", "hovered"], false], 18, 13], "circle-color": ["case", ["boolean", ["feature-state", "hovered"], false], "#f2a900", dayColorExpression], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
-    this.map.addLayer({ id: "itinerary-stop-labels", type: "symbol", source: "itinerary", filter: ["==", ["get", "kind"], "stop"], layout: { "text-field": ["get", "number"], "text-size": 11, "text-font": ["Noto Sans Bold"], "text-allow-overlap": true }, paint: { "text-color": "#ffffff" } });
+    this.map.addLayer({ id: "itinerary-stop-circles", type: "circle", source: "itinerary", filter: ["==", ["get", "kind"], "stop"], paint: { "circle-radius": ["case", ["boolean", ["feature-state", "hovered"], false], 18, 13], "circle-color": ["case", ["boolean", ["feature-state", "hovered"], false], "#f2a900", dayColorExpression], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5, "circle-opacity": 0, "circle-stroke-opacity": 0 } });
+    this.map.addLayer({ id: "itinerary-stop-labels", type: "symbol", source: "itinerary", filter: ["==", ["get", "kind"], "stop"], layout: { "text-field": ["get", "number"], "text-size": 11, "text-font": ["Noto Sans Bold"], "text-allow-overlap": true }, paint: { "text-color": "#ffffff", "text-opacity": 0 } });
     this.map.addLayer({ id: "continent-symbols", type: "symbol", source: "continents", layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 13, "text-padding": 8, "text-allow-overlap": true, "text-ignore-placement": true }, paint: { "text-color": "#173847", "text-halo-color": "#ffffff", "text-halo-width": 2.5 } });
     this.map.addLayer({ id: "city-circles", type: "circle", source: "cities", layout: { visibility: "none" }, paint: { "circle-radius": 5, "circle-color": "#138b80", "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 } });
     this.map.addLayer({ id: "city-symbols", type: "symbol", source: "cities", layout: { visibility: "none", "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 11, "text-offset": [0, 1.3], "text-anchor": "top", "text-optional": true }, paint: { "text-color": "#18544f", "text-halo-color": "#ffffff", "text-halo-width": 1.5 } });
@@ -846,52 +847,188 @@ class MapManager {
     this.syncSource("spots"); this.syncSource("airports");
     this.clearItineraryRoute();
   }
+  getItineraryStopCoordinate(city, spot) {
+    const isValid = (lat, lng) => lat !== null && lat !== undefined && lat !== "" && lng !== null && lng !== undefined && lng !== ""
+      && Number.isFinite(Number(lat)) && Number(lat) >= -90 && Number(lat) <= 90
+      && Number.isFinite(Number(lng)) && Number(lng) >= -180 && Number(lng) <= 180
+      && !(Number(lat) === 0 && Number(lng) === 0);
+    const direct = [Number(spot?.lng), Number(spot?.lat)];
+    if (isValid(spot?.lat, spot?.lng)) return direct;
+    const normalize = value => String(value || "").normalize("NFKC").trim().toLocaleLowerCase();
+    const entry = [...this.citySpotMarkers.values()].find(candidate => candidate.city?.id === city?.id
+      && normalize(candidate.spot?.name) === normalize(spot?.name) && candidate.feature);
+    const coordinates = entry?.feature?.geometry?.coordinates;
+    return Array.isArray(coordinates) && isValid(coordinates[1], coordinates[0])
+      ? [Number(coordinates[0]), Number(coordinates[1])] : null;
+  }
   showItineraryDay(city, itinerarySpots, dayIndex = 0, travelMode = "transit") {
     if (!this.map || !city?.id || this.currentCityContext?.id !== city.id) return 0;
-    const normalize = value => String(value || "").normalize("NFKC").trim().toLocaleLowerCase();
-    const valid = (lat, lng) => lat !== null && lat !== undefined && lat !== "" && lng !== null && lng !== undefined && lng !== ""
-      && Number.isFinite(Number(lat)) && Number(lat) >= -90 && Number(lat) <= 90
-      && Number.isFinite(Number(lng)) && Number(lng) >= -180 && Number(lng) <= 180;
     const stops = (itinerarySpots || []).map((item, index) => {
       const spot = item?.spot || item;
-      let lat = Number(spot?.lat), lng = Number(spot?.lng);
-      const hasCoordinates = spot?.lat !== null && spot?.lat !== undefined && spot?.lat !== ""
-        && spot?.lng !== null && spot?.lng !== undefined && spot?.lng !== "";
-      if (!hasCoordinates || !valid(lat, lng)) {
-        lat = NaN; lng = NaN;
-        const entry = [...this.citySpotMarkers.values()].find(candidate => candidate.city?.id === city.id && normalize(candidate.spot?.name) === normalize(spot?.name) && candidate.feature);
-        if (entry) [lng, lat] = entry.feature.geometry.coordinates;
-      }
-      return valid(lat, lng) ? { name: spot.name || "景點", coordinates: [lng, lat], spotIndex: Number.isInteger(item?.index) ? item.index : index } : null;
+      const coordinates = this.getItineraryStopCoordinate(city, spot);
+      return coordinates ? { name: spot.name || "景點", coordinates, spotIndex: Number.isInteger(item?.index) ? item.index : index } : null;
     }).filter(Boolean);
     const requestToken = this.itineraryRouteToken = (this.itineraryRouteToken || 0) + 1;
+    this.cancelItineraryAnimation();
+    this.clearItineraryDomMarkers();
     this.geojson.itinerary = this.emptyCollection();
     if (!stops.length) { this.syncSource("itinerary"); return 0; }
     dayIndex = Math.max(0, Number(dayIndex) || 0);
-    this.geojson.itinerary.features = stops.map((stop, index) => this.feature(`itinerary-stop-${dayIndex}-${index}`, stop.coordinates, { kind: "stop", number: String(index + 1), name: stop.name, spotIndex: stop.spotIndex, dayIndex }));
-    if (stops.length > 1) this.geojson.itinerary.features.unshift(this.lineFeature("itinerary-day-route", stops.map(stop => stop.coordinates), { kind: "route", dayIndex }));
+    const stopFeatures = stops.map((stop, index) => this.feature(`itinerary-stop-${dayIndex}-${index}`, stop.coordinates, { kind: "stop", number: String(index + 1), name: stop.name, spotIndex: stop.spotIndex, dayIndex }));
+    this.geojson.itinerary.features = stopFeatures;
+    if (stops.length > 1) this.geojson.itinerary.features.unshift(this.lineFeature("itinerary-day-route", [stops[0].coordinates, stops[0].coordinates], { kind: "route", dayIndex }));
     this.syncSource("itinerary");
+    this.renderItineraryDomMarkers(city, stops, dayIndex, requestToken);
     if (travelMode === "driving" && stops.length > 1 && window.RoadRouteService) {
       window.RoadRouteService.getDrivingRoute(stops.map(stop => stop.coordinates)).then(route => {
         if (!route || requestToken !== this.itineraryRouteToken || this.currentCityContext?.id !== city.id) return;
         const line = this.geojson.itinerary.features.find(feature => feature.properties?.kind === "route");
         if (!line) return;
-        line.geometry = { type: "LineString", coordinates: route.coordinates };
+        this.cancelItineraryAnimation();
+        line.geometry = this.buildItineraryLineGeometry(route.coordinates);
         line.properties = { ...line.properties, routeSource: "OSRM", distanceMeters: route.distanceMeters, durationSeconds: route.durationSeconds };
         this.syncSource("itinerary");
+        this.revealItineraryMarkers(stops.length);
       });
     }
-    const bounds = stops.reduce((box, stop) => box.extend(stop.coordinates), new window.maplibregl.LngLatBounds(stops[0].coordinates, stops[0].coordinates));
+    const bounds = new window.maplibregl.LngLatBounds(stops[0].coordinates, stops[0].coordinates);
+    let previousLongitude = stops[0].coordinates[0];
+    stops.slice(1).forEach(stop => {
+      let longitude = stop.coordinates[0];
+      const difference = longitude - previousLongitude;
+      if (difference > 180) longitude -= 360;
+      else if (difference < -180) longitude += 360;
+      bounds.extend([longitude, stop.coordinates[1]]);
+      previousLongitude = longitude;
+    });
     if (stops.length === 1) this.map.flyTo({ center: stops[0].coordinates, zoom: Math.max(13, this.map.getZoom()), duration: this.animateAllowed(true) ? 650 : 0, essential: false });
     else this.map.fitBounds(bounds, { padding: this.isCoarsePointer ? 56 : 84, maxZoom: 14, duration: this.animateAllowed(true) ? 700 : 0, essential: false });
+    if (stops.length > 1) this.animateItineraryLine(stops.map(stop => stop.coordinates), dayIndex, requestToken, stopFeatures);
+    else this.revealItineraryMarkers(1);
     return stops.length;
   }
-  clearItineraryRoute() { this.itineraryRouteToken = (this.itineraryRouteToken || 0) + 1; this.geojson.itinerary = this.emptyCollection(); this.syncSource("itinerary"); }
+  cancelItineraryAnimation() {
+    if (this.itineraryAnimationFrameId !== null && this.itineraryAnimationFrameId !== undefined) cancelAnimationFrame(this.itineraryAnimationFrameId);
+    this.itineraryAnimationFrameId = null;
+  }
+  clearItineraryDomMarkers() {
+    this.itineraryDomMarkers.forEach(marker => marker.remove());
+    this.itineraryDomMarkers.clear();
+  }
+  revealItineraryMarkers(count) {
+    [...this.itineraryDomMarkers.values()].slice(0, count).forEach(marker => marker.getElement().classList.add("is-visible"));
+  }
+  buildItineraryLineGeometry(coordinates) {
+    const wrap = lng => ((Number(lng) + 540) % 360) - 180;
+    const points = (coordinates || []).filter(point => Array.isArray(point) && point.length >= 2
+      && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])))
+      .map(([lng, lat]) => [wrap(lng), Number(lat)]);
+    if (points.length < 2) return { type: "LineString", coordinates: points };
+    const segments = [[points[0]]];
+    for (let index = 1; index < points.length; index += 1) {
+      const previous = points[index - 1];
+      const next = points[index];
+      const delta = next[0] - previous[0];
+      if (delta > 180 || delta < -180) {
+        const eastward = delta < -180;
+        const unwrappedNextLng = next[0] + (eastward ? 360 : -360);
+        const boundaryLng = eastward ? 180 : -180;
+        const ratio = (boundaryLng - previous[0]) / (unwrappedNextLng - previous[0]);
+        const crossingLat = previous[1] + (next[1] - previous[1]) * ratio;
+        segments[segments.length - 1].push([boundaryLng, crossingLat]);
+        segments.push([[eastward ? -180 : 180, crossingLat], next]);
+      } else segments[segments.length - 1].push(next);
+    }
+    const validSegments = segments.filter(segment => segment.length >= 2);
+    return validSegments.length > 1
+      ? { type: "MultiLineString", coordinates: validSegments }
+      : { type: "LineString", coordinates: validSegments[0] || points };
+  }
+  renderItineraryDomMarkers(city, stops, dayIndex, requestToken) {
+    if (!this.map || !window.maplibregl?.Marker) return;
+    const colors = ["#4f46a5", "#16836f", "#c17a21", "#337da0", "#a74867", "#64783d", "#7254a6"];
+    const color = colors[dayIndex % colors.length];
+    stops.forEach((stop, index) => {
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = "itinerary-route-marker";
+      element.style.setProperty("--itinerary-marker-color", color);
+      element.setAttribute("aria-label", `Day ${dayIndex + 1}，第 ${index + 1} 站：${stop.name}。點擊查看行程卡片`);
+      element.title = `${index + 1}. ${stop.name}`;
+      element.innerHTML = `<span class="itinerary-route-marker__badge" aria-hidden="true">${index + 1}</span>`;
+      element.addEventListener("mouseenter", () => this.setItineraryStopHover(dayIndex, stop.spotIndex, true));
+      element.addEventListener("mouseleave", () => this.setItineraryStopHover(dayIndex, stop.spotIndex, false));
+      element.addEventListener("focus", () => this.setItineraryStopHover(dayIndex, stop.spotIndex, true));
+      element.addEventListener("blur", () => this.setItineraryStopHover(dayIndex, stop.spotIndex, false));
+      element.addEventListener("click", event => {
+        event.stopPropagation();
+        if (requestToken !== this.itineraryRouteToken) return;
+        const card = document.querySelector(`.itinerary-spot-card[data-day-index="${dayIndex}"][data-spot-index="${stop.spotIndex}"]`);
+        card?.scrollIntoView({ behavior: this.prefersReducedMotion ? "auto" : "smooth", block: "center" });
+        card?.focus({ preventScroll: true });
+        card?.classList.add("is-route-target");
+        window.setTimeout(() => card?.classList.remove("is-route-target"), 1500);
+      });
+      const marker = new window.maplibregl.Marker({ element, anchor: "center", subpixelPositioning: true }).setLngLat(stop.coordinates).addTo(this.map);
+      this.itineraryDomMarkers.set(`${dayIndex}:${stop.spotIndex}`, marker);
+    });
+  }
+  animateItineraryLine(coordinates, dayIndex, requestToken, stopFeatures) {
+    const line = this.geojson.itinerary.features.find(feature => feature.properties?.kind === "route");
+    if (!line) return;
+    const distance = (a, b) => this.distanceKm(a, b);
+    const segmentLengths = coordinates.slice(1).map((point, index) => distance(coordinates[index], point));
+    const totalLength = segmentLengths.reduce((sum, value) => sum + value, 0);
+    this.prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+    if (!totalLength || this.prefersReducedMotion || !this.navigationAnimationEnabled) {
+      line.geometry = this.buildItineraryLineGeometry(coordinates);
+      this.syncSource("itinerary");
+      this.revealItineraryMarkers(stopFeatures.length);
+      return;
+    }
+    const cumulative = [0];
+    segmentLengths.forEach(length => cumulative.push(cumulative[cumulative.length - 1] + length));
+    const startedAt = performance.now();
+    const duration = 820;
+    const draw = now => {
+      if (requestToken !== this.itineraryRouteToken || !this.map) return;
+      const rawProgress = Math.min(1, (now - startedAt) / duration);
+      const progress = 1 - (1 - rawProgress) ** 3;
+      const distanceAlong = totalLength * progress;
+      const drawn = [coordinates[0]];
+      for (let index = 0; index < segmentLengths.length; index += 1) {
+        const startDistance = cumulative[index];
+        const endDistance = cumulative[index + 1];
+        if (distanceAlong >= endDistance) drawn.push(coordinates[index + 1]);
+        else if (distanceAlong > startDistance) {
+          const ratio = (distanceAlong - startDistance) / (endDistance - startDistance || 1);
+          const [startLng, startLat] = coordinates[index];
+          const [endLng, endLat] = coordinates[index + 1];
+          let longitudeDelta = endLng - startLng;
+          if (longitudeDelta > 180) longitudeDelta -= 360;
+          else if (longitudeDelta < -180) longitudeDelta += 360;
+          const longitude = ((startLng + longitudeDelta * ratio + 540) % 360) - 180;
+          drawn.push([longitude, startLat + (endLat - startLat) * ratio]);
+          break;
+        } else break;
+      }
+      line.geometry = this.buildItineraryLineGeometry(drawn.length === 1 ? [drawn[0], drawn[0]] : drawn);
+      this.syncSource("itinerary");
+      let revealed = 0;
+      while (revealed < cumulative.length && distanceAlong >= cumulative[revealed]) revealed += 1;
+      this.revealItineraryMarkers(revealed);
+      if (rawProgress < 1) this.itineraryAnimationFrameId = requestAnimationFrame(draw);
+      else { this.itineraryAnimationFrameId = null; this.revealItineraryMarkers(stopFeatures.length); }
+    };
+    this.itineraryAnimationFrameId = requestAnimationFrame(draw);
+  }
+  clearItineraryRoute() { this.itineraryRouteToken = (this.itineraryRouteToken || 0) + 1; this.cancelItineraryAnimation(); this.clearItineraryDomMarkers(); this.geojson.itinerary = this.emptyCollection(); this.syncSource("itinerary"); }
   setItineraryStopHover(dayIndex, spotIndex, active) {
     const feature = this.geojson.itinerary.features.find(item => item.properties?.kind === "stop"
       && Number(item.properties.dayIndex) === Number(dayIndex) && Number(item.properties.spotIndex) === Number(spotIndex));
     if (!feature) return;
     this.map?.setFeatureState({ source: "itinerary", id: feature.id }, { hovered: Boolean(active) });
+    this.itineraryDomMarkers.get(`${Number(dayIndex)}:${Number(spotIndex)}`)?.getElement().classList.toggle("is-active", Boolean(active));
     document.querySelectorAll(`.itinerary-spot-card[data-day-index="${Number(dayIndex)}"][data-spot-index="${Number(spotIndex)}"]`)
       .forEach(card => card.classList.toggle("is-map-hovered", Boolean(active)));
   }

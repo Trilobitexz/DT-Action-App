@@ -3578,6 +3578,40 @@ body.sidebar-collapsed .app-sidebar { width: 100%; }
   .global-city-card:hover, .country-card:hover { transform: translateY(-2px); }
   .map-control-cluster:hover { box-shadow: 0 11px 32px rgba(24,43,38,.2); }
 }
+
+/* Animated daily routes and compact planner actions. */
+.itinerary-day-actions { display: flex; flex-wrap: wrap; gap: .45rem; margin: .7rem 0 .35rem; }
+.itinerary-day-actions .tool-outline-btn { min-height: 38px; padding: .42rem .72rem; border: 1px solid #dce6df; border-radius: 999px; background: #fff; color: #315f4f; font: inherit; font-size: .72rem; font-weight: 750; cursor: pointer; }
+.itinerary-day-actions .tool-outline-btn:hover:not(:disabled), .itinerary-day-actions .tool-outline-btn:focus-visible { border-color: #86aa98; background: #f1f7f2; }
+.itinerary-day-actions .tool-outline-btn:disabled { opacity: .48; cursor: not-allowed; }
+.itinerary-route-marker { display: grid; width: 38px; height: 38px; place-items: center; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.itinerary-route-marker__badge { display: grid; width: 30px; height: 30px; place-items: center; border: 2px solid #fff; border-radius: 50%; background: var(--itinerary-marker-color, #4f46a5); box-shadow: 0 3px 12px rgba(21, 35, 32, .28); color: #fff; font: 800 .78rem/1 system-ui, sans-serif; opacity: 0; transform: scale(.35); transition: transform .18s ease, box-shadow .18s ease; }
+.itinerary-route-marker.is-visible .itinerary-route-marker__badge { animation: itinerary-marker-pop .42s cubic-bezier(.18,.9,.3,1.35) both; }
+.itinerary-route-marker.is-active .itinerary-route-marker__badge,
+.itinerary-route-marker:hover .itinerary-route-marker__badge,
+.itinerary-route-marker:focus-visible .itinerary-route-marker__badge { box-shadow: 0 0 0 5px rgba(246, 186, 60, .3), 0 5px 16px rgba(21, 35, 32, .32); transform: scale(1.2); }
+.itinerary-route-marker:focus-visible { outline: 3px solid #f2b63c; outline-offset: 2px; border-radius: 50%; }
+@keyframes itinerary-marker-pop {
+  0% { opacity: 0; transform: scale(0); }
+  72% { opacity: 1; transform: scale(1.18); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.itinerary-spot-card.is-route-target { border-color: #d59a28; background: #fff9e9; box-shadow: 0 0 0 3px rgba(242, 182, 60, .22); }
+.itinerary-action-toast { position: fixed; z-index: 1800; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom)); display: flex; max-width: min(38rem, calc(100vw - 2rem)); align-items: center; justify-content: center; gap: .8rem; padding: .72rem .9rem; border: 1px solid rgba(255,255,255,.72); border-radius: 999px; background: rgba(32, 49, 45, .94); box-shadow: 0 12px 34px rgba(22, 37, 33, .22); color: #fff; font-size: .8rem; line-height: 1.4; backdrop-filter: blur(14px); animation: itinerary-toast-enter .22s ease-out both; }
+.itinerary-action-toast[hidden] { display: none; }
+.itinerary-toast-undo { flex: 0 0 auto; min-height: 36px; padding: .35rem .72rem; border: 1px solid rgba(255,255,255,.42); border-radius: 999px; background: rgba(255,255,255,.12); color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.itinerary-toast-undo:hover, .itinerary-toast-undo:focus-visible { background: rgba(255,255,255,.24); }
+@keyframes itinerary-toast-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 760px) {
+  .itinerary-day-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .itinerary-day-actions .tool-outline-btn { min-width: 0; padding-inline: .4rem; font-size: .68rem; }
+  .itinerary-action-toast { right: max(.65rem, env(safe-area-inset-right)); bottom: calc(5.4rem + env(safe-area-inset-bottom)); width: calc(100vw - 1.3rem); max-width: none; justify-content: space-between; border-radius: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .itinerary-route-marker__badge, .itinerary-route-marker.is-visible .itinerary-route-marker__badge,
+  .itinerary-action-toast { animation: none !important; transition: none !important; }
+  .itinerary-route-marker.is-visible .itinerary-route-marker__badge { opacity: 1; transform: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .view-panel.active, .global-search-results:not([hidden]),
   .global-search-results [role="option"], .global-search-results button,

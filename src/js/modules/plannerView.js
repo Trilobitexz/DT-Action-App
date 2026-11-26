@@ -797,6 +797,8 @@ window.PlannerView = {
   renderItinerary: function (city, days) {
     const result = document.getElementById("itinerary-result");
     if (!result) return;
+    const previouslyOpenDay = [...result.querySelectorAll("[data-itinerary-day]")].findIndex(card => card.open);
+    const openDayIndex = previouslyOpenDay >= 0 ? previouslyOpenDay : 0;
     const mode = document.querySelector("#itinerary-travel-mode")?.value || this.getRecommendedTravelMode(city);
     const plan = this.buildItineraryPlan(city, days, mode);
     const spots = this.getPlanningSpots(city);
@@ -815,10 +817,12 @@ window.PlannerView = {
         : spots.map((spot, index) => ({ index, spot })).filter(item => !customSet.has(item.index) && item.index % days === dayIndex).slice(0, 3);
       daySpotLists[dayIndex] = orderedSpots;
       const directionsUrl = this.googleMapsDayUrl(city, orderedSpots.map(item => item.spot), mode);
+      const validCoordinateCount = orderedSpots.filter(item => this.getItineraryCoordinate(city, item.spot)).length;
+      const canOptimize = validCoordinateCount >= 3 && Boolean(this.getItineraryCoordinate(city, orderedSpots[0]?.spot));
       const load = orderedSpots.length <= 2 ? "輕鬆" : orderedSpots.length <= 4 ? "適中" : "偏滿";
-      return `<details class="itinerary-day-card" data-itinerary-day="${dayIndex}" ${dayIndex === 0 ? "open" : ""}>
+      return `<details class="itinerary-day-card" data-itinerary-day="${dayIndex}" ${dayIndex === openDayIndex ? "open" : ""}>
         <summary class="itinerary-day-summary"><strong>Day ${dayIndex + 1}</strong><span>${escapePlannerText(aiDayPlans[dayIndex]?.theme || day.theme)}</span><small>${orderedSpots.length} 個景點・${load}</small></summary>
-        <div class="itinerary-day-content"><div class="itinerary-day-heading"><small>${escapePlannerText(aiDayPlans[dayIndex]?.note || day.note)}</small>${aiDayPlans[dayIndex]?.routingRationale ? `<small class="itinerary-planning-rationale">路線安排：${escapePlannerText(aiDayPlans[dayIndex].routingRationale)}</small>` : ""}${mode === "driving" && orderedSpots.length > 1 ? `<small class="itinerary-driving-estimate" id="itinerary-driving-route-${dayIndex}" role="status" aria-live="polite">等待估算駕車路線…</small>` : ""}${directionsUrl ? `<a class="itinerary-google-route" href="${escapePlannerText(directionsUrl)}" target="_blank" rel="noopener noreferrer">🗺️ 在 Google Maps 開啟當日路線 ↗</a>` : ""}</div>
+        <div class="itinerary-day-content"><div class="itinerary-day-heading"><small>${escapePlannerText(aiDayPlans[dayIndex]?.note || day.note)}</small>${aiDayPlans[dayIndex]?.routingRationale ? `<small class="itinerary-planning-rationale">路線安排：${escapePlannerText(aiDayPlans[dayIndex].routingRationale)}</small>` : ""}${mode === "driving" && orderedSpots.length > 1 ? `<small class="itinerary-driving-estimate" id="itinerary-driving-route-${dayIndex}" role="status" aria-live="polite">等待估算駕車路線…</small>` : ""}<div class="itinerary-day-actions"><button type="button" class="tool-outline-btn" data-view-day-route="${dayIndex}" ${validCoordinateCount ? "" : "disabled"}>🗺️ 檢視當日路線</button><button type="button" class="tool-outline-btn itinerary-optimize-button" data-optimize-day-route="${dayIndex}" ${canOptimize ? "" : "disabled"} title="至少需要 3 個含座標景點，且第一站必須有座標">✨ 一鍵順路排序</button></div>${directionsUrl ? `<a class="itinerary-google-route" href="${escapePlannerText(directionsUrl)}" target="_blank" rel="noopener noreferrer">在 Google Maps 開啟當日路線 ↗</a>` : ""}</div>
         <div class="itinerary-load ${load === "偏滿" ? "is-busy" : ""}">今日安排：${load}・${orderedSpots.length} 個景點 ${load === "偏滿" ? "— 建議移除或分配至其他天" : ""}</div>
         <div class="itinerary-schedule">
           ${orderedSpots.length ? orderedSpots.map(({ index, spot }, order) => {
@@ -858,6 +862,19 @@ window.PlannerView = {
     }));
     const initiallyOpenDay = dayCards.findIndex(card => card.open);
     if (initiallyOpenDay >= 0) syncDayMap(initiallyOpenDay);
+
+    result.querySelectorAll("[data-view-day-route]").forEach(button => button.addEventListener("click", () => {
+      const dayIndex = Number(button.dataset.viewDayRoute);
+      const card = dayCards[dayIndex];
+      if (!card) return;
+      const wasOpen = card.open;
+      dayCards.forEach((other, otherIndex) => { if (otherIndex !== dayIndex) other.open = false; });
+      card.open = true;
+      if (wasOpen) syncDayMap(dayIndex);
+    }));
+    result.querySelectorAll("[data-optimize-day-route]").forEach(button => button.addEventListener("click", () => {
+      this.optimizeItineraryDay(city, days, Number(button.dataset.optimizeDayRoute));
+    }));
 
     let dragged = null;
     result.querySelectorAll(".itinerary-spot-card").forEach(card => {
@@ -914,6 +931,106 @@ window.PlannerView = {
     if (saved[dayIndex]?.length) return [...saved[dayIndex]];
     const custom = new Set(saved.flat());
     return this.getPlanningSpots(city).map((_, index) => index).filter(index => !custom.has(index) && index % days === dayIndex);
+  },
+
+  getItineraryCoordinate: function (city, spot) {
+    if (window.mapManager?.getItineraryStopCoordinate) return window.mapManager.getItineraryStopCoordinate(city, spot);
+    const lat = Number(spot?.lat), lng = Number(spot?.lng);
+    if (spot?.lat === null || spot?.lat === undefined || spot?.lat === "" || spot?.lng === null || spot?.lng === undefined || spot?.lng === ""
+      || !Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180 || (lat === 0 && lng === 0)) return null;
+    return [lng, lat];
+  },
+
+  itineraryDistanceKm: function (a, b) {
+    const radians = value => value * Math.PI / 180;
+    const [lng1, lat1] = a, [lng2, lat2] = b;
+    const dLat = radians(lat2 - lat1), dLng = radians(lng2 - lng1);
+    const value = Math.sin(dLat / 2) ** 2 + Math.cos(radians(lat1)) * Math.cos(radians(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 6371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+  },
+
+  optimizeItineraryDay: function (city, days, dayIndex) {
+    const order = this.getOrderedDaySpotIndexes(city, days, dayIndex);
+    const spots = this.getPlanningSpots(city);
+    const items = order.map(index => ({ index, coordinate: this.getItineraryCoordinate(city, spots[index]) }));
+    const first = items[0];
+    const routable = items.filter(item => item.coordinate);
+    const missing = items.filter(item => !item.coordinate).map(item => item.index);
+    if (!first?.coordinate || routable.length < 3) return;
+
+    const pathDistance = route => route.slice(1).reduce((sum, item, index) => sum + this.itineraryDistanceKm(route[index].coordinate, item.coordinate), 0);
+    const originalKm = pathDistance(routable);
+    const remaining = routable.slice(1);
+    const optimized = [first];
+    while (remaining.length) {
+      const current = optimized[optimized.length - 1];
+      let nearestIndex = 0;
+      for (let index = 1; index < remaining.length; index += 1) {
+        if (this.itineraryDistanceKm(current.coordinate, remaining[index].coordinate)
+          < this.itineraryDistanceKm(current.coordinate, remaining[nearestIndex].coordinate)) nearestIndex = index;
+      }
+      optimized.push(remaining.splice(nearestIndex, 1)[0]);
+    }
+
+    let improved = true;
+    let passes = 0;
+    while (improved && passes < 8) {
+      improved = false;
+      passes += 1;
+      for (let start = 1; start < optimized.length - 1; start += 1) {
+        for (let end = start + 1; end < optimized.length; end += 1) {
+          const before = this.itineraryDistanceKm(optimized[start - 1].coordinate, optimized[start].coordinate)
+            + (end + 1 < optimized.length ? this.itineraryDistanceKm(optimized[end].coordinate, optimized[end + 1].coordinate) : 0);
+          const after = this.itineraryDistanceKm(optimized[start - 1].coordinate, optimized[end].coordinate)
+            + (end + 1 < optimized.length ? this.itineraryDistanceKm(optimized[start].coordinate, optimized[end + 1].coordinate) : 0);
+          if (after + 0.001 < before) {
+            optimized.splice(start, end - start + 1, ...optimized.slice(start, end + 1).reverse());
+            improved = true;
+          }
+        }
+      }
+    }
+
+    const optimizedKm = pathDistance(optimized);
+    const savedKm = originalKm - optimizedKm;
+    if (savedKm < 0.1) {
+      this.showItineraryToast("目前動線已經是最順路線！");
+      return;
+    }
+    const previousItinerary = this.getItinerary(city, days);
+    const previousOrder = [...(previousItinerary[dayIndex] || order)];
+    const meta = this.getItineraryMeta(city, days);
+    previousItinerary[dayIndex] = [...optimized.map(item => item.index), ...missing];
+    this.saveItinerary(city, days, previousItinerary, meta);
+    this.renderItinerary(city, days);
+    this.showItineraryToast(`已優化當日動線，直線距離約省下 ${savedKm.toFixed(1)} 公里`, () => {
+      const restored = this.getItinerary(city, days);
+      restored[dayIndex] = previousOrder;
+      this.saveItinerary(city, days, restored, meta);
+      this.renderItinerary(city, days);
+    });
+  },
+
+  showItineraryToast: function (message, onUndo) {
+    let toast = document.getElementById("itinerary-action-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "itinerary-action-toast";
+      toast.className = "itinerary-action-toast";
+      toast.setAttribute("role", "status");
+      toast.setAttribute("aria-live", "polite");
+      document.body.appendChild(toast);
+    }
+    window.clearTimeout(this.itineraryToastTimer);
+    toast.innerHTML = `<span>${escapePlannerText(message)}</span>${onUndo ? '<button type="button" class="itinerary-toast-undo">復原</button>' : ""}`;
+    toast.hidden = false;
+    const undoButton = toast.querySelector(".itinerary-toast-undo");
+    undoButton?.addEventListener("click", () => {
+      window.clearTimeout(this.itineraryToastTimer);
+      toast.hidden = true;
+      onUndo();
+    }, { once: true });
+    this.itineraryToastTimer = window.setTimeout(() => { toast.hidden = true; }, onUndo ? 9000 : 3200);
   },
 
   getRecommendedTravelMode: function (city) {
@@ -994,7 +1111,7 @@ window.PlannerView = {
     stored[city.id] = { ...(stored[city.id] || {}), [days]: itinerary };
     const metaKey = String(days) + "Meta";
     if (Array.isArray(aiDayPlans)) stored[city.id][metaKey] = aiDayPlans.map(day => ({ theme: String(day.theme || ""), note: String(day.note || ""), routingRationale: String(day.routingRationale || "") }));
-    else delete stored[city.id][metaKey];
+    // 手動排序或新增景點時保留既有 AI 每日主題與備註。
     try {
       const value = JSON.stringify(stored);
       localStorage.setItem(this.itineraryStorageKey, value);
