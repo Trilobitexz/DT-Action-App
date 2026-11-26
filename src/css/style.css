@@ -3514,3 +3514,51 @@ body.sidebar-collapsed .app-sidebar { width: 100%; }
   }
   #map-hero-card .map-controls { justify-content: stretch; }
 }
+
+/* v92: restrained motion polish for a calmer, more premium travel workspace. */
+@keyframes atlas-view-enter {
+  from { opacity: 0; transform: translate3d(0, 9px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes atlas-results-enter {
+  from { opacity: 0; transform: translate3d(0, -6px, 0) scale(.99); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+.view-panel.active { animation: atlas-view-enter .38s cubic-bezier(.2,.72,.24,1) both; }
+.global-search-results:not([hidden]) { transform-origin: top center; animation: atlas-results-enter .2s cubic-bezier(.2,.7,.25,1) both; }
+.global-search-wrap,
+.search-input-wrap,
+.global-city-search-wrap { transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease; }
+.global-search-wrap:focus-within,
+.search-input-wrap:focus-within,
+.global-city-search-wrap:focus-within { border-color: #a8c0b3; box-shadow: 0 0 0 3px rgba(63,119,91,.1); }
+.global-search-results [role="option"],
+.global-search-results button { transition: background-color .16s ease, color .16s ease, transform .16s ease; }
+.country-card, .global-city-card, .spot-item, .world-highlight-group {
+  transition: border-color .22s ease, box-shadow .22s ease, background-color .22s ease, transform .22s ease;
+}
+.map-control-cluster, .map-continent-chips { transition: box-shadow .2s ease, border-color .2s ease; }
+.map-btn, .map-layer-btn, .continent-chip-btn, .drawer-close, .highlight-back-button {
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.map-btn:active, .map-layer-btn:active, .continent-chip-btn:active,
+.drawer-close:active, .highlight-back-button:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) {
+  .country-card:hover, .global-city-card:hover, .spot-item:hover, .world-highlight-group:hover {
+    border-color: #d8e3da;
+    box-shadow: 0 12px 30px rgba(34,52,43,.085);
+  }
+  .global-city-card:hover, .country-card:hover { transform: translateY(-2px); }
+  .map-control-cluster:hover { box-shadow: 0 11px 32px rgba(24,43,38,.2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .view-panel.active, .global-search-results:not([hidden]),
+  .global-search-results [role="option"], .global-search-results button,
+  .country-card, .global-city-card, .spot-item, .world-highlight-group,
+  .map-control-cluster, .map-continent-chips, .map-btn, .map-layer-btn,
+  .continent-chip-btn, .drawer-close, .highlight-back-button {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
