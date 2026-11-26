@@ -362,7 +362,7 @@ window.CountryView = {
         const thumbEl = document.getElementById(`spot-thumb-${idx}`);
         const imageUrl = spot.imageUrl || spot.thumbnail || spot.photoUrl;
         if (spot.imageFailed) return;
-        const addImage = (url, alt, sourceUrl) => {
+        const addImage = (url, alt, sourceUrl, allowCommonsRetry = true) => {
           if (!url || !thumbEl || !isCurrentCity()) return;
           let safeImageUrl;
           try {
@@ -389,12 +389,26 @@ window.CountryView = {
             }
           };
           image.onerror = () => {
-            spot.imageFailed = true;
             image.remove();
             thumbEl.classList.remove("has-image");
-            thumbEl.title = "景點圖片暫不可用，已改用分類圖示顯示";
             const sourceLink = document.getElementById(`spot-image-source-${idx}`);
             if (sourceLink) sourceLink.hidden = true;
+            if (allowCommonsRetry && window.SpotService?.fetchCommonsImage) {
+              window.SpotService.fetchCommonsImage(spot.name, currentCity.name).then(alternate => {
+                if (!isCurrentCity() || !alternate?.thumbnail || alternate.thumbnail === safeImageUrl.href) {
+                  spot.imageFailed = true;
+                  thumbEl.title = "景點照片暫不可用，已顯示分類插圖";
+                  return;
+                }
+                addImage(alternate.thumbnail, alt, alternate.pageUrl, false);
+              }).catch(() => {
+                spot.imageFailed = true;
+                thumbEl.title = "景點照片暫不可用，已顯示分類插圖";
+              });
+              return;
+            }
+            spot.imageFailed = true;
+            thumbEl.title = "景點照片暫不可用，已顯示分類插圖";
           };
           thumbEl.appendChild(image);
           image.src = safeImageUrl.href;

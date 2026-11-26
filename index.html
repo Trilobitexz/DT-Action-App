@@ -15,12 +15,13 @@
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="src/css/style.css?v=62">
+  <link rel="stylesheet" href="src/css/style.css?v=63">
 
 </head>
 <body>
   <aside class="app-sidebar" aria-label="主要功能導覽">
     <a class="sidebar-brand" href="#view-world" onclick="window.appNavigate('world'); return false;"><span>✈</span><strong>旅途指南</strong><small>JOURNEY ATLAS</small></a>
+    <button type="button" class="mobile-nav-toggle" id="mobile-nav-toggle" aria-expanded="false" aria-controls="sidebar-navigation" aria-label="展開功能選單"><span aria-hidden="true">☰</span><small>選單</small></button>
     <nav class="sidebar-nav" id="sidebar-navigation" aria-label="功能選單">
       <button type="button" class="sidebar-nav-item active" data-sidebar-action="explore" aria-label="探索" aria-current="page"><span>🌍</span><small>探索</small></button>
       <button type="button" class="sidebar-nav-item" data-sidebar-action="cities" aria-label="城市目錄" aria-controls="city-rankings-drawer" aria-expanded="false"><span>🏙️</span><small>城市目錄</small></button>
@@ -343,13 +344,13 @@
 
     <!-- 載入視圖模組 -->
     <script src="src/js/modules/continentView.js" defer></script>
-    <script src="src/js/modules/countryView.js?v=52" defer></script>
+    <script src="src/js/modules/countryView.js?v=53" defer></script>
     <script src="src/js/modules/globalCitiesView.js?v=3" defer></script>
     <script src="src/js/modules/plannerView.js?v=13" defer></script>
     <script src="src/js/modules/worldHighlightsView.js?v=2" defer></script>
     <script src="src/js/firebase-ai-config.js?v=2" defer></script>
     <script src="src/js/firebase.js?v=36" defer></script>
-    <script src="src/js/app.js?v=43" defer></script>
+    <script src="src/js/app.js?v=44" defer></script>
     <script src="src/js/pwa.js" defer></script>
   </div>
 </body>

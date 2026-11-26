@@ -172,7 +172,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const drawers = document.querySelectorAll(".side-drawer");
   const sidebar = document.querySelector(".app-sidebar");
   const sidebarCompactQuery = window.matchMedia?.("(max-width: 980px)");
+  const mobileNavQuery = window.matchMedia?.("(max-width: 760px)");
+  const mobileNavToggle = document.getElementById("mobile-nav-toggle");
   const sidebarHoverQuery = window.matchMedia?.("(hover: hover) and (pointer: fine) and (min-width: 981px)");
+  const setMobileNavOpen = open => {
+    if (!sidebar || (open && !mobileNavQuery?.matches)) return;
+    sidebar.classList.toggle("mobile-nav-open", open);
+    document.body.classList.toggle("mobile-nav-open", open);
+    mobileNavToggle?.setAttribute("aria-expanded", String(open));
+    mobileNavToggle?.setAttribute("aria-label", open ? "收合功能選單" : "展開功能選單");
+  };
   const syncSidebarLayout = () => {
     const compact = sidebarCompactQuery?.matches === true;
     document.body.classList.toggle("sidebar-collapsed", compact || sidebarHoverQuery?.matches === true);
@@ -181,6 +190,19 @@ document.addEventListener("DOMContentLoaded", () => {
   syncSidebarLayout();
   sidebarCompactQuery?.addEventListener?.("change", syncSidebarLayout);
   sidebarHoverQuery?.addEventListener?.("change", syncSidebarLayout);
+  mobileNavQuery?.addEventListener?.("change", () => setMobileNavOpen(false));
+  mobileNavToggle?.addEventListener("click", () => {
+    setMobileNavOpen(!sidebar?.classList.contains("mobile-nav-open"));
+  });
+  document.addEventListener("click", event => {
+    if (sidebar?.classList.contains("mobile-nav-open") && !sidebar.contains(event.target)) setMobileNavOpen(false);
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && sidebar?.classList.contains("mobile-nav-open")) {
+      setMobileNavOpen(false);
+      mobileNavToggle?.focus();
+    }
+  });
   if (sidebar && sidebarHoverQuery) {
     sidebar.addEventListener("pointerenter", () => {
       if (sidebarHoverQuery.matches) document.body.classList.remove("sidebar-collapsed");
@@ -255,6 +277,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return true;
   };
   sidebarItems.forEach(item => item.addEventListener("click", () => {
+    setMobileNavOpen(false);
     const action = item.dataset.sidebarAction;
     if (action === "explore") {
       setSidebarActive(action);
