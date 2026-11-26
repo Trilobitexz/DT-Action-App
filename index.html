@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="src/css/style.css?v=63">
+  <link rel="stylesheet" href="src/css/style.css?v=64">
 
 </head>
 <body>
@@ -258,6 +258,11 @@
       </div>
     </section>
 
+    <main id="view-highlight-detail" class="view-panel highlight-detail-view" tabindex="-1" aria-labelledby="highlight-detail-title" aria-hidden="true">
+      <button type="button" class="highlight-back-button" id="highlight-back-button">← 返回世界之最名錄</button>
+      <article id="highlight-detail-content" class="highlight-detail-content"></article>
+    </main>
+
     <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
     <aside class="side-drawer rankings-drawer" id="city-rankings-drawer" aria-labelledby="rankings-drawer-title" aria-hidden="true" inert>
       <div class="drawer-content">
@@ -347,10 +352,10 @@
     <script src="src/js/modules/countryView.js?v=53" defer></script>
     <script src="src/js/modules/globalCitiesView.js?v=3" defer></script>
     <script src="src/js/modules/plannerView.js?v=13" defer></script>
-    <script src="src/js/modules/worldHighlightsView.js?v=2" defer></script>
+    <script src="src/js/modules/worldHighlightsView.js?v=3" defer></script>
     <script src="src/js/firebase-ai-config.js?v=2" defer></script>
     <script src="src/js/firebase.js?v=36" defer></script>
-    <script src="src/js/app.js?v=44" defer></script>
+    <script src="src/js/app.js?v=45" defer></script>
     <script src="src/js/pwa.js" defer></script>
   </div>
 </body>

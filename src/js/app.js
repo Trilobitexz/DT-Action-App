@@ -6,6 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const viewWorld = document.getElementById("view-world");
   const viewContinent = document.getElementById("view-continent");
   const viewCountry = document.getElementById("view-country");
+  const viewHighlightDetail = document.getElementById("view-highlight-detail");
   const mapHeroCard = document.getElementById("map-hero-card");
   const mapSlots = {
     world: document.getElementById("map-world-slot"),
@@ -313,6 +314,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }));
   document.querySelectorAll("[data-close-drawer]").forEach(button => button.addEventListener("click", closeDrawers));
+  document.getElementById("highlight-back-button")?.addEventListener("click", () => {
+    navigateTo("world");
+    setSidebarActive("highlights");
+    window.WorldHighlightsView?.render();
+    window.setTimeout(() => openDrawer("world-highlights-drawer", document.querySelector('[data-sidebar-action="highlights"]')), 40);
+  });
   backdrop?.addEventListener("click", closeDrawers);
   document.addEventListener("keydown", event => {
     const activeDrawer = document.querySelector(".side-drawer.open");
@@ -470,6 +477,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function navigateTo(viewName, params = {}) {
+    const highlightGroupId = params.groupId;
+    const highlightItemIndex = Number(params.itemIndex);
     closeDrawers();
     const skipMapRecord = params.skipMapRecord === true;
     const fromHistory = params.fromHistory === true;
@@ -536,6 +545,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (state.selectedCountryId) routeParams.set("country", state.selectedCountryId);
       if (state.selectedCityId) routeParams.set("city", state.selectedCityId);
       if (state.globalCityId) routeParams.set("global", state.globalCityId);
+      if (viewName === "highlight-detail") {
+        routeParams.set("group", highlightGroupId || "");
+        routeParams.set("item", String(highlightItemIndex));
+      }
       const nextHash = `#${routeParams.toString()}`;
       if (window.location.hash !== nextHash) {
         window.history.pushState(null, "", nextHash);
@@ -545,16 +558,20 @@ document.addEventListener("DOMContentLoaded", () => {
     viewWorld.classList.toggle("active", viewName === "world");
     viewContinent.classList.toggle("active", viewName === "continent");
     viewCountry.classList.toggle("active", viewName === "country");
+    viewHighlightDetail?.classList.toggle("active", viewName === "highlight-detail");
     viewWorld.setAttribute("aria-hidden", String(viewName !== "world"));
     viewContinent.setAttribute("aria-hidden", String(viewName !== "continent"));
     viewCountry.setAttribute("aria-hidden", String(viewName !== "country"));
+    viewHighlightDetail?.setAttribute("aria-hidden", String(viewName !== "highlight-detail"));
     setMapContext(viewName);
     updateMapContextControls(viewName);
 
     updateBreadcrumb();
-    if (typeof setSidebarActive === "function") setSidebarActive("explore");
+    if (typeof setSidebarActive === "function") setSidebarActive(viewName === "highlight-detail" ? "highlights" : "explore");
     const globalCity = state.globalCityId ? getGlobalCity(state.globalCityId) : null;
-    document.title = viewName === "world"
+    document.title = viewName === "highlight-detail"
+      ? `${window.WorldHighlightsView?.getItem(highlightGroupId, highlightItemIndex)?.item?.[0] || "世界之最詳情"}｜旅途指南 Journey Atlas`
+      : viewName === "world"
       ? "旅途指南 Journey Atlas｜目的地探索與旅行規劃"
       : viewName === "continent"
         ? `${window.TRAVEL_DATA.continents.find(item => item.id === state.selectedContinentId)?.name || "探索目的地"}｜旅途指南 Journey Atlas`
@@ -581,13 +598,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (city) {
         showCityOnMap(city, country?.id || null, shouldAnimateMap);
       }
+    } else if (viewName === "highlight-detail") {
+      window.WorldHighlightsView?.renderDetail(highlightGroupId, highlightItemIndex);
     }
 
     // 先立即回到新畫面頂端，避免 CSS smooth scroll 與淡入動畫同時執行造成跳動。
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
-    const activeView = viewName === "world" ? viewWorld : viewName === "continent" ? viewContinent : viewCountry;
+    const activeView = viewName === "highlight-detail" ? viewHighlightDetail : viewName === "world" ? viewWorld : viewName === "continent" ? viewContinent : viewCountry;
     activeView.focus({ preventScroll: true });
     requestAnimationFrame(() => {
       window.scrollTo(0, 0);
@@ -596,6 +615,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 麵包屑導航
   function updateBreadcrumb() {
+    if (state.currentView === "highlight-detail") {
+      breadcrumbNav.innerHTML = '<button type="button" class="breadcrumb-item" data-target="world">🌍 世界地圖</button><span aria-hidden="true">/</span><span class="breadcrumb-item active" aria-current="page">🏛️ 世界之最</span>';
+      breadcrumbNav.querySelector('[data-target="world"]')?.addEventListener("click", () => navigateTo("world"));
+      return;
+    }
     let html = `<button type="button" class="breadcrumb-item ${state.currentView === 'world' ? 'active' : ''}" data-target="world" ${state.currentView === 'world' ? 'aria-current="page"' : ''}>🌍 世界地圖</button>`;
 
     if (state.selectedContinentId) {
@@ -786,6 +810,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const readRoute = () => {
     const route = new URLSearchParams(window.location.hash.slice(1));
     const view = route.get("view");
+    if (view === "highlight-detail" && route.get("group") && route.has("item")) {
+      return { viewName: "highlight-detail", params: { groupId: route.get("group"), itemIndex: route.get("item") } };
+    }
     if (!["world", "continent", "country"].includes(view)) return null;
     if (view === "world") return { viewName: "world" };
     if (view === "continent" && route.get("continent")) {

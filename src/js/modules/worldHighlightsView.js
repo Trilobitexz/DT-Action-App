@@ -43,6 +43,12 @@ window.WorldHighlightsView = {
     }
   ],
   escape: value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]),
+  getItem: function(groupId, itemIndex) {
+    const group = this.groups.find(entry => entry.id === groupId);
+    const index = Number(itemIndex);
+    if (!group || !Number.isInteger(index) || index < 0 || index >= group.items.length) return null;
+    return { group, item: group.items[index], index };
+  },
   render: function() {
     const host = document.getElementById("world-highlights-list");
     if (!host) return;
@@ -50,11 +56,16 @@ window.WorldHighlightsView = {
       <section class="world-highlight-group" aria-labelledby="highlight-${group.id}">
         <header><div><span class="section-kicker">CURATED COLLECTION</span><h3 id="highlight-${group.id}">${this.escape(group.title)}</h3><p>${this.escape(group.note)}</p></div><a href="${group.source}" target="_blank" rel="noopener noreferrer">資料來源 ↗</a></header>
         <ol>${group.items.map(([name, location, lat, lng, description], index) => `
-          <li><span class="world-highlight-number">${index + 1}</span><div class="world-highlight-copy"><strong>${this.escape(name)}</strong><small>${this.escape(location)}</small><p>${this.escape(description)}</p></div><button type="button" class="world-highlight-map" data-highlight-lat="${lat}" data-highlight-lng="${lng}" data-highlight-name="${this.escape(name)}" aria-label="在地圖查看${this.escape(name)}">地圖定位</button></li>
+          <li><span class="world-highlight-number">${index + 1}</span><button type="button" class="world-highlight-open" data-highlight-open="${group.id}" data-highlight-item="${index}" aria-label="查看${this.escape(name)}詳細介紹"><span class="world-highlight-copy"><strong>${this.escape(name)}</strong><small>${this.escape(location)}</small><span class="world-highlight-description">${this.escape(description)}</span></span><span class="world-highlight-chevron" aria-hidden="true">→</span></button><button type="button" class="world-highlight-map" data-highlight-lat="${lat}" data-highlight-lng="${lng}" data-highlight-name="${this.escape(name)}" aria-label="在地圖查看${this.escape(name)}">地圖定位</button></li>
         `).join("")}</ol>
       </section>
     `).join("");
     host.onclick = event => {
+      const detailButton = event.target.closest("[data-highlight-open]");
+      if (detailButton) {
+        window.appNavigate?.("highlight-detail", { groupId: detailButton.dataset.highlightOpen, itemIndex: detailButton.dataset.highlightItem });
+        return;
+      }
       const button = event.target.closest("[data-highlight-lat]");
       if (!button) return;
       const lat = Number(button.dataset.highlightLat), lng = Number(button.dataset.highlightLng);
@@ -62,6 +73,25 @@ window.WorldHighlightsView = {
       close?.click();
       window.appNavigate?.("world");
       window.setTimeout(() => window.mapManager?.focusCoordinates?.(lat, lng, 8.5, button.dataset.highlightName), 280);
+    };
+  },
+  renderDetail: function(groupId, itemIndex) {
+    const host = document.getElementById("highlight-detail-content");
+    const record = this.getItem(groupId, itemIndex);
+    if (!host) return;
+    if (!record) {
+      host.innerHTML = '<div class="highlight-detail-empty"><h1 id="highlight-detail-title">找不到這筆名錄資料</h1><p>請返回世界之最，重新選擇一個項目。</p></div>';
+      return;
+    }
+    const { group, item, index } = record;
+    const [name, location, lat, lng, description] = item;
+    host.innerHTML = `<span class="section-kicker">${this.escape(group.title)} · 第 ${index + 1} 項</span><h1 id="highlight-detail-title">${this.escape(name)}</h1><p class="highlight-detail-location">📍 ${this.escape(location)}</p><p class="highlight-detail-description">${this.escape(description)}</p><div class="highlight-detail-context"><h2>關於這份名錄</h2><p>${this.escape(group.note)}</p><a href="${this.escape(group.source)}" target="_blank" rel="noopener noreferrer">查看名錄資料來源 ↗</a></div><p class="highlight-coordinate-note">地圖標記為地點參考位置；部分古代遺址或文明範圍使用近似座標。</p><button type="button" class="primary-action highlight-locate-button" data-highlight-detail-locate data-lat="${Number(lat)}" data-lng="${Number(lng)}" data-name="${this.escape(name)}">在地圖上查看位置</button>`;
+    host.onclick = event => {
+      const locate = event.target.closest("[data-highlight-detail-locate]");
+      if (!locate) return;
+      const latitude = Number(locate.dataset.lat), longitude = Number(locate.dataset.lng);
+      window.appNavigate?.("world");
+      window.setTimeout(() => window.mapManager?.focusCoordinates?.(latitude, longitude, 8.5, locate.dataset.name), 260);
     };
   }
 };
