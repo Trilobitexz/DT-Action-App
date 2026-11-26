@@ -698,7 +698,7 @@ class MapManager {
     // Keep every location reachable while reducing overlapping pins at city scale.
     // At neighborhood zoom all pins return; at wider zoom keep a stable, spatially
     // distributed subset, recalculated as the map moves or zooms.
-    const minDistance = zoom < 8 ? 48 : zoom < 9 ? 32 : zoom < 10 ? 18 : zoom < 11 ? 8 : 0;
+    const minDistance = zoom < 8 ? 52 : zoom < 9 ? 42 : zoom < 10 ? 32 : zoom < 11 ? 24 : zoom < 12 ? 14 : 0;
     const pins = [...this.cityContextDomMarkers.values()]
       .map(marker => ({ marker, element: marker.getElement() }))
       .filter(item => item.element.dataset.cityMarkerType === "spot"
@@ -709,14 +709,18 @@ class MapManager {
     const accepted = [];
     pins.forEach(({ marker, element }) => {
       const point = this.map.project(marker.getLngLat());
-      const overlaps = minDistance > 0 && accepted.some(other => {
+      const container = this.map.getContainer();
+      const inViewport = point.x >= -24 && point.y >= -24
+        && point.x <= container.clientWidth + 24 && point.y <= container.clientHeight + 24;
+      const overlaps = inViewport && minDistance > 0 && accepted.some(other => {
         const dx = point.x - other.x;
         const dy = point.y - other.y;
         return dx * dx + dy * dy < minDistance * minDistance;
       });
-      element.hidden = overlaps;
-      if (!overlaps) accepted.push(point);
+      element.hidden = !inViewport || overlaps;
+      if (inViewport && !overlaps) accepted.push(point);
     });
+    this.updateCitySpotCount(this.currentCityContext.id);
   }
   handleCityContextZoom(event) {
     const userInitiatedZoomOut = (Boolean(event?.originalEvent) && this.cityContextZoomDirection === "out")
@@ -1120,15 +1124,25 @@ class MapManager {
   updateCitySpotCount(cityId) {
     if (this.currentCityContext?.id !== cityId) return;
     const spots = this.geojson.spots.features.filter(feature => feature.properties?.kind === "spot");
-    const count = spots.length;
-    const visibleCount = this.activeCitySpotCategory === "all"
-      ? count
-      : spots.filter(feature => String(feature.properties.category || "景點") === this.activeCitySpotCategory).length;
+    const filteredSpots = this.activeCitySpotCategory === "all"
+      ? spots
+      : spots.filter(feature => String(feature.properties.category || "景點") === this.activeCitySpotCategory);
+    const visibleCount = [...this.cityContextDomMarkers.values()].filter(marker => {
+      const element = marker.getElement();
+      return element.dataset.cityMarkerType === "spot" && !element.hidden
+        && (this.activeCitySpotCategory === "all" || element.dataset.spotCategory === this.activeCitySpotCategory);
+    }).length;
     const label = document.querySelector("#map-context-info .map-context-spot-count");
     if (!label) return;
-    if (!count) label.textContent = "🔴 尚無已核實座標的景點";
-    else if (this.activeCitySpotCategory !== "all") label.textContent = `🔴 顯示 ${visibleCount} / ${count} 個景點`;
-    else label.textContent = `🔴 地圖景點 ${count} 個`;
+    if (!spots.length) label.textContent = "🔴 尚無已核實座標的景點";
+    else {
+      const total = filteredSpots.length;
+      const shown = Math.min(visibleCount, total);
+      const prefix = this.activeCitySpotCategory === "all" ? "🔴 地圖景點" : `🔴 ${this.activeCitySpotCategory}`;
+      label.textContent = shown < total
+        ? `${prefix}：顯示 ${shown} / ${total} 個・移動或放大可查看更多`
+        : `${prefix}：${total} 個`;
+    }
   }
   fitCityContext(city, animate = true) {
     if (!this.map || this.currentCityContext?.id !== city.id) return;

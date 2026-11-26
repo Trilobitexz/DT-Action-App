@@ -313,6 +313,7 @@ body.sidebar-collapsed .sidebar-nav-item { grid-template-columns: 1fr; justify-i
   color: var(--success);
   font-weight: 700;
 }
+.map-context-spot-count { max-width: 100%; line-height: 1.4; white-space: normal; }
 
 .city-map-filter { display: inline-flex; align-items: center; gap: 0.4rem; }
 .map-context-info .city-map-filter span { padding: 0; background: transparent; color: var(--text-muted); font-weight: 600; }
