@@ -37,3 +37,11 @@
 - 未登入帳戶，因此沒有送出 Google 登入、Firestore 個人資料寫入或付費 AI 生成請求；這些流程仍需登入後驗收。
 - 尚未登入帳戶，因此 Google 登入、個人 Firestore 寫入與 AI 行程生成未在本次實測；這些流程需使用已授權帳戶另行驗收。
 - GitHub Pages 已確認提供 v100 資產；Service Worker 的離線重新開啟流程仍需在實際安裝 PWA 的裝置上抽測。
+
+
+## v101 城市資料可用性呈現
+
+- 檢查 `PlannerView.getCityDataCoverage`：原有 10 項資料欄位覆蓋算法維持不變，新增獨立的圖片、介紹、來源評分及營業時間計數。
+- 檢查城市詳情渲染順序：統計在景點資料整理後由 `renderCityTools` 產生，會跟目前城市的景點目錄同步更新。
+- `node --check`（`plannerView.js`、`countryView.js`）及 `git diff --check` 通過。
+- 尚未登入個人帳戶；此變更為前端呈現與統計，不涉及 Firestore 寫入或外部 API。

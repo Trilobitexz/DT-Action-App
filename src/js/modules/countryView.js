@@ -336,7 +336,13 @@ window.CountryView = {
     const chart = document.getElementById("city-insight-chart");
     if (chart) {
       const coverage = window.PlannerView?.getCityDataCoverage(currentCity, country);
-      if (coverage) chart.innerHTML = `<p class="city-data-completeness-label">資料完整度 ${coverage.score}/${coverage.maxScore}（資料欄位覆蓋，不代表旅遊品質評分）</p>` + coverage.fields.map(field => `
+      if (coverage) chart.innerHTML = `<p class="city-data-completeness-label">資料欄位覆蓋 ${coverage.score}/${coverage.maxScore}<small>此比例只表示欄位是否有來源資料，不代表景點品質或旅遊推薦分數。</small></p><div class="city-evidence-summary" aria-label="景點資料可用性統計">
+        <span><strong>${coverage.sourcedSpotStats.total}</strong> 有來源座標</span>
+        <span><strong>${coverage.sourcedSpotStats.withImage}</strong> 有圖片</span>
+        <span><strong>${coverage.sourcedSpotStats.withDescription}</strong> 有介紹</span>
+        <span><strong>${coverage.sourcedSpotStats.withRating}</strong> 有來源評分</span>
+        <span><strong>${coverage.sourcedSpotStats.withHours}</strong> 有營業時間</span>
+      </div>` + coverage.fields.map(field => `
         <div class="insight-metric" data-insight="${field.key === "spots" ? "spots" : ""}" title="${escapeHtml(field.note)}">
           <div><strong>${field.label} <small>${field.value}/${field.max}</small></strong><span>${escapeHtml(field.note)}</span></div>
           <div class="insight-track"><i style="width:${field.value / field.max * 100}%"></i></div>

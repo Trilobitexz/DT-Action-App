@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light">
 
   <meta name="description" content="從互動地圖開始，慢慢探索世界城市、旅行風格、航班預算與精選景點。">
-  <link rel="manifest" href="manifest.json?v=100">
+  <link rel="manifest" href="manifest.json?v=101">
   <title>旅途指南 Journey Atlas｜目的地探索與旅行規劃</title>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin>
@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://open.er-api.com" crossorigin>
   <!-- MapLibre GL JS：單一 WebGL 畫布支援平面與 globe 投影。 -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-    <link rel="stylesheet" href="src/css/style.css?v=100">
+    <link rel="stylesheet" href="src/css/style.css?v=101">
 
 </head>
 <body>
@@ -239,7 +239,7 @@
           <div class="city-insight-panel">
             <div class="city-insight-header">
               <div><span class="section-kicker">TRAVEL INSIGHT</span><h4>用一眼看懂這座城市</h4></div>
-              <span class="source-badge">資訊更新時間依來源而異</span>
+              <span class="source-badge" title="景點資料來自不同公開來源；部分來源沒有提供更新日期">來源更新日期未完整提供</span>
             </div>
             <div id="city-insight-chart" class="city-insight-chart" role="img" aria-label="城市旅遊面向圖表"></div>
           </div>
@@ -250,7 +250,7 @@
             <span>• 天氣與空氣品質：<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a>；空氣品質為全球模式估值，並非測站即時讀值；月氣候為近十年歷史平均。</span>
             <span>• 國家行前資訊：<a href="https://restcountries.com/" target="_blank" rel="noopener noreferrer">REST Countries</a>；國定假日：<a href="https://date.nager.at/" target="_blank" rel="noopener noreferrer">Nager.Date</a>，未涵蓋地方節日。</span>
             <span>• 開車路線：<a href="https://project-osrm.org/" target="_blank" rel="noopener noreferrer">OSRM</a>／OpenStreetMap；路況與車程僅供參考，服務無回應時顯示行程示意線。</span>
-            <small>航班、價格、天氣與空氣品質會變動；請以出發當日的官方或服務提供者資訊為準。資料完整度不是旅遊品質評分。</small>
+            <small>景點統計只計有來源連結與有效座標的目錄資料；未提供的評分與營業時間不會推估。來源未附更新日期時，無法確認資料新舊。航班、價格、天氣與空氣品質會變動，請以出發當日官方資訊為準。</small>
           </div>
         </details>
         <div class="city-tab-list" id="city-tab-list"></div>
@@ -328,43 +328,43 @@
       });
       window.mapLibreReady.catch(error => console.error(error));
     </script>
-    <script src="src/js/map/geoContinents.js?v=100" defer></script>
-    <script src="src/js/map/mapManager.js?v=100" defer></script>
+    <script src="src/js/map/geoContinents.js?v=101" defer></script>
+    <script src="src/js/map/mapManager.js?v=101" defer></script>
 
     <!-- 載入資料庫與各洲資料模組 -->
-    <script src="src/data/travelData.js?v=100" defer></script>
-    <script src="src/data/countries/asia.js?v=100" defer></script>
-    <script src="src/data/countries/europe.js?v=100" defer></script>
-    <script src="src/data/countries/others.js?v=100" defer></script>
-    <script src="src/data/globalCities.js?v=100" defer></script>
-    <script src="src/data/cityCatalogExpansion.js?v=100" defer></script>
-    <script src="src/data/cityGeonames.js?v=100" defer></script>
-    <script src="src/data/cityCoordinates.js?v=100" defer></script>
-    <script src="src/data/cityEnrichment.js?v=100" defer></script>
+    <script src="src/data/travelData.js?v=101" defer></script>
+    <script src="src/data/countries/asia.js?v=101" defer></script>
+    <script src="src/data/countries/europe.js?v=101" defer></script>
+    <script src="src/data/countries/others.js?v=101" defer></script>
+    <script src="src/data/globalCities.js?v=101" defer></script>
+    <script src="src/data/cityCatalogExpansion.js?v=101" defer></script>
+    <script src="src/data/cityGeonames.js?v=101" defer></script>
+    <script src="src/data/cityCoordinates.js?v=101" defer></script>
+    <script src="src/data/cityEnrichment.js?v=101" defer></script>
     <!-- 載入資料層與即時 API 服務 (階段二) -->
-    <script src="src/js/services/currencyService.js?v=100" defer></script>
-    <script src="src/js/services/spotTextService.js?v=100" defer></script>
-    <script src="src/js/services/nationalInfoService.js?v=100" defer></script>
-    <script src="src/js/services/climateService.js?v=100" defer></script>
-    <script src="src/js/services/roadRouteService.js?v=100" defer></script>
-    <script src="src/js/services/weatherService.js?v=100" defer></script>
-    <script src="src/js/services/flightService.js?v=100" defer></script>
-    <script src="src/js/services/spotService.js?v=100" defer></script>
-    <script src="src/js/services/cityCatalogService.js?v=100" defer></script>
+    <script src="src/js/services/currencyService.js?v=101" defer></script>
+    <script src="src/js/services/spotTextService.js?v=101" defer></script>
+    <script src="src/js/services/nationalInfoService.js?v=101" defer></script>
+    <script src="src/js/services/climateService.js?v=101" defer></script>
+    <script src="src/js/services/roadRouteService.js?v=101" defer></script>
+    <script src="src/js/services/weatherService.js?v=101" defer></script>
+    <script src="src/js/services/flightService.js?v=101" defer></script>
+    <script src="src/js/services/spotService.js?v=101" defer></script>
+    <script src="src/js/services/cityCatalogService.js?v=101" defer></script>
     <!-- 載入狀態管理 Store (階段三) -->
-    <script src="src/js/store/appStore.js?v=100" defer></script>
+    <script src="src/js/store/appStore.js?v=101" defer></script>
 
 
     <!-- 載入視圖模組 -->
-    <script src="src/js/modules/continentView.js?v=100" defer></script>
-    <script src="src/js/modules/countryView.js?v=100" defer></script>
-    <script src="src/js/modules/globalCitiesView.js?v=100" defer></script>
-    <script src="src/js/modules/plannerView.js?v=100" defer></script>
-    <script src="src/js/modules/worldHighlightsView.js?v=100" defer></script>
-    <script src="src/js/firebase-ai-config.js?v=100" defer></script>
-    <script src="src/js/firebase.js?v=100" defer></script>
-    <script src="src/js/app.js?v=100" defer></script>
-    <script src="src/js/pwa.js?v=100" defer></script>
+    <script src="src/js/modules/continentView.js?v=101" defer></script>
+    <script src="src/js/modules/countryView.js?v=101" defer></script>
+    <script src="src/js/modules/globalCitiesView.js?v=101" defer></script>
+    <script src="src/js/modules/plannerView.js?v=101" defer></script>
+    <script src="src/js/modules/worldHighlightsView.js?v=101" defer></script>
+    <script src="src/js/firebase-ai-config.js?v=101" defer></script>
+    <script src="src/js/firebase.js?v=101" defer></script>
+    <script src="src/js/app.js?v=101" defer></script>
+    <script src="src/js/pwa.js?v=101" defer></script>
   </div>
 </body>
 </html>

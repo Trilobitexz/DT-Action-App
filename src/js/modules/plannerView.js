@@ -233,6 +233,13 @@ window.PlannerView = {
     const spotList = Array.isArray(city?.spots) ? city.spots : Array.isArray(city?.spotCandidates) ? city.spotCandidates : [];
     const verifiedSpots = spotList.filter(spot => !spot?.isSearchSuggestion
       && /^https?:\/\//i.test(String(spot?.sourceUrl || "")) && validCoordinates(spot));
+    const sourcedSpotStats = {
+      total: verifiedSpots.length,
+      withImage: verifiedSpots.filter(spot => /^https?:\/\//i.test(String(spot.imageUrl || spot.image || ""))).length,
+      withDescription: verifiedSpots.filter(spot => String(spot.description || spot.summary || spot.note || "").trim().length >= 40).length,
+      withRating: verifiedSpots.filter(spot => Number.isFinite(Number(spot.rating)) && Number(spot.rating) >= 0 && Number(spot.rating) <= 5 && String(spot.ratingSource || "").trim()).length,
+      withHours: verifiedSpots.filter(spot => String(spot.openingHours || "").trim()).length
+    };
     const sourcedAirports = (Array.isArray(city?.airports) ? city.airports : []).filter(airport =>
       /^https?:\/\//i.test(String(airport?.sourceUrl || "")) && validCoordinates(airport)
     );
@@ -246,7 +253,7 @@ window.PlannerView = {
       { key: "price", label: "旅費參考", value: price && (price.dailyBudgetTwd || price.tier) && price.verified !== false ? 1 : 0, max: 1, note: price && (price.dailyBudgetTwd || price.tier) && price.verified !== false ? `${city?.priceLevel ? "城市" : "國家／地區"}級參考` : "尚無可比較參考" },
       { key: "flight", label: "航線資訊", value: flight?.hasDirect === true || flight?.hasDirect === false ? 1 : 0, max: 1, note: flight?.hasDirect === true || flight?.hasDirect === false ? `${city?.flightInfo ? "城市" : "國家／地區"}級參考` : "尚無可比較資料" }
     ];
-    return { fields, score: fields.reduce((sum, field) => sum + field.value, 0), maxScore: fields.reduce((sum, field) => sum + field.max, 0) };
+    return { fields, sourcedSpotStats, score: fields.reduce((sum, field) => sum + field.value, 0), maxScore: fields.reduce((sum, field) => sum + field.max, 0) };
   },
 
   renderRecommendations: function (formData) {
