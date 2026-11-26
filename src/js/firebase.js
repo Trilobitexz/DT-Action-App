@@ -238,7 +238,12 @@
     }
 
     function writeCloudValue(uid, key, value) {
-      if (!isCloudDataKey(key) || typeof value !== "string" || value.length > 700000) return Promise.resolve();
+      if (!isCloudDataKey(key)) return Promise.resolve();
+      if (typeof value !== "string" || new Blob([value]).size > 700000) {
+        var sizeError = new Error("這筆資料超過雲端同步上限；資料仍保存在目前裝置。請整理較舊的行程或收藏後再試。");
+        sizeError.code = "firestore/local-data-too-large";
+        return Promise.reject(sizeError);
+      }
       return firestoreDataRef(uid, key).set({ value: value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     }
 
@@ -330,7 +335,9 @@
             if (auth.currentUser?.uid === uid) setCloudSyncStatus("資料已同步至個人雲端資料庫", "success");
           }).catch(function (error) {
             console.error("Firestore 資料寫入失敗：", error);
-            setCloudSyncStatus("雲端同步失敗，資料仍保存在本機。請檢查資料庫規則與網路。", "error");
+            setCloudSyncStatus(error.code === "firestore/local-data-too-large"
+              ? error.message
+              : "雲端同步失敗，資料仍保存在本機。請檢查資料庫規則與網路。", "error");
           });
         }, 450));
       },

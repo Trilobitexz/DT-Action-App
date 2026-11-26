@@ -142,8 +142,19 @@ window.CountryView = {
     const hasSourcedRating = spot => spot?.rating !== null && spot?.rating !== undefined && spot?.rating !== ""
       && Number.isFinite(Number(spot.rating))
       && Number(spot.rating) >= 0 && Number(spot.rating) <= 5 && Boolean(String(spot.ratingSource || "").trim());
-    const hasCoordinates = spot => Number.isFinite(spot?.lat) && Number.isFinite(spot?.lng)
-      && spot.lat >= -90 && spot.lat <= 90 && spot.lng >= -180 && spot.lng <= 180;
+    const hasCoordinates = spot => {
+      const lat = Number(spot?.lat), lng = Number(spot?.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0
+        || lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+      if (Number.isFinite(currentCity?.lat) && Number.isFinite(currentCity?.lng)) {
+        const radians = Math.PI / 180;
+        const dLat = (lat - currentCity.lat) * radians;
+        const dLng = (lng - currentCity.lng) * radians;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(currentCity.lat * radians) * Math.cos(lat * radians) * Math.sin(dLng / 2) ** 2;
+        if (6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) > 50) return false;
+      }
+      return true;
+    };
     const spotQuality = spot => (spot.imageUrl || spot.thumbnail || spot.photoUrl ? 4 : 0)
       + (String(spot.description || spot.note || "").trim().length >= 24 ? 2 : 0)
       + (hasCoordinates(spot) ? 1 : 0);
@@ -367,7 +378,7 @@ window.CountryView = {
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.4rem;">
             <div class="spot-score">${hasSourcedRating(spot) ? `★ ${Number(spot.rating).toFixed(1)} · ${escapeHtml(spot.ratingSource)}` : `<a class="spot-rating-link" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${spot.name}, ${currentCity.name}, ${currentCity.countryName || country.name}`)}" target="_blank" rel="noopener noreferrer">前往 Google 地圖查看評價 ↗</a>`}</div>
-            <button type="button" class="spot-map-focus" data-map-focus-spot data-city-id="${currentCity.id}" data-spot-index="${idx}" data-spot-name="${escapeHtml(spot.name)}" title="${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 100) ? "地圖標記已達上限，將改用 Google 地圖搜尋" : (!hasCoordinates(spot) ? "座標尚未核實，點擊後改用 Google 地圖搜尋" : "在城市地圖查看位置")}">🗺️ 在地圖查看</button>
+            <button type="button" class="spot-map-focus" data-map-focus-spot data-city-id="${currentCity.id}" data-spot-index="${idx}" data-spot-name="${escapeHtml(spot.name)}" title="${idx >= (window.MapManager?.MAX_CITY_SPOT_MARKERS || 100) ? "地圖標記已達上限，將改用 Google 地圖搜尋" : (!hasCoordinates(spot) ? "座標尚未核實，點擊後改用 Google 地圖搜尋" : "在城市地圖查看位置")}">${idx < (window.MapManager?.MAX_CITY_SPOT_MARKERS || 100) && hasCoordinates(spot) ? "🗺️ 在地圖查看" : "↗ Google 地圖搜尋"}</button>
             <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${spot.name}, ${currentCity.name}, ${currentCity.countryName || country.name}`)}" target="_blank" rel="noopener noreferrer" class="spot-source-link spot-google-map">Google 地圖</a>
             ${(safeHttpUrl(spot.sourceUrl) || safeHttpUrl(spot.website) || safeHttpUrl(spot.wikipediaUrl) || spot.wikidataId) ? `<details class="spot-extra-links"><summary>更多資料</summary><div>${safeHttpUrl(spot.sourceUrl) ? `<a href="${safeHttpUrl(spot.sourceUrl)}" target="_blank" rel="noopener noreferrer">資料來源</a>` : ""}${safeHttpUrl(spot.website) ? `<a href="${safeHttpUrl(spot.website)}" target="_blank" rel="noopener noreferrer">官方網站</a>` : ""}${safeHttpUrl(spot.wikipediaUrl) ? `<a href="${safeHttpUrl(spot.wikipediaUrl)}" target="_blank" rel="noopener noreferrer">Wikipedia${spot.wikipedia ? ` · ${escapeHtml(spot.wikipedia)}` : ""}</a>` : ""}${spot.wikidataId ? `<a href="https://www.wikidata.org/wiki/${encodeURIComponent(spot.wikidataId)}" target="_blank" rel="noopener noreferrer">Wikidata</a>` : ""}</div></details>` : ""}
           </div>

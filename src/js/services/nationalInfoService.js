@@ -127,7 +127,11 @@ window.NationalInfoService = {
         englishName: String(item.name || ""),
         types: Array.isArray(item.types) ? item.types : []
       })).filter(item => /^\d{4}-\d{2}-\d{2}$/.test(item.date)) : [])
-      .catch(error => { console.warn(`國定假日資料暫時無法取得（${code} ${safeYear}）：`, error); return null; });
+      .catch(error => {
+        console.warn(`國定假日資料暫時無法取得（${code} ${safeYear}）：`, error);
+        this.holidayCache.delete(key);
+        return null;
+      });
     this.holidayCache.set(key, request);
     return request;
   }

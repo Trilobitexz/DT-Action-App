@@ -592,7 +592,7 @@ window.PlannerView = {
         else if (error?.code === "ai/auth-required") status.textContent = "請先使用 Google 帳戶登入。";
         else if (/quota|resource.?exhausted|429/i.test(String(error?.code || "") + " " + errorText)) status.textContent = "AI 目前的使用額度或請求頻率已達上限，請稍後再試。";
         else if (/network|fetch|offline|unavailable/i.test(String(error?.code || "") + " " + errorText)) status.textContent = "目前連線不穩，請確認網路後再試；已載入的城市景點會保留。";
-        else if (/AppCheck|app check|permission-denied/i.test(errorText)) status.textContent = "App Check 驗證失敗。請在 Firebase Console 確認這個 Web App 的 reCAPTCHA Enterprise 網站金鑰、允許網域與 App Check API 狀態。";
+        else if (/AppCheck|app.?check|permission-denied/i.test(errorText + " " + String(error?.code || ""))) status.textContent = "Firebase AI 權限或 App Check 驗證失敗。請確認 Firebase AI Logic 已啟用，並檢查 Web App 網站金鑰與授權網域。";
         else status.textContent = error?.message || "AI 暫時無法規劃，請稍後再試。";
       } finally {
         aiGenerationInFlight = false;

@@ -758,7 +758,8 @@ class MapManager {
     visibleSpots.forEach((spot, index) => {
       const hasCoords = Number.isFinite(spot.lat) && Number.isFinite(spot.lng)
         && spot.lat !== 0 && spot.lng !== 0
-        && spot.lat >= -90 && spot.lat <= 90 && spot.lng >= -180 && spot.lng <= 180;
+        && spot.lat >= -90 && spot.lat <= 90 && spot.lng >= -180 && spot.lng <= 180
+        && this.distanceKm([city.lng, city.lat], [spot.lng, spot.lat]) <= 50;
       const feature = hasCoords
         ? this.feature(`${city.id}-spot-${index}`, [spot.lng, spot.lat], { kind: "spot", cityId: city.id, index, name: spot.name, label: `${index + 1}. ${spot.name}`, category: spot.category || "景點", rating: spot.rating || "—", note: spot.note || "", isFeatured: spot.isFeatured === true, featuredRank: Number.isFinite(spot.featuredRank) ? spot.featuredRank : null, approximate: false })
         : null;
@@ -1031,9 +1032,11 @@ class MapManager {
   updateSpotDetail(cityId, index, detail) {
     const entry = this.citySpotMarkers.get(`${cityId}:${index}`); if (!entry || !detail) return;
     const loc = detail.location;
+    const city = this.currentCityContext;
     if (!Number.isFinite(loc?.latitude) || !Number.isFinite(loc?.longitude)
       || loc.latitude < -90 || loc.latitude > 90 || loc.longitude < -180 || loc.longitude > 180
-      || loc.category === "city" || this.currentCityContext?.id !== cityId) return;
+      || loc.category === "city" || city?.id !== cityId
+      || this.distanceKm([city.lng, city.lat], [loc.longitude, loc.latitude]) > 50) return;
     entry.spot.lat = loc.latitude; entry.spot.lng = loc.longitude;
     if (loc.pageUrl) entry.spot.sourceUrl = loc.pageUrl;
     if (loc.sourceLabel) entry.spot.sourceLabel = loc.sourceLabel;
@@ -1062,7 +1065,11 @@ class MapManager {
   syncSpotMapButton(cityId, index, isMapped) {
     const card = document.querySelector(`[data-city-id="${cityId}"][data-spot-index="${index}"]`);
     const button = card?.querySelector("[data-map-focus-spot]");
-    if (button) button.disabled = !isMapped;
+    if (!button) return;
+    button.disabled = false;
+    button.dataset.mapReady = String(Boolean(isMapped));
+    button.textContent = isMapped ? "🗺️ 在地圖查看" : "↗ Google 地圖搜尋";
+    button.title = isMapped ? "在城市地圖定位此景點" : "此景點尚無可信座標，將以 Google 地圖搜尋";
   }
   focusSpot(cityId, index) {
     const entry = this.citySpotMarkers.get(`${cityId}:${index}`);
