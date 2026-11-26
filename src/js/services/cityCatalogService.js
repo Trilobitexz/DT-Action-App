@@ -1,4 +1,10 @@
 (function () {
+  const appVersion = (() => {
+    const script = [...document.scripts].find(item => item.src.includes("cityCatalogService.js"));
+    try { return new URL(script?.src || location.href, document.baseURI).searchParams.get("v") || "1"; }
+    catch (error) { return "1"; }
+  })();
+
   window.CityCatalogService = {
     cache: new Map(),
     spotCache: new Map(),
@@ -6,6 +12,76 @@
     cityRequests: new Map(),
     prebuiltCityRequests: new Map(),
     failedCityReads: new Map(),
+    spotCacheDbPromise: null,
+    spotCacheTtlMs: 14 * 24 * 60 * 60 * 1000,
+    spotCacheMaxStaleMs: 180 * 24 * 60 * 60 * 1000,
+    getSpotCacheDb: function () {
+      if (!window.indexedDB) return Promise.resolve(null);
+      if (this.spotCacheDbPromise) return this.spotCacheDbPromise;
+      this.spotCacheDbPromise = new Promise(resolve => {
+        let request;
+        try { request = window.indexedDB.open("journey-atlas-city-cache", 1); }
+        catch (error) { resolve(null); return; }
+        request.onupgradeneeded = () => {
+          if (!request.result.objectStoreNames.contains("citySpots")) request.result.createObjectStore("citySpots", { keyPath: "cityId" });
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => resolve(null);
+        request.onblocked = () => resolve(null);
+      });
+      return this.spotCacheDbPromise;
+    },
+    readSpotCache: async function (cityId, legacyKey) {
+      const readLegacy = () => {
+        try { return JSON.parse(localStorage.getItem(legacyKey) || "null"); }
+        catch (error) { console.warn("城市景點舊快取無法讀取：", error); return null; }
+      };
+      let record = null;
+      try {
+        const db = await this.getSpotCacheDb();
+        if (db) record = await new Promise((resolve, reject) => {
+          const transaction = db.transaction("citySpots", "readwrite");
+          const request = transaction.objectStore("citySpots").get(String(cityId));
+          let value = null;
+          request.onsuccess = () => {
+            value = request.result || null;
+            if (value) transaction.objectStore("citySpots").put({ ...value, accessedAt: Date.now() });
+          };
+          request.onerror = () => reject(request.error);
+          transaction.oncomplete = () => resolve(value);
+          transaction.onerror = () => reject(transaction.error);
+        });
+      } catch (error) { console.warn("IndexedDB 城市景點快取讀取失敗，改用舊快取。", error); }
+      if (!record) record = readLegacy();
+      if (!Array.isArray(record?.spots) || !Number.isFinite(record.fetchedAt)) return null;
+      const age = Date.now() - record.fetchedAt;
+      if (age > this.spotCacheMaxStaleMs) return null;
+      return { ...record, isStale: age > this.spotCacheTtlMs };
+    },
+    writeSpotCache: async function (cityId, legacyKey, record) {
+      const normalized = { ...record, cityId: String(cityId), schemaVersion: 1, accessedAt: Date.now() };
+      try {
+        const db = await this.getSpotCacheDb();
+        if (!db) throw new Error("瀏覽器不支援 IndexedDB");
+        await new Promise((resolve, reject) => {
+          const transaction = db.transaction("citySpots", "readwrite");
+          const store = transaction.objectStore("citySpots");
+          store.put(normalized);
+          const all = store.getAll();
+          all.onsuccess = () => {
+            const records = (all.result || []).sort((a, b) => Number(b.accessedAt || b.fetchedAt) - Number(a.accessedAt || a.fetchedAt));
+            records.slice(40).forEach(item => store.delete(item.cityId));
+          };
+          transaction.oncomplete = resolve;
+          transaction.onerror = () => reject(transaction.error);
+          transaction.onabort = () => reject(transaction.error || new Error("IndexedDB 快取交易中止"));
+        });
+        try { localStorage.removeItem(legacyKey); } catch (error) { /* IndexedDB remains authoritative. */ }
+      } catch (error) {
+        try { localStorage.setItem(legacyKey, JSON.stringify(record)); }
+        catch (storageError) { console.warn("城市景點快取寫入失敗；資料仍可由來源重新載入。", storageError); }
+      }
+    },
     waitForFirestore: function () {
       if (window.firebaseFirestore) return Promise.resolve(window.firebaseFirestore);
       return new Promise(resolve => {
@@ -127,7 +203,7 @@
       const continentId = this.getCityContinentId(city);
       if (!city?.id || !continentId) return Promise.resolve([]);
       if (!this.prebuiltCityRequests.has(continentId)) {
-        const request = fetch(`src/data/city-spots/${encodeURIComponent(continentId)}.json?v=100`)
+        const request = fetch(`src/data/city-spots/${encodeURIComponent(continentId)}.json?v=${appVersion}`)
           .then(response => response.ok ? response.json() : {})
           .catch(error => {
             console.warn(`無法載入${continentId}精選景點資料：`, error);
@@ -209,21 +285,21 @@
 
       const request = (async () => {
         const localKey = `journey-atlas-city-spots-v2-${key}`;
-        let saved = null;
-        try {
-          const rawCache = localStorage.getItem(localKey);
-          saved = JSON.parse(rawCache || "null");
-          if (!Array.isArray(saved?.spots) || !Number.isFinite(saved?.fetchedAt)
-            || Date.now() - saved.fetchedAt > 14 * 24 * 60 * 60 * 1000) {
-            saved = null;
-            if (rawCache) localStorage.removeItem(localKey);
-          }
-        } catch (error) {
-          console.warn("城市景點快取無法讀取：", error);
+        let cacheReadTimer;
+        const [saved, prebuiltSpots] = await Promise.all([
+          Promise.race([
+            this.readSpotCache(key, localKey),
+            new Promise(resolve => { cacheReadTimer = window.setTimeout(() => resolve(null), 300); })
+          ]).finally(() => window.clearTimeout(cacheReadTimer)),
+          this.fetchPrebuiltSpots(city)
+        ]);
+        if (saved && !saved.cityId) {
+          this.writeSpotCache(key, localKey, { fetchedAt: saved.fetchedAt, source: saved.source || "舊版本機快取", spots: saved.spots }).catch(error => {
+            console.warn("遷移舊版城市景點快取失敗：", error);
+          });
         }
-
+        if (saved) city.spotsCacheMeta = { fetchedAt: saved.fetchedAt, source: saved.source || "離線快取", stale: saved.isStale === true };
         const cachedSpots = Array.isArray(saved?.spots) ? saved.spots : [];
-        const prebuiltSpots = await this.fetchPrebuiltSpots(city);
         if (prebuiltSpots.length) {
           const instantSpots = this.sortSpotsByQuality(this.mergeSpots(prebuiltSpots, city.spots || [], cachedSpots, city.spotCandidates || []));
           city.spots = instantSpots;
@@ -307,9 +383,15 @@
         city.spotsSource = cloudSpots.length ? "firestore" : liveSpots.length ? "live" : saved ? "cached" : prebuiltSpots.length ? "prebuilt" : "local-or-map-search";
         city.dataStatus = { ...(city.dataStatus || {}), spots: spots.some(spot => !spot.isSearchSuggestion) ? "available" : "map-search-fallback" };
         this.spotCache.set(key, spots);
-        if (liveSpots.length) {
-          try { localStorage.setItem(localKey, JSON.stringify({ fetchedAt: Date.now(), spots: liveSpots })); }
-          catch (error) { console.warn("城市景點快取無法寫入：", error); }
+        const refreshSucceeded = Boolean(cloudCatalog) || liveSpots.length > 0;
+        if (refreshSucceeded) {
+          const source = cloudSpots.length ? "Firestore" : liveSpots.length ? "公開地圖資料" : prebuiltSpots.length ? "離線精選目錄" : "公開目錄";
+          const fetchedAt = Date.now();
+          city.spotsCacheMeta = { fetchedAt, source, stale: false };
+          await this.writeSpotCache(key, localKey, { fetchedAt, source, spots: spots.slice(0, 100) });
+        }
+        if (typeof onCatalogReady === "function") {
+          onCatalogReady(spots, { city: cloudCatalog?.city || null, source: "final", cacheMeta: city.spotsCacheMeta || null });
         }
         return spots;
       })().finally(() => this.spotRequests.delete(key));

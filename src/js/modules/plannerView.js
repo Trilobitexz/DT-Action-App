@@ -90,12 +90,81 @@ window.PlannerView = {
     const spots = [...(city?.spots || []), ...(city?.spotCandidates || [])];
     const seen = new Set();
     return spots.filter(spot => {
+      if (!(window.SpotTextService?.isTravelAttraction(spot) ?? true)) return false;
       const key = String(spot?.name || spot || "").normalize("NFKC").trim().toLocaleLowerCase()
         .replace(/[\s\p{P}]+/gu, "");
       if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;
     }).map(spot => typeof spot === "string" ? { name: spot, category: "景點" } : spot);
+  },
+  rankAIPlanningSpots: function (city, days) {
+    const all = this.getPlanningSpots(city).map((spot, index) => ({ spot, index, score: 0 }));
+    const real = all.filter(item => !item.spot.isSearchSuggestion);
+    const candidates = real.length >= days ? real : all;
+    const hasCoordinates = spot => Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lng));
+    candidates.forEach(item => {
+      const spot = item.spot;
+      item.score = (spot.isFeatured ? 2 : 0)
+        + (hasCoordinates(spot) ? 4 : 0)
+        + (/^https?:\/\//i.test(String(spot.sourceUrl || "")) ? 2 : 0)
+        + (String(spot.description || spot.summary || spot.note || "").trim().length >= 60 ? 2 : 0)
+        + (/^https?:\/\//i.test(String(spot.imageUrl || spot.image || "")) ? 1 : 0)
+        + (spot.openingHours ? 1 : 0)
+        - (spot.isSearchSuggestion ? 8 : 0);
+    });
+    const maxCandidates = Math.min(24, Math.max(days, days * 4));
+    return candidates.sort((a, b) => b.score - a.score || a.index - b.index)
+      .slice(0, maxCandidates).map(item => ({ ...item, key: this.getPlanningSpotKey(item.spot) }));
+  },
+  getPlanningSpotKey: function (spot) {
+    const name = String(spot?.name || "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+    const identity = spot?.id || spot?.wikidataId || spot?.sourceUrl || "";
+    const coordinates = Number.isFinite(Number(spot?.lat)) && Number.isFinite(Number(spot?.lng))
+      ? `${Number(spot.lat).toFixed(4)},${Number(spot.lng).toFixed(4)}` : "";
+    return `${identity}|${name}|${coordinates}`;
+  },
+  getAIPlanCacheKey: function (city, days, mode, preferences, spots) {
+    const input = JSON.stringify({ city: city.id, days, mode, preferences: String(preferences || "").trim(), spots: spots.map(spot => ({
+      key: this.getPlanningSpotKey(spot), category: spot.category || "", summary: spot.description || spot.summary || spot.note || "",
+      openingHours: spot.openingHours || "", imageUrl: spot.imageUrl || spot.image || "", featured: spot.isFeatured === true,
+      rating: spot.rating ?? null, ratingSource: spot.ratingSource || ""
+    })) });
+    let first = 2166136261;
+    let second = 0x9e3779b9;
+    for (let index = 0; index < input.length; index++) {
+      const code = input.charCodeAt(index);
+      first = Math.imul(first ^ code, 16777619);
+      second = Math.imul(second ^ code, 2246822519);
+    }
+    return `journey-atlas-ai-plan-v1-${city.id}-${(first >>> 0).toString(36)}${(second >>> 0).toString(36)}`;
+  },
+  readAIPlanCache: function (key, days, candidateCount) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(key) || "null");
+      if (!cached || Date.now() - cached.savedAt > 7 * 24 * 60 * 60 * 1000 || !Array.isArray(cached.response?.days)
+        || cached.response.days.length !== days) return null;
+      const seen = new Set();
+      for (const day of cached.response.days) {
+        if (!Array.isArray(day?.spotIndexes) || day.spotIndexes.length > 3 || (!day.spotIndexes.length && candidateCount >= days)) return null;
+        for (const index of day.spotIndexes) {
+          if (!Number.isInteger(index) || index < 0 || index >= candidateCount || seen.has(index)) return null;
+          seen.add(index);
+        }
+      }
+      return cached.response;
+    } catch (error) { return null; }
+  },
+  writeAIPlanCache: function (key, response) {
+    try {
+      localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), response }));
+      const keys = [];
+      for (let index = 0; index < localStorage.length; index++) {
+        const itemKey = localStorage.key(index);
+        if (itemKey?.startsWith("journey-atlas-ai-plan-v1-")) keys.push(itemKey);
+      }
+      if (keys.length > 12) keys.slice(0, keys.length - 12).forEach(itemKey => localStorage.removeItem(itemKey));
+    } catch (error) { console.warn("AI 行程快取無法寫入；本次規劃仍可使用。", error); }
   },
   compareIds: readStoredArray("journey-atlas-compare"),
   favoriteIds: readStoredArray("journey-atlas-favorites"),
@@ -466,6 +535,18 @@ window.PlannerView = {
   renderCityTools: function (city, state, country = null) {
     const host = document.getElementById("city-planner-tools");
     if (!host || !city) return;
+    const sourceBadge = document.querySelector(".city-insight-header .source-badge");
+    if (sourceBadge) {
+      const cacheMeta = city.spotsCacheMeta;
+      if (cacheMeta?.fetchedAt) {
+        const date = new Date(cacheMeta.fetchedAt).toLocaleDateString("zh-TW");
+        sourceBadge.textContent = cacheMeta.stale ? `較舊快取 · ${date}` : `資料快取 · ${date}`;
+        sourceBadge.title = `${cacheMeta.source || "城市景點目錄"}${cacheMeta.stale ? "（快取超過 14 天，顯示期間內可用資料）" : "（最近一次成功更新日期）"}`;
+      } else {
+        sourceBadge.textContent = city.spotsSource === "prebuilt" ? "離線精選資料" : "來源更新日期未提供";
+        sourceBadge.title = city.spotsSource === "prebuilt" ? "使用專案預先整理的城市景點資料。" : "此資料來源沒有提供一致的更新時間。";
+      }
+    }
     this.itineraryDays = 5;
     const compareKey = city.id;
     const selected = this.compareIds.includes(compareKey);
@@ -553,26 +634,47 @@ window.PlannerView = {
             usedCatalog = true;
           }
         }
-        const planningSpots = this.getPlanningSpots(city).slice(0, this.itineraryDays * 2);
+        const allPlanningSpots = this.getPlanningSpots(city);
+        const planningCandidates = this.rankAIPlanningSpots(city, this.itineraryDays);
+        const planningSpots = planningCandidates.map(item => item.spot);
         if (!planningSpots.length) throw new Error("尚未取得可安排的景點，請確認網路後再試。");
         const spotSelect = host.querySelector("#itinerary-spot-select");
-        if (spotSelect) spotSelect.innerHTML = planningSpots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}</option>`).join("");
+        if (spotSelect) spotSelect.innerHTML = allPlanningSpots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}</option>`).join("");
+        const preferences = host.querySelector("#itinerary-ai-preferences")?.value || "";
+        const travelMode = this.travelModes[modeSelect?.value || this.getRecommendedTravelMode(city)];
+        const planCacheKey = this.getAIPlanCacheKey(city, this.itineraryDays, travelMode, preferences, planningSpots);
+        let response = this.readAIPlanCache(planCacheKey, this.itineraryDays, planningSpots.length);
+        const usedPlanCache = Boolean(response);
         status.textContent = usedCatalog
-          ? "AI 正在依照城市景點與偏好安排行程…"
-          : "AI 正在依照目前已載入的景點與偏好安排行程…";
-        const response = await window.FirebaseAIPlanner.generateItinerary({
-          cityName: city.name,
-          days: this.itineraryDays,
-          travelMode: this.travelModes[modeSelect?.value || this.getRecommendedTravelMode(city)],
-          preferences: host.querySelector("#itinerary-ai-preferences")?.value || "",
-          spots: planningSpots
-        });
-        this.saveItinerary(city, this.itineraryDays, response.days.map(day => day.spotIndexes), response.days);
+          ? (usedPlanCache ? "載入已驗證的行程快取…" : "AI 正在依照城市景點與偏好安排行程…")
+          : (usedPlanCache ? "載入已驗證的行程快取…" : "AI 正在依照目前已載入的景點與偏好安排行程…");
+        if (!response) {
+          response = await window.FirebaseAIPlanner.generateItinerary({
+            cityName: city.name,
+            days: this.itineraryDays,
+            travelMode,
+            preferences,
+            spots: planningSpots
+          });
+          this.writeAIPlanCache(planCacheKey, response);
+        }
+        const currentIndexes = new Map(allPlanningSpots.map((spot, index) => [this.getPlanningSpotKey(spot), index]));
+        const selectedDays = response.days.map(day => day.spotIndexes
+          .map(candidateIndex => currentIndexes.get(planningCandidates[candidateIndex]?.key))
+          .filter(index => Number.isInteger(index)));
+        if (selectedDays.some(day => !day.length) && planningSpots.length >= this.itineraryDays) {
+          throw new Error("AI 沒有為每一天選到有效景點，請再試一次。");
+        }
+        this.saveItinerary(city, this.itineraryDays, selectedDays, response.days);
         this.renderItinerary(city, this.itineraryDays);
         status.dataset.state = "success";
-        status.textContent = planningSpots.some(spot => spot.isSearchSuggestion)
-          ? `已完成 ${this.itineraryDays} 天 AI 行程；含地圖搜尋建議，請開啟連結挑選實際地點。`
-          : "已完成 " + this.itineraryDays + " 天 AI 行程，可拖曳景點調整順序。";
+        const selectedCount = selectedDays.reduce((sum, day) => sum + day.length, 0);
+        const hasSuggestions = selectedDays.flat().some(index => allPlanningSpots[index]?.isSearchSuggestion);
+        const unplannedCount = Math.max(0, planningSpots.length - selectedCount);
+        const cacheLabel = usedPlanCache ? "（使用已驗證快取）" : "";
+        status.textContent = hasSuggestions
+          ? `AI 已從 ${planningSpots.length} 筆候選挑選 ${selectedCount} 個景點${cacheLabel}；含地圖搜尋建議，請開啟連結確認實際地點。`
+          : `AI 已從 ${planningSpots.length} 筆候選挑選 ${selectedCount} 個景點，安排為 ${this.itineraryDays} 天行程${cacheLabel}；${unplannedCount ? `另有 ${unplannedCount} 筆候選未安排，可從手動新增清單挑選。` : "所有候選均已安排。"}`;
       } catch (error) {
         console.error("AI 行程規劃失敗：", error);
         status.dataset.state = "error";
@@ -669,12 +771,15 @@ window.PlannerView = {
     const spots = this.getPlanningSpots(city);
     const custom = this.getItinerary(city, days);
     const aiDayPlans = this.getItineraryMeta(city, days);
+    const isAIItinerary = aiDayPlans.length === days;
     const customSet = new Set(custom.flat());
     const daySpotLists = [];
     const recommendation = document.getElementById("itinerary-mode-recommendation");
     if (recommendation) recommendation.textContent = `依城市建議：${this.travelModes[this.getRecommendedTravelMode(city)]}`;
     result.innerHTML = plan.map((day, dayIndex) => {
-      const orderedSpots = custom[dayIndex].length
+      const orderedSpots = isAIItinerary
+        ? (custom[dayIndex] || []).map(index => ({ index, spot: spots[index] })).filter(item => item.spot)
+        : custom[dayIndex].length
         ? custom[dayIndex].map(index => ({ index, spot: spots[index] })).filter(item => item.spot)
         : spots.map((spot, index) => ({ index, spot })).filter(item => !customSet.has(item.index) && item.index % days === dayIndex).slice(0, 3);
       daySpotLists[dayIndex] = orderedSpots;
@@ -773,6 +878,7 @@ window.PlannerView = {
 
   getOrderedDaySpotIndexes: function (city, days, dayIndex) {
     const saved = this.getItinerary(city, days);
+    if (this.getItineraryMeta(city, days).length === days) return [...(saved[dayIndex] || [])];
     if (saved[dayIndex]?.length) return [...saved[dayIndex]];
     const custom = new Set(saved.flat());
     return this.getPlanningSpots(city).map((_, index) => index).filter(index => !custom.has(index) && index % days === dayIndex);

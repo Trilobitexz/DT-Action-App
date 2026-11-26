@@ -491,6 +491,7 @@ window.CountryView = {
         onCatalogReady: (publishedSpots, publishedCatalog) => {
           if (!isCurrentCity()) return;
           const catalogCityData = publishedCatalog.city || {};
+          currentCity.spotsCacheMeta = publishedCatalog.cacheMeta || catalogCity.spotsCacheMeta || currentCity.spotsCacheMeta;
           if ((!Number.isFinite(currentCity.lat) || !Number.isFinite(currentCity.lng))
             && Number.isFinite(catalogCityData.lat) && Number.isFinite(catalogCityData.lng)) {
             currentCity.lat = catalogCityData.lat;
