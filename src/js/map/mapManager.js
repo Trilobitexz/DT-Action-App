@@ -780,6 +780,7 @@ class MapManager {
         if (this.geojson.spots.features.filter(feature => feature.properties?.kind === "spot").length >= MapManager.MAX_CITY_SPOT_MARKERS) return;
         if (!Number.isFinite(spot?.lat) || !Number.isFinite(spot?.lng) || spot.lat === 0 || spot.lng === 0
           || spot.lat < -90 || spot.lat > 90 || spot.lng < -180 || spot.lng > 180) return;
+        spot = window.SpotTextService?.normalizeSpot(spot) || spot;
         const name = normalizeName(spot.name);
         if (!name || knownNames.has(name)) return;
         knownNames.add(name);
@@ -976,10 +977,11 @@ class MapManager {
       && Boolean(this.safeExternalUrl(airport.sourceUrl)));
   }
   getCitySpots(city) {
-    if (Array.isArray(city?.spots) && city.spots.length) return city.spots;
-    if (Array.isArray(city?.spotCandidates) && city.spotCandidates.length) return city.spotCandidates;
+    const normalize = items => items.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot);
+    if (Array.isArray(city?.spots) && city.spots.length) return normalize(city.spots);
+    if (Array.isArray(city?.spotCandidates) && city.spotCandidates.length) return normalize(city.spotCandidates);
     if (Array.isArray(city?.attractions) && city.attractions.length) {
-      return city.attractions.map(name => typeof name === "string" ? { name } : name);
+      return normalize(city.attractions.map(name => typeof name === "string" ? { name } : name));
     }
     return [];
   }

@@ -234,20 +234,20 @@ window.CountryView = {
     if (cityDescription) {
       const locationText = Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng)
         ? `座標 ${currentCity.lat.toFixed(4)}, ${currentCity.lng.toFixed(4)}`
-        : "座標資料載入中";
+        : "尚無已確認的座標";
       cityDescription.innerText = currentCity.descriptionSource?.text
         || (currentCity._citySummaryLookupFailed
           ? "目前找不到相符的城市百科摘要；景點清單與地圖仍可使用。"
-          : `${currentCity.name}（${currentCity.englishName}）位於${currentCity.countryName || country.name}，${locationText}。正在整理旅遊指南與百科資料。`);
+          : `${currentCity.name}（${currentCity.englishName}）位於${currentCity.countryName || country.name}，${locationText}。`);
     }
     const cityHeading = document.querySelector("#view-country .city-tabs-card h3");
     if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：${currentCity.destinationType === "island" ? "目的地資訊" : "城市資訊"}與景點資料`;
     const detail = document.getElementById("city-detail-facts");
     if (detail) {
       detail.innerHTML = `
-        <div><strong>📍 位置</strong><p>${currentCity.countryName || country.name} · ${Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? `${currentCity.lat.toFixed(4)}, ${currentCity.lng.toFixed(4)}` : "資料載入中"}</p></div>
+        <div><strong>📍 位置</strong><p>${currentCity.countryName || country.name} · ${Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? `${currentCity.lat.toFixed(4)}, ${currentCity.lng.toFixed(4)}` : "尚無已確認的座標"}</p></div>
         <div><strong>🧭 目的地類型</strong><p>${currentCity.destinationType === "island" ? "島嶼目的地" : "城市目的地"} · 可從地圖查看周邊公開地點</p></div>
-        <div><strong>📚 深度資料</strong><p>${currentCity.climateSource ? currentCity.climate : "旅遊指南、百科摘要與公開地圖資料正在載入，取得後會附上原始來源。"}</p></div>
+        <div><strong>📚 深度資料</strong><p>${currentCity.climateSource ? currentCity.climate : "城市介紹與氣候資料會在取得後顯示；目前景點與地圖仍可使用。"}</p></div>
       `;
     }
     if (detail && window.NationalInfoService && country.englishName) {
@@ -255,17 +255,23 @@ window.CountryView = {
       facts.className = "country-live-facts";
       facts.innerHTML = "<strong>🧳 行前資訊</strong><p>正在載入國家官方語言、時區與駕駛方向…</p>";
       detail.appendChild(facts);
+      const countryCodeFallback = country.id.startsWith("global-") ? country.name : country.id;
+      const factsDeadline = window.setTimeout(() => {
+        if (!facts.isConnected || state.selectedCityId !== currentCity.id || !facts.textContent.includes("正在載入")) return;
+        facts.textContent = `行前資訊暫時無法連線。幣別參考：${country.currency || "請依目的地確認"}；簽證請以官方公告為準。`;
+      }, 8000);
       const renderCountryFacts = info => {
         const languages = info.languages.length ? info.languages.join("、") : "未提供";
         const timezone = info.timezones.length ? info.timezones.slice(0, 3).join("、") + (info.timezones.length > 3 ? "…" : "") : "未提供";
         facts.replaceChildren();
         const heading = document.createElement("strong"); heading.textContent = "🧳 行前資訊";
         const text = document.createElement("p");
-        text.textContent = `官方語言：${languages} · 時區：${timezone} · 靠${info.drivingSide === "left" ? "左" : info.drivingSide === "right" ? "右" : "未提供"}行駛 · 國際電話：${info.callingCode || "未提供"} · 幣別：${(info.currencies || []).join("、") || country.currency || "未提供"}`;
+        text.textContent = `官方語言：${languages} · 時區：${timezone} · 靠${info.drivingSide === "left" ? "左" : info.drivingSide === "right" ? "右" : "未提供"}行駛 · 國際電話：${info.callingCode || "未提供"} · 幣別：${(info.currencies || []).join("、") || country.currency || "未提供"}${info.source === "offline" ? " · 離線參考" : ""}`;
         facts.append(heading, text);
       };
-      window.NationalInfoService.getCountry(country.englishName).then(info => {
+      window.NationalInfoService.getCountry(country.englishName, countryCodeFallback).then(info => {
         if (!facts.isConnected || state.selectedCityId !== currentCity.id) return;
+        window.clearTimeout(factsDeadline);
         if (info) { renderCountryFacts(info); return; }
         facts.replaceChildren();
         const heading = document.createElement("strong"); heading.textContent = "🧳 行前資訊";
@@ -275,7 +281,7 @@ window.CountryView = {
         retry.type = "button"; retry.className = "country-facts-retry"; retry.textContent = "重新載入行前資訊";
         retry.addEventListener("click", () => {
           retry.disabled = true; retry.textContent = "重新連線中…";
-          window.NationalInfoService.retryCountry(country.englishName).then(nextInfo => {
+          window.NationalInfoService.retryCountry(country.englishName, countryCodeFallback).then(nextInfo => {
             if (!facts.isConnected || state.selectedCityId !== currentCity.id) return;
             if (nextInfo) renderCountryFacts(nextInfo);
             else { retry.disabled = false; retry.textContent = "再試一次"; }
@@ -368,7 +374,7 @@ window.CountryView = {
       </div>
     `;
     spotsContainer.innerHTML = `${spots.slice(0, visibleSpotCount).map((spot, idx) => renderSpotCard(spot, idx)).join("")}${Array.from({ length: skeletonCount }, (_, index) => `<article class="spot-item spot-skeleton" aria-hidden="true"><span class="skeleton-media"></span><span class="skeleton-copy"><i></i><i></i><i></i></span><span class="skeleton-actions"><i></i><i></i></span></article>`).join("")}${spots.length > visibleSpotCount ? `<button type="button" class="spot-list-toggle" data-toggle-spots data-expanded="false">顯示其餘 ${spots.length - visibleSpotCount} 個景點</button>` : ""}`
-      || `<p class="spot-data-empty">正在整理 ${escapeHtml(currentCity.name)} 的景點靈感…</p>`;
+      || `<p class="spot-data-empty">${currentCity._spotCatalogReady ? `目前沒有可核實的景點資料，可改用地圖搜尋 ${escapeHtml(currentCity.name)}。` : `正在整理 ${escapeHtml(currentCity.name)} 的景點靈感…`}</p>`;
     if (currentCity._spotCatalogReady && currentCity.spotsSource === "local-or-map-search") {
       const retry = document.createElement("button");
       retry.type = "button";
@@ -456,7 +462,7 @@ window.CountryView = {
     };
     const catalogCity = currentCity.catalogSourceCity || currentCity;
     if (window.CityCatalogService?.ensureSpots && !catalogCity._spotCatalogReady) {
-      window.CityCatalogService.ensureSpots(catalogCity, {
+      const catalogLoad = window.CityCatalogService.ensureSpots(catalogCity, {
         onCatalogReady: (publishedSpots, publishedCatalog) => {
           if (!isCurrentCity()) return;
           const catalogCityData = publishedCatalog.city || {};
@@ -506,7 +512,12 @@ window.CountryView = {
             }
           }
         }
-      }).then(spots => {
+      });
+      let catalogTimer;
+      const catalogDeadline = new Promise((_, reject) => {
+        catalogTimer = window.setTimeout(() => reject(new Error("城市景點載入逾時，已切換備援搜尋")), 18000);
+      });
+      Promise.race([catalogLoad, catalogDeadline]).then(spots => {
         currentCity.spots = spots;
         currentCity._spotCatalogReady = true;
         currentCity.spotsSource = catalogCity.spotsSource;
@@ -518,7 +529,12 @@ window.CountryView = {
         }
       }).catch(error => {
         console.warn(`無法整理 ${currentCity.name} 的景點資料：`, error);
-      });
+        if (!isCurrentCity()) return;
+        currentCity.spots = window.CityCatalogService?.createMapSearchSuggestions(currentCity) || [];
+        currentCity._spotCatalogReady = true;
+        currentCity.spotsSource = "local-or-map-search";
+        window.CountryView.render(state);
+      }).finally(() => window.clearTimeout(catalogTimer));
     }
     if (!currentCity._citySummaryLookupStarted && !cityDescription?.textContent?.includes("正在向 OpenStreetMap") && cityDescription && window.SpotService?.fetchCitySummary
       && Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng)) {
