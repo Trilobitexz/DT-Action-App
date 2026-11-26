@@ -127,7 +127,7 @@
       const continentId = this.getCityContinentId(city);
       if (!city?.id || !continentId) return Promise.resolve([]);
       if (!this.prebuiltCityRequests.has(continentId)) {
-        const request = fetch(`src/data/city-spots/${encodeURIComponent(continentId)}.json?v=86`)
+        const request = fetch(`src/data/city-spots/${encodeURIComponent(continentId)}.json?v=87`)
           .then(response => response.ok ? response.json() : {})
           .catch(error => {
             console.warn(`無法載入${continentId}精選景點資料：`, error);

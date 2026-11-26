@@ -8,7 +8,7 @@
   "scope": "./",
   "icons": [
     {
-      "src": "./src/assets/app-icon.svg?v=86",
+      "src": "./src/assets/app-icon.svg?v=87",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
