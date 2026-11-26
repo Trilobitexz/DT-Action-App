@@ -2266,6 +2266,10 @@ body {
 .itinerary-load { margin-top: 0.5rem; padding: 0.35rem 0.5rem; border-radius: 6px; background: #eff8f2; color: #317355; font-size: 0.68rem; font-weight: 700; }
 .itinerary-load.is-busy { background: #fff1e8; color: #a34f28; }
 .itinerary-slot.itinerary-spot-card { display: grid; grid-template-columns: 1.2rem minmax(0, 1fr); gap: 0.45rem; align-items: start; padding: 0.55rem; border: 1px solid #eeeae3; border-radius: 8px; background: #fff; cursor: grab; transition: border-color .15s, background .15s, transform .15s; }
+.itinerary-slot.itinerary-spot-card { grid-template-columns: 1.2rem minmax(0, 1fr) auto; }
+.itinerary-reorder-controls { display: grid; gap: .2rem; }
+.itinerary-reorder-controls button { width: 2rem; min-height: 2rem; border: 1px solid #e6e5df; border-radius: .55rem; background: #fff; color: var(--text-main); font: inherit; cursor: pointer; }
+.itinerary-reorder-controls button:hover, .itinerary-reorder-controls button:focus-visible { border-color: var(--primary); background: var(--primary-light); }
 .itinerary-spot-card:active { cursor: grabbing; }
 .itinerary-spot-card.is-dragging { opacity: .45; }
 .itinerary-spot-card.drop-target { border-color: var(--primary); background: #fff7f2; transform: translateY(2px); }

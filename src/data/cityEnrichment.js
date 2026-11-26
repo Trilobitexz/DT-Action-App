@@ -135,6 +135,17 @@
         sourceUrl: geonamesRecord.sourceUrl,
         matchDistanceKm: geonamesRecord.matchDistanceKm
       };
+    } else {
+      const catalogCoordinate = window.CITY_COORDINATES?.[city.id];
+      if (catalogCoordinate && Number.isFinite(catalogCoordinate.lat) && Number.isFinite(catalogCoordinate.lng)) {
+        city.lat = catalogCoordinate.lat;
+        city.lng = catalogCoordinate.lng;
+        city.coordinateSource = {
+          provider: "Journey Atlas verified offline gazetteer",
+          sourceUrl: catalogCoordinate.sourceUrl || "",
+          checkedAt: window.CITY_COORDINATES_SOURCE?.generatedAt || ""
+        };
+      }
     }
     const sourceSpots = localCity?.spots?.length
       ? localCity.spots

@@ -513,6 +513,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (params.continentId !== undefined) state.selectedContinentId = params.continentId;
     if (params.countryId !== undefined) state.selectedCountryId = params.countryId;
     if (params.cityId !== undefined) state.selectedCityId = params.cityId;
+    if (viewName === "continent" && params.filters) state.filters = { ...state.filters, ...params.filters };
 
     if (viewName === "world") {
       state.selectedContinentId = null;
@@ -545,6 +546,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (state.selectedCountryId) routeParams.set("country", state.selectedCountryId);
       if (state.selectedCityId) routeParams.set("city", state.selectedCityId);
       if (state.globalCityId) routeParams.set("global", state.globalCityId);
+      if (viewName === "continent") {
+        if (state.filters.search) routeParams.set("q", state.filters.search);
+        if (state.filters.directOnly) routeParams.set("direct", "1");
+        if (state.filters.budgetAffordable) routeParams.set("budget", "1");
+      }
       if (viewName === "highlight-detail") {
         routeParams.set("group", highlightGroupId || "");
         routeParams.set("item", String(highlightItemIndex));
@@ -807,6 +813,16 @@ document.addEventListener("DOMContentLoaded", () => {
       globalSearch.setAttribute("aria-expanded", "false");
     }
   });
+  window.syncFilterHash = function (filters) {
+    const route = new URLSearchParams(window.location.hash.slice(1));
+    if (route.get("view") !== "continent") return;
+    ["q", "direct", "budget"].forEach(key => route.delete(key));
+    if (filters.search) route.set("q", filters.search);
+    if (filters.directOnly) route.set("direct", "1");
+    if (filters.budgetAffordable) route.set("budget", "1");
+    window.history.replaceState(null, "", `#${route.toString()}`);
+  };
+
   const readRoute = () => {
     const route = new URLSearchParams(window.location.hash.slice(1));
     const view = route.get("view");
@@ -816,7 +832,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!["world", "continent", "country"].includes(view)) return null;
     if (view === "world") return { viewName: "world" };
     if (view === "continent" && route.get("continent")) {
-      return { viewName: "continent", params: { continentId: route.get("continent") } };
+      return { viewName: "continent", params: { continentId: route.get("continent"), filters: {
+        search: route.get("q") || "",
+        directOnly: route.get("direct") === "1",
+        budgetAffordable: route.get("budget") === "1"
+      } } };
     }
     if (view === "country") {
       if (route.get("global")) {

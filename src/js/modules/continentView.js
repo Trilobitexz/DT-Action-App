@@ -25,17 +25,20 @@ window.ContinentView = {
       searchDebounce = setTimeout(() => {
         state.filters.search = e.target.value.trim().toLowerCase();
         this.applyFilters(state);
+        window.syncFilterHash?.(state.filters);
       }, 250);
     };
 
     checkDirect.onchange = (e) => {
       state.filters.directOnly = e.target.checked;
       this.applyFilters(state);
+      window.syncFilterHash?.(state.filters);
     };
 
     checkBudget.onchange = (e) => {
       state.filters.budgetAffordable = e.target.checked;
       this.applyFilters(state);
+      window.syncFilterHash?.(state.filters);
     };
 
     this.applyFilters(state);
@@ -52,6 +55,7 @@ window.ContinentView = {
       clearFiltersButton.addEventListener("click", () => {
         state.filters = { search: "", directOnly: false, budgetAffordable: false };
         this.render(state);
+        window.syncFilterHash?.(state.filters);
         document.getElementById("country-search-input")?.focus();
       });
     }

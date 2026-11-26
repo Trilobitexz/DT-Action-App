@@ -71,6 +71,7 @@ for (let offset = 0; offset < cities.length; offset += concurrency) {
       }
     });
     if (validCount < minimumSpotsPerCity) problems.push(`只有 ${validCount} 筆有效景點（至少需要 ${minimumSpotsPerCity} 筆）`);
+    if (invalidCount > 0) problems.push(`包含 ${invalidCount} 筆無效景點文件`);
     return { city, problems, validCount, invalidCount };
   }));
   results.forEach(result => {

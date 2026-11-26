@@ -689,6 +689,7 @@ window.PlannerView = {
               <small class="itinerary-transport">🚉 ${spot.isSearchSuggestion ? "搜尋附近實際景點" : `${escapePlannerText(travel)} · ${this.travelModes[mode]}`}${spot.isSearchSuggestion && spot.sourceUrl ? ` <a href="${escapePlannerText(spot.sourceUrl)}" target="_blank" rel="noopener noreferrer">開啟地圖搜尋</a>` : order ? ` <a href="${routeUrl}" target="_blank" rel="noopener noreferrer">查看路線</a>` : ""}</small>
               <small>⏱ 建議停留 ${duration} 小時</small><small class="itinerary-opening">🕒 ${escapePlannerText(opening)}　📅 ${escapePlannerText(closed)}</small>
               ${!spot.openingHours || !spot.closedDays ? `<small class="itinerary-data-warning">營業／休館資訊未驗證，出發前請查官方公告。</small>` : ""}</div>
+              <span class="itinerary-reorder-controls"><button type="button" data-move-spot="up" aria-label="${escapePlannerText(spot.name)}往前移">↑</button><button type="button" data-move-spot="down" aria-label="${escapePlannerText(spot.name)}往後移">↓</button></span>
             </div>`;
           }).join("") : `<p class="itinerary-empty-day">尚未安排景點，可從上方加入。</p>`}
         </div>
@@ -741,6 +742,19 @@ window.PlannerView = {
         this.saveItinerary(city, days, itinerary);
         this.renderItinerary(city, days);
       });
+      card.querySelectorAll("[data-move-spot]").forEach(button => button.addEventListener("click", event => {
+        event.stopPropagation();
+        const dayIndex = Number(card.dataset.dayIndex);
+        const order = this.getOrderedDaySpotIndexes(city, days, dayIndex);
+        const from = order.indexOf(Number(card.dataset.spotIndex));
+        const target = from + (button.dataset.moveSpot === "up" ? -1 : 1);
+        if (from < 0 || target < 0 || target >= order.length) return;
+        order.splice(target, 0, order.splice(from, 1)[0]);
+        const itinerary = this.getItinerary(city, days);
+        itinerary[dayIndex] = order;
+        this.saveItinerary(city, days, itinerary);
+        this.renderItinerary(city, days);
+      }));
     });
     result.querySelectorAll("[data-clear-day]").forEach(button => button.addEventListener("click", () => {
       const itinerary = this.getItinerary(city, days);
