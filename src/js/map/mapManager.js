@@ -1006,17 +1006,11 @@ class MapManager {
     const openingHours = spot.openingHours ? `<span>開放時間：${this.escapePopupText(spot.openingHours)}</span>` : "";
     const websiteUrl = this.safeExternalUrl(spot.website);
     const website = websiteUrl ? `<a href="${this.escapePopupText(websiteUrl)}" target="_blank" rel="noopener noreferrer">官方網站／資訊</a>` : "";
-    return `<div class="map-spot-popup"><strong>#${index + 1} ${this.escapePopupText(detail?.title || spot.name)}</strong><span>${this.escapePopupText(spot.category || "景點")}${rating ? ` · ${rating}` : ""}</span>${ratingLink}<p>${this.escapePopupText(detail?.extract || spot.note || "尚無補充說明")}</p>${address}${openingHours}${website}${sourceLink}<button type="button" data-map-spot-index="${index}">查看景點詳細資訊</button></div>`;
+    return `<div class="map-spot-popup"><strong>#${index + 1} ${this.escapePopupText(detail?.title || spot.name)}</strong><span>${this.escapePopupText(spot.category || "景點")}${rating ? ` · ${rating}` : ""}</span>${ratingLink}<p>${this.escapePopupText(detail?.extract || spot.note || "尚無補充說明")}</p>${address}${openingHours}${website}${sourceLink}</div>`;
   }
   openSpotPopup(feature) {
     const p = feature.properties || {}, entry = this.citySpotMarkers.get(`${p.cityId}:${p.index}`); if (!entry) return;
-    const popup = this.showMapPopup(`spot:${p.cityId}:${p.index}`, new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates).setHTML(this.createSpotPopup(entry.city, entry.spot, entry.index, entry.detail)));
-    if (!popup) return;
-    popup.getElement().querySelector("[data-map-spot-index]")?.addEventListener("click", () => {
-      const card = document.querySelector(`[data-city-id="${entry.city.id}"][data-spot-index="${entry.index}"]`);
-      card?.scrollIntoView({ behavior: this.prefersReducedMotion ? "auto" : "smooth", block: "center" }); card?.classList.add("spot-item-map-focus");
-      window.setTimeout(() => card?.classList.remove("spot-item-map-focus"), 1600); popup.remove();
-    });
+    this.showMapPopup(`spot:${p.cityId}:${p.index}`, new window.maplibregl.Popup({ closeButton: true, maxWidth: "300px" }).setLngLat(feature.geometry.coordinates).setHTML(this.createSpotPopup(entry.city, entry.spot, entry.index, entry.detail)));
   }
   setSpotHover(cityId, index, active) {
     const marker = [...this.cityContextDomMarkers.values()].find(item => {
