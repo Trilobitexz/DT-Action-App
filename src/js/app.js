@@ -24,11 +24,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!mapHeroCard || !target || mapHeroCard.parentElement === target) return;
     target.appendChild(mapHeroCard);
     window.requestAnimationFrame(() => {
+      // Map placement only owns the map's layout refresh. Page scrolling belongs to navigateTo().
       mapManager.invalidateSize();
-      const mapElement = document.getElementById("leaflet-map");
-      const mapTop = mapElement?.getBoundingClientRect().top ?? 0;
-      const headerHeight = document.querySelector(".app-header")?.getBoundingClientRect().height ?? 0;
-      window.scrollTo({ top: window.scrollY + mapTop - headerHeight - 12, behavior: "smooth" });
     });
   };
   const updateMapContextControls = viewName => {
@@ -154,14 +151,6 @@ document.addEventListener("DOMContentLoaded", () => {
   mapContextInfo?.addEventListener("change", event => {
     if (event.target?.id === "map-spot-category-filter") {
       mapManager.filterCitySpots(event.target.value);
-    }
-  });
-  document.getElementById("btn-map-back")?.addEventListener("click", () => {
-    if (state.currentView === "country") {
-      if (state.selectedContinentId) navigateTo("continent", { continentId: state.selectedContinentId });
-      else navigateTo("world");
-    } else {
-      navigateTo("world");
     }
   });
   window.PlannerView?.init();
