@@ -211,3 +211,11 @@
 - `node scripts/audit-city-spots.mjs` 通過：839 筆 AI 候選，缺來源、座標、介紹、短介紹、超距、非景點、重複名稱及城市中心錯置均為 0；缺可核實圖片 50 筆，使用分類替代圖。
 - `node --check`（spotTextService.js、plannerView.js、firebase.js、smoke-ai-planning.mjs）及 `git diff --check` 通過。未以登入帳戶呼叫真實 Firebase AI Logic。
 - GitHub Pages workflow #46030966449 對應提交 `baf0b4d` 並成功；正式頁回應 HTTP 200，HTML 載入 v126 資源。AI 真實登入流程仍待以使用者帳戶實測。
+
+## v127 已保存行程景點對應
+
+- 發現 AI／手動行程保存清單索引，城市目錄更新或排序變更後可能顯示不同景點；舊 AI 行程也沒有可用資訊判斷歷史索引是否仍正確。
+- 新行程保存每個已選景點的穩定名稱鍵，載入時依目前清單重新對應索引。舊 AI 計畫缺少穩定鍵時不使用不確定的索引；景點已從目錄消失時清除該項並顯示更新提示。
+- 複製與列印遇到過期或無法對應的景點時會回報需重新產生，不會匯出其他清單項目冒充原行程。
+- `node scripts/smoke-ai-planning.mjs` 覆蓋清單重排重新對應、缺少穩定鍵的舊 AI 行程，以及景點已移除的失效鍵案例；語法檢查與 `git diff --check` 通過。
+- 待提交、推送並確認 GitHub Pages 部署結果。

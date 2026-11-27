@@ -894,11 +894,12 @@ window.PlannerView = {
     const custom = this.getItinerary(city, days);
     const aiDayPlans = this.getItineraryMeta(city, days);
     const isAIItinerary = aiDayPlans.length === days;
+    const itineraryIdentityWarning = this.getItineraryIdentityWarning(city, days);
     const customSet = new Set(custom.flat());
     const daySpotLists = [];
     const recommendation = document.getElementById("itinerary-mode-recommendation");
     if (recommendation) recommendation.textContent = `依城市建議：${this.travelModes[this.getRecommendedTravelMode(city)]}`;
-    result.innerHTML = plan.map((day, dayIndex) => {
+    result.innerHTML = `${itineraryIdentityWarning ? `<p class="itinerary-data-warning" role="status">${escapePlannerText(itineraryIdentityWarning)}</p>` : ""}${plan.map((day, dayIndex) => {
       const orderedSpots = isAIItinerary
         ? (custom[dayIndex] || []).map(index => ({ index, spot: spots[index] })).filter(item => item.spot)
         : custom[dayIndex].length
@@ -935,7 +936,7 @@ window.PlannerView = {
 
         </div>
       </details>`;
-    }).join("");
+    }).join("")}`;
 
     const dayCards = [...result.querySelectorAll("[data-itinerary-day]")];
     const syncDayMap = dayIndex => {
@@ -1179,12 +1180,47 @@ window.PlannerView = {
     return "優先使用地鐵／公車，景點間預留 30–45 分鐘";
   },
 
+  getItinerarySpotKey: function (spot) {
+    return String(spot?.name || "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+  },
+
+  getItineraryIdentityWarning: function (city, days) {
+    const stored = readStoredJson(this.itineraryStorageKey, {});
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) return "";
+    const aliases = Object.entries(window.TRAVEL_DATA.globalCityAliases || {});
+    const legacyId = aliases.find(([, canonicalId]) => canonicalId === city.id)?.[0];
+    const savedCity = stored[city.id] || stored[legacyId];
+    if (!savedCity || typeof savedCity !== "object") return "";
+    const keysKey = `${days}SpotKeys`;
+    const keysByDay = savedCity[keysKey];
+    const aiMeta = savedCity[`${days}Meta`];
+    if (Array.isArray(aiMeta) && aiMeta.length === days && !Array.isArray(keysByDay)) {
+      return "這份舊版 AI 行程沒有保存景點對應資料；為避免顯示錯誤景點，請重新產生行程。";
+    }
+    if (!Array.isArray(keysByDay)) return "";
+    const currentKeys = new Set(this.getPlanningSpots(city).map(spot => this.getItinerarySpotKey(spot)));
+    const missingCount = keysByDay.flatMap(day => Array.isArray(day) ? day : [])
+      .filter(key => key && !currentKeys.has(key)).length;
+    return missingCount
+      ? `已保存的行程有 ${missingCount} 個景點目前不在資料清單中；請重新載入景點或產生新行程，避免使用過期資料。`
+      : "";
+  },
+
   getItinerary: function (city, days) {
     const stored = readStoredJson(this.itineraryStorageKey, {});
     if (!stored || typeof stored !== "object" || Array.isArray(stored)) return Array.from({ length: days }, () => []);
     const aliases = Object.entries(window.TRAVEL_DATA.globalCityAliases || {});
     const legacyId = aliases.find(([, canonicalId]) => canonicalId === city.id)?.[0];
-    const saved = (stored[city.id] || stored[legacyId])?.[days];
+    const savedCity = stored[city.id] || stored[legacyId];
+    const saved = savedCity?.[days];
+    const keysByDay = savedCity?.[`${days}SpotKeys`];
+    if (Array.isArray(keysByDay)) {
+      const currentIndexes = new Map(this.getPlanningSpots(city).map((spot, index) => [this.getItinerarySpotKey(spot), index]));
+      return Array.from({ length: days }, (_, index) => (Array.isArray(keysByDay[index]) ? keysByDay[index] : [])
+        .map(key => currentIndexes.get(key)).filter(Number.isInteger));
+    }
+    const aiMeta = savedCity?.[`${days}Meta`];
+    if (Array.isArray(aiMeta) && aiMeta.length === days) return Array.from({ length: days }, () => []);
     return Array.from({ length: days }, (_, index) => Array.isArray(saved?.[index]) ? saved[index] : []);
   },
 
@@ -1216,7 +1252,12 @@ window.PlannerView = {
   saveItinerary: function (city, days, itinerary, aiDayPlans, departureDate) {
     const parsed = readStoredJson(this.itineraryStorageKey, {});
     const stored = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-    stored[city.id] = { ...(stored[city.id] || {}), [days]: itinerary };
+    const spots = this.getPlanningSpots(city);
+    const safeItinerary = Array.from({ length: days }, (_, dayIndex) => (Array.isArray(itinerary?.[dayIndex]) ? itinerary[dayIndex] : [])
+      .map(index => Number.isInteger(index) ? index : -1)
+      .filter(index => index >= 0 && index < spots.length));
+    const spotKeysByDay = safeItinerary.map(day => day.map(index => this.getItinerarySpotKey(spots[index])).filter(Boolean));
+    stored[city.id] = { ...(stored[city.id] || {}), [days]: safeItinerary, [`${days}SpotKeys`]: spotKeysByDay };
     if (departureDate !== undefined) {
       const startDate = normalizePlannerDate(departureDate);
       if (startDate) stored[city.id].departureDate = startDate;
@@ -1252,6 +1293,8 @@ window.PlannerView = {
   },
 
   getItineraryText: function (city, days) {
+    const identityWarning = this.getItineraryIdentityWarning(city, days);
+    if (identityWarning) return `${city.name} ${days} 日行程\n\n${identityWarning}`;
     const mode = typeof document !== "undefined" ? (document.querySelector("#itinerary-travel-mode")?.value || this.getRecommendedTravelMode(city)) : this.getRecommendedTravelMode(city);
     const aiDayPlans = this.getItineraryMeta(city, days);
     const planningSpots = this.getPlanningSpots(city);

@@ -4,6 +4,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+let storedItineraryJson = null;
 const sandbox = {
   window: {
     TRAVEL_DATA: { globalCities: [], countries: [], globalCityAliases: {} },
@@ -12,7 +13,10 @@ const sandbox = {
   },
   document: { scripts: [], baseURI: "https://journey-atlas.invalid/" },
   location: { href: "https://journey-atlas.invalid/" },
-  localStorage: { getItem: () => null, setItem: () => {} },
+  localStorage: {
+    getItem: key => key === "journey-atlas-itineraries" ? storedItineraryJson : null,
+    setItem: (key, value) => { if (key === "journey-atlas-itineraries") storedItineraryJson = value; }
+  },
   URL,
   console,
   setTimeout,
@@ -28,6 +32,53 @@ for (const relative of [
   "src/js/services/cityCatalogService.js"
 ]) {
   vm.runInNewContext(fs.readFileSync(path.join(root, relative), "utf8"), sandbox, { filename: relative });
+}
+
+const itinerarySpots = [
+  { name: "Riverside Garden", category: "自然與景觀", description: "A botanical garden preserves rare plants and offers shaded walking paths for visitors.", sourceUrl: "https://example.org/riverside-garden" },
+  { name: "Central Museum", category: "博物館", description: "This museum preserves regional history through permanent galleries and public exhibitions.", sourceUrl: "https://example.org/central-museum" }
+];
+const itineraryCity = { id: "itinerary-key-test", name: "測試城市", spots: itinerarySpots };
+const reorderedItineraryCity = { ...itineraryCity, spots: [...itinerarySpots].reverse() };
+const emptyDays = Array.from({ length: 5 }, () => []);
+const aiMeta = Array.from({ length: 5 }, () => ({ theme: "城市探索", note: "預留交通時間。" }));
+storedItineraryJson = JSON.stringify({
+  "itinerary-key-test": {
+    5: [[0], ...emptyDays.slice(1)],
+    "5SpotKeys": [["riversidegarden"], ...emptyDays.slice(1)],
+    "5Meta": aiMeta
+  }
+});
+const remappedItinerary = sandbox.window.PlannerView.getItinerary(reorderedItineraryCity, 5);
+if (remappedItinerary[0][0] !== 1 || sandbox.window.PlannerView.getItineraryIdentityWarning(reorderedItineraryCity, 5)) {
+  throw new Error("A saved itinerary did not follow its attraction after the catalog order changed.");
+}
+storedItineraryJson = JSON.stringify({
+  "itinerary-key-test": { 5: [[0], ...emptyDays.slice(1)], "5Meta": aiMeta }
+});
+if (sandbox.window.PlannerView.getItinerary(itineraryCity, 5).some(day => day.length)
+  || !sandbox.window.PlannerView.getItineraryIdentityWarning(itineraryCity, 5).includes("舊版 AI 行程")
+  || !sandbox.window.PlannerView.getItineraryText(itineraryCity, 5).includes("舊版 AI 行程")) {
+  throw new Error("A legacy AI itinerary without attraction identities was not safely withheld.");
+}
+storedItineraryJson = JSON.stringify({
+  "itinerary-key-test": {
+    5: [[0], ...emptyDays.slice(1)],
+    "5SpotKeys": [["removedattraction"], ...emptyDays.slice(1)],
+    "5Meta": aiMeta
+  }
+});
+if (sandbox.window.PlannerView.getItinerary(itineraryCity, 5).some(day => day.length)
+  || !sandbox.window.PlannerView.getItineraryIdentityWarning(itineraryCity, 5).includes("目前不在資料清單中")
+  || !sandbox.window.PlannerView.getItineraryText(itineraryCity, 5).includes("目前不在資料清單中")) {
+  throw new Error("A removed attraction was silently replaced by a different catalog index.");
+}
+storedItineraryJson = null;
+sandbox.window.PlannerView.saveItinerary(reorderedItineraryCity, 5, [[null, "1", 1.5, 1], ...emptyDays.slice(1)]);
+const savedIdentity = JSON.parse(storedItineraryJson)?.["itinerary-key-test"]?.["5SpotKeys"]?.[0]?.[0];
+const savedIndexes = JSON.parse(storedItineraryJson)?.["itinerary-key-test"]?.[5]?.[0];
+if (savedIdentity !== "riversidegarden" || savedIndexes?.length !== 1 || savedIndexes[0] !== 1) {
+  throw new Error("Saving an itinerary did not persist a stable identity or reject corrupt indexes.");
 }
 
 const prebuiltPath = path.join(root, "scripts", "data", "prebuilt-spots.json");

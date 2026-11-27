@@ -8,7 +8,7 @@
 
 ### 發布版本命名規則
 
-- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v126`，下一次發布時統一遞增為 `v127`。
+- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v127`，下一次發布時統一遞增為 `v128`。
 - 所有本地 CSS、JavaScript、城市資料、景點 JSON、manifest 與圖示的快取查詢參數使用相同的 `?v=N`，並在 `index.html`、`sw.js` 與程式內的動態靜態資料 URL 保持一致。
 - Service Worker 快取名稱使用 `journey-atlas-shell-vN`，與資源參數和發布提交訊息中的版本一致。更新 HTML 資源參數時，必須同步更新 Service Worker 的預快取清單及快取名稱。
 - 外部 CDN／API 使用供應商版本或 API URL，不改成專案版號；`index.html` 與 `sw.js` 自身不加查詢參數，避免影響導覽快取與 Service Worker 更新檢查。
@@ -237,6 +237,12 @@ AI 候選還必須具備有效座標、名稱、分類、40 字以上介紹，�
 - 規劃頁與 Firebase AI 呼叫共用景點資格驗證：必須有名稱、分類、HTTP(S) 來源、有效座標、至少 40 字介紹，且不得是搜尋建議或非觀光景點。
 - Firebase AI 服務收到不完整候選時會在產生提示與呼叫模型前拒絕整批輸入；不會移除項目後重排索引，避免 AI 回傳索引指向錯誤景點。
 - `node scripts/smoke-ai-planning.mjs` 覆蓋有效景點及缺來源、無效座標、短介紹、搜尋建議與一般車站等拒絕案例；離線資料維持 839 筆完整候選、200 城每城至少 3 筆。
+
+### v127 已保存行程景點對應
+
+- 行程保存穩定的景點名稱鍵，重新載入城市目錄或候選排序改變後會重新對應景點，避免舊數字索引靜默指向另一個名稱與來源。
+- 舊版 AI 行程缺少穩定鍵時不再信任舊索引；被移除的景點也不會以其他清單項目替代。畫面提示重新產生行程，複製／列印同樣會說明資料需要更新。
+- `node scripts/smoke-ai-planning.mjs` 覆蓋清單重排後恢復正確景點、舊版 AI 行程安全停用及消失景點提示。
 
 首次使用前，請依照 [`Firebase 維運與發布流程`](./FIREBASE_OPERATIONS.md) 在 Firebase Console 註冊 App Check reCAPTCHA Enterprise Web App，並確認 GitHub Pages 網域列入允許清單。網站金鑰已放在 `src/js/firebase-ai-config.js`，屬公開識別碼；不要放入 reCAPTCHA secret key 或 App Check debug token。先確認有效 token，再於 Console 逐步啟用 Firebase AI Logic enforcement。
 
