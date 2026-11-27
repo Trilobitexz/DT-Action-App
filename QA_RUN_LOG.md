@@ -201,4 +201,4 @@
 - 將 5 個既有 Commons 圖片來源特殊檔案頁由 HTTP 升為 HTTPS；839 筆資料的景點來源、圖片及圖片來源 URL 全量檢查皆為 HTTPS，格式問題 0。五個舊檔案頁皆在限流冷卻後 HEAD 驗證回應 200。
 - `seed-city-catalog.mjs` 與 `cityCatalogService.js` 保留圖片歸屬欄位，以便未來受控匯入／雲端讀取。此輪沒有寫入 Firestore。
 - `node --check`（countryView.js、cityCatalogService.js、seed-city-catalog.mjs、smoke-ai-planning.mjs）、`node scripts/build-city-spot-data.mjs`、`node scripts/smoke-ai-planning.mjs`、`node scripts/audit-city-spots.mjs` 及 `git diff --check` 通過。稽核缺圖數 50；缺來源、座標及介紹仍為 0。
-- 待本輪提交、推送並確認 GitHub Pages 部署狀態。
+- GitHub Pages workflow #46018062853 對應提交 `e4808fc` 並成功；正式頁回應 HTTP 200，HTML 載入 v125 資源。推送後 `main` 與 `origin/main` 一致，工作樹乾淨。
