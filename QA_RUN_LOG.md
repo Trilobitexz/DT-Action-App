@@ -254,3 +254,4 @@
 - 目錄服務現在記錄進行中的請求是否已是強制刷新；強制刷新遇到一般請求時會先等待，再重試資料載入。已在進行中的強制刷新仍由併發呼叫共用，完成清理也只移除目前請求本身。
 - AI smoke 新增受控的並行情境：一般請求停在即時來源時觸發強制刷新，確認完成後第二次查詢確實發出，並把新增的有效景點納入候選。原有 40 筆快取資料仍會觸發即時來源檢查。
 - `node scripts/smoke-ai-planning.mjs`、`node --check src/js/services/cityCatalogService.js`、`node --check scripts/smoke-ai-planning.mjs` 及 `git diff --check` 通過。資源與 Service Worker 快取版號升至 v131。
+- GitHub Pages workflow #100（run `46039764190`）對應提交 `60c747e` 並成功；正式頁回應 HTTP 200，HTML 載入 v131 資源。遠端 `main` 已核對為 `60c747e`。
