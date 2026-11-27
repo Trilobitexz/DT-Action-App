@@ -37,7 +37,9 @@ const isCityItself = (city, spot) => {
 };
 const coordinate = value => value === null || value === undefined || value === "" ? NaN : Number(value);
 const grouped = new Map();
+const cleanedCatalogCities = [];
 const incomplete = [];
+const originalSpotCount = (catalog.cities || []).reduce((sum, city) => sum + (city.spots || []).length, 0);
 
 for (const city of catalog.cities || []) {
   const localCity = sourceCities.get(city.id);
@@ -61,6 +63,12 @@ for (const city of catalog.cities || []) {
       || distanceKm(center, spot) > 50
       || !/^https?:\/\//i.test(String(spot.sourceUrl || ""))
       || !(window.SpotTextService?.isTravelAttraction(spot) ?? true)) return false;
+    if (spot.imageUrl && (!String(spot.imageAttribution || "").trim()
+      || !String(spot.imageLicense || "").trim()
+      || !/^https:\/\//i.test(String(spot.imageSourceUrl || "")))) {
+      incomplete.push(`${city.id}/${spot.name}: 圖片缺少可核實的作者、授權或檔案來源頁`);
+      return false;
+    }
     seen.add(nameKey);
     return true;
   }).map(spot => ({
@@ -70,6 +78,7 @@ for (const city of catalog.cities || []) {
     description: String(spot.description || spot.summary || spot.note || "")
   }));
   if (spots.length < 3) incomplete.push(`${city.id}: 只有 ${spots.length} 筆合格景點`);
+  cleanedCatalogCities.push({ ...city, spots });
   if (!grouped.has(continentId)) grouped.set(continentId, {});
   grouped.get(continentId)[city.id] = spots;
 }
@@ -81,10 +90,16 @@ if (expectedCityCount < 200 || emittedCityCount !== expectedCityCount || incompl
   incomplete.slice(0, 80).forEach(problem => console.error(`- ${problem}`));
   process.exitCode = 1;
 } else {
+  catalog.cities = cleanedCatalogCities;
+  catalog.cityCount = cleanedCatalogCities.length;
+  catalog.successfulCityCount = cleanedCatalogCities.filter(city => city.spots.length >= 3).length;
+  await fs.writeFile(inputPath, `${JSON.stringify(catalog, null, 2)}\n`, "utf8");
   const outputDir = path.join(root, "src", "data", "city-spots");
   for (const [continentId, cities] of grouped) {
     await fs.writeFile(path.join(outputDir, `${continentId}.json`), `${JSON.stringify(cities)}\n`, "utf8");
   }
-  console.log(`已從可稽核的預建目錄更新 ${emittedCityCount} 座城市的離線景點檔。`);
+  const cleanedSpotCount = cleanedCatalogCities.reduce((sum, city) => sum + city.spots.length, 0);
+  console.log(`已清理預建目錄中的 ${originalSpotCount - cleanedSpotCount} 筆非旅遊景點或不合格記錄。`);
+  console.log(`已從可稽核的預建目錄更新 ${emittedCityCount} 座城市的離線景點檔（${cleanedSpotCount} 筆景點）。`);
   console.log(`大洲檔案：${[...grouped.keys()].join(", " )}`);
 }

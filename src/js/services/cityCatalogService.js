@@ -191,6 +191,9 @@
             imageUrl: data.imageUrl || "",
             imageSourceUrl: data.imageSourceUrl || "",
             imageAttribution: data.imageAttribution || "",
+            imageArtist: data.imageArtist || "",
+            imageLicense: data.imageLicense || "",
+            imageLicenseUrl: data.imageLicenseUrl || "",
             closedDays: data.closedDays || "",
             visitHours: Number.isFinite(Number(data.visitHours)) && Number(data.visitHours) > 0 ? Number(data.visitHours) : null,
             hasCoordinates: data.lat !== null && data.lat !== undefined && data.lat !== ""
@@ -290,10 +293,14 @@
         if (!normalized) return;
         if (names.has(normalized)) {
           const existing = merged[names.get(normalized)];
-          if (!existing.imageAttribution && item.imageAttribution) {
+          if ((!existing.imageAttribution || !existing.imageLicense || !existing.imageUrl)
+            && item.imageAttribution && item.imageLicense && item.imageUrl) {
             existing.imageAttribution = String(item.imageAttribution).trim();
             existing.imageUrl = item.imageUrl || existing.imageUrl || "";
             existing.imageSourceUrl = item.imageSourceUrl || existing.imageSourceUrl || "";
+            existing.imageArtist = item.imageArtist || existing.imageArtist || "";
+            existing.imageLicense = item.imageLicense || existing.imageLicense || "";
+            existing.imageLicenseUrl = item.imageLicenseUrl || existing.imageLicenseUrl || "";
           }
           return;
         }

@@ -59,6 +59,10 @@ for (let offset = 0; offset < cities.length; offset += concurrency) {
     let invalidCount = 0;
     spotSnapshot.forEach(document => {
       const spot = normalizeSpot(document.data());
+      const hasUncreditedImage = Boolean(String(spot.imageUrl || "").trim())
+        && (!String(spot.imageAttribution || "").trim()
+          || !String(spot.imageLicense || "").trim()
+          || !/^https:\/\//i.test(String(spot.imageSourceUrl || "")));
       const valid = Boolean(String(spot.name || "").trim())
         && typeof spot.category === "string"
         && typeof spot.description === "string"
@@ -68,6 +72,7 @@ for (let offset = 0; offset < cities.length; offset += concurrency) {
         && validCoordinate(spot.lat, spot.lng)
         && /^https?:\/\//i.test(String(spot.sourceUrl || ""))
         && validCoordinate(center.lat, center.lng)
+        && !hasUncreditedImage
         && distanceKm(center, spot) <= 50;
       if (valid) validCount += 1;
       else {
@@ -81,7 +86,8 @@ for (let offset = 0; offset < cities.length; offset += concurrency) {
             : !validCoordinate(spot.lat, spot.lng) ? "座標格式錯誤或缺漏（僅排除 [0, 0]）"
             : !/^https?:\/\//i.test(String(spot.sourceUrl || "")) ? "來源網址缺漏"
               : distanceKm(center, spot) > 50 ? "超過 50 公里"
-                : "category、description 或 imageUrl 欄位缺漏"
+                : hasUncreditedImage ? "圖片缺少作者署名、授權或檔案來源頁"
+                  : "category、description 或 imageUrl 欄位缺漏"
         });
       }
     });

@@ -22,6 +22,10 @@ const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT 
 const validCityCoordinate = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng)
   && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0);
 const validSpotCoordinate = (lat, lng) => validCityCoordinate(lat, lng);
+const hasCreditedImage = spot => Boolean(String(spot?.imageUrl || "").trim()
+  && /^https:\/\//i.test(String(spot?.imageSourceUrl || ""))
+  && String(spot?.imageAttribution || "").trim()
+  && String(spot?.imageLicense || "").trim());
 const distanceKm = (a, b) => {
   const radians = Math.PI / 180;
   const dLat = (b.lat - a.lat) * radians;
@@ -38,6 +42,7 @@ const isValidStoredSpot = (city, rawSpot) => {
     && typeof spot.category === "string"
     && typeof spot.description === "string"
     && typeof spot.imageUrl === "string"
+    && (!spot.imageUrl || hasCreditedImage(spot))
     && isTravelAttraction(spot)
     && !isCityItself(city, spot)
     && validSpotCoordinate(spot.lat, spot.lng)
@@ -46,7 +51,7 @@ const isValidStoredSpot = (city, rawSpot) => {
     && distanceKm(city, spot) <= 50;
 };
 const enrichmentScore = spot => [
-  spot.imageUrl, spot.website, spot.openingHours, spot.address, spot.ratingSource,
+  hasCreditedImage(spot) ? "credited-image" : "", spot.website, spot.openingHours, spot.address, spot.ratingSource,
   String(spot.description || spot.note || "").trim().length >= 80 ? "description" : ""
 ].filter(Boolean).length;
 const mergeEnrichment = (spot, matches) => {
@@ -58,6 +63,7 @@ const mergeEnrichment = (spot, matches) => {
     .filter(value => typeof value === "string" && value.trim()).sort((a, b) => b.trim().length - a.trim().length);
   const ratingItem = candidates.find(item => item?.rating !== null && item?.rating !== undefined && item?.rating !== ""
     && Number.isFinite(Number(item.rating)) && Number(item.rating) >= 0 && Number(item.rating) <= 5);
+  const creditedImage = candidates.find(hasCreditedImage);
   const visitHours = candidates.find(item => Number.isFinite(Number(item?.visitHours)) && Number(item.visitHours) > 0)?.visitHours;
   const description = descriptions[0]?.trim() || "";
   const merged = {
@@ -65,9 +71,12 @@ const mergeEnrichment = (spot, matches) => {
     summary: description,
     description,
     note: description,
-    imageUrl: firstUrl("imageUrl"),
-    imageSourceUrl: firstUrl("imageSourceUrl") || firstUrl("sourceUrl"),
-    imageAttribution: firstString("imageAttribution"),
+    imageUrl: creditedImage?.imageUrl || "",
+    imageSourceUrl: creditedImage?.imageSourceUrl || "",
+    imageAttribution: creditedImage?.imageAttribution || "",
+    imageArtist: creditedImage?.imageArtist || "",
+    imageLicense: creditedImage?.imageLicense || "",
+    imageLicenseUrl: creditedImage?.imageLicenseUrl || "",
     website: firstUrl("website"),
     openingHours: firstString("openingHours"),
     address: firstString("address"),
@@ -212,7 +221,7 @@ try {
       featuredSpotCount: city.spots.length,
       catalogUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       publishedAt: admin.firestore.FieldValue.serverTimestamp(),
-      dataVersion: "2026.11.27-prebuilt-spots-v3"
+      dataVersion: "2026.11.28-prebuilt-spots-v4"
     }, { merge: true });
 
     for (const [index, planned] of plannedSpots.entries()) {
@@ -232,11 +241,14 @@ try {
         sourceUrl: spot.sourceUrl,
         sourceLabel: spot.sourceLabel || "Wikipedia geosearch",
         imageUrl: spot.imageUrl || "",
-        imageSourceUrl: spot.imageSourceUrl || spot.sourceUrl,
+        imageSourceUrl: spot.imageSourceUrl || "",
         imageAttribution: spot.imageAttribution || "",
+        imageArtist: spot.imageArtist || "",
+        imageLicense: spot.imageLicense || "",
+        imageLicenseUrl: spot.imageLicenseUrl || "",
         hasCoordinates: true,
         hasDescription: Boolean(spot.summary || spot.description || spot.note),
-        dataVersion: "2026.11.27-prebuilt-spots-v3",
+        dataVersion: "2026.11.28-prebuilt-spots-v4",
         catalogUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         publishedAt: admin.firestore.FieldValue.serverTimestamp()
       };

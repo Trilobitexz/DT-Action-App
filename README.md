@@ -8,7 +8,7 @@
 
 ### 發布版本命名規則
 
-- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v129`，下一次發布時統一遞增為 `v130`。
+- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v130`，下一次發布時統一遞增為 `v131`。
 - 所有本地 CSS、JavaScript、城市資料、景點 JSON、manifest 與圖示的快取查詢參數使用相同的 `?v=N`，並在 `index.html`、`sw.js` 與程式內的動態靜態資料 URL 保持一致。
 - Service Worker 快取名稱使用 `journey-atlas-shell-vN`，與資源參數和發布提交訊息中的版本一致。更新 HTML 資源參數時，必須同步更新 Service Worker 的預快取清單及快取名稱。
 - 外部 CDN／API 使用供應商版本或 API URL，不改成專案版號；`index.html` 與 `sw.js` 自身不加查詢參數，避免影響導覽快取與 Service Worker 更新檢查。
@@ -147,7 +147,7 @@ Firebase 使用 compat SDK 初始化 Authentication 與 Analytics；Google 登�
 - 城市、航班與物價部分為專案整理或規劃參考資料，不代表即時航班、即時價格或官方簽證結果。
 - 天氣、匯率與景點補充資料依賴外部服務；服務無法使用時，介面會保留內建資料並標示目前狀態。
 - 景點圖片、百科摘要、地址與座標可能來自不同公開資料來源，更新時間與完整度可能不同。
-- 前端館藏會優先讀取 Firestore 公開目錄 `cities/{cityId}` 與 `cities/{cityId}/spots/{spotId}`；訪客可讀取，瀏覽器不提供一般寫入權限。城市景點離線資料由 `npm run enrich:city-spots` 產生，再執行 `npm run seed:city-catalog` 透過 Firebase Admin Application Default Credentials 匯入。
+- 前端館藏會優先讀取 Firestore 公開目錄 `cities/{cityId}` 與 `cities/{cityId}/spots/{spotId}`；訪客可讀取，瀏覽器不提供一般寫入權限。城市景點離線資料由 `npm run enrich:city-spots` 產生，圖片作者與授權從 Wikimedia API 核實；`npm run build:city-spot-data` 產生前端靜態資料，`npm run check:image-attributions` 與 `node scripts/audit-city-spots.mjs` 驗證後，再執行 `npm run seed:city-catalog` 匯入 Firestore。
 - GeoNames 城市地名資料以 CC BY 4.0 授權；資料來源與地名 ID 保留於城市目錄，地圖頁會顯示來源連結。
 - OpenStreetMap Nominatim 僅在使用者開啟尚未有座標的城市時查詢，每個瀏覽器序列化請求並至少間隔 1.1 秒，座標快取 180 天；使用量需遵守 [Nominatim 使用政策](https://operations.osmfoundation.org/policies/nominatim/)。
 - 景點補充會合併 OpenStreetMap、Wikidata 與 Wikipedia 的地理資料；資料服務無回應且沒有本地景點候選時，改顯示標示清楚的地圖搜尋入口，不推測單一景點或座標。
@@ -182,11 +182,12 @@ Firestore 安全規則位於 [`firestore.rules`](./firestore.rules)，僅允許�
 
 ### 城市景點離線補齊與匯入
 
-1. 在具備網路的管理者電腦執行 `npm run enrich:city-spots`（或 `node scripts/enrich-city-spots.mjs`）。腳本讀取前端 200 座去重城市，沿用內建 GeoNames 座標，缺座標時依 Nominatim 政策以至少 1.1 秒間隔查詢；先查中文 Wikipedia geosearch，不足三筆再查英文 Wikipedia 與 Wikidata，篩出 50 公里內具來源網址與合法座標的景點。若只想重試上次未達三筆的城市，可加 `--retry-incomplete`。
-2. 腳本產生 `scripts/data/prebuilt-spots.json`，並列出成功城市數及不足三筆的城市。公開資料不足時不會捏造景點；必須人工檢查缺漏，預設匯入會拒絕未達至少 200 城市、每城三筆或座標驗證不通過的資料。
-3. 檢查統計後執行 `npm run seed:city-catalog`（或 `node scripts/seed-city-catalog.mjs`）。需安裝專案依賴，並以 `gcloud auth application-default login` 設定管理者 ADC，確認帳號有目標 Firebase 專案的 Firestore 寫入權限。匯入腳本會先完整驗證 JSON，再以最多 400 筆操作的 Firestore `writeBatch` 寫入；固定文件 ID 允許修正資料後安全重跑。
-4. 執行 `npm run verify:city-catalog`（或 `node scripts/verify-city-catalog.mjs`）從 Firestore 回讀全部城市文件與景點子集合，逐筆驗證座標、來源、50 公里範圍與至少三筆景點。只有回讀驗證成功，才可判定資料庫匯入完成。
-5. 前端進入城市頁時先讀 Firestore 子集合；有效景點到達即更新卡片和 MapLibre 標記，並依標記 bounds 調整視野。地圖仍需網路載入底圖；公開資料、Nominatim 回應和服務可用度無法保證每次都能取得三筆百科景點，因此以產生報告與匯入前驗證為準。
+1. 在具備網路的管理者電腦執行 `npm run enrich:city-spots`。腳本讀取前端 200 座去重城市，沿用內建 GeoNames 座標，缺座標時依 Nominatim 政策以至少 1.1 秒間隔查詢；先查中文 Wikipedia geosearch，不足三筆再查英文 Wikipedia 與 Wikidata，篩出 50 公里內具來源網址與合法座標的景點，並查詢圖片作者及授權。若只想重試上次未達三筆的城市，可加 `--retry-incomplete`。
+2. 若要補齊目前預建資料的圖片授權，執行 `npm run enrich:image-attributions`；無法核實作者／授權的照片會改用分類替代圖。執行 `npm run check:image-attributions`、`npm run build:city-spot-data` 與 `node scripts/audit-city-spots.mjs`，確認各城景點數、來源、座標、介紹與圖片授權完整。
+3. 檢查 `scripts/data/prebuilt-spots.json` 報告中的成功城市數及不足三筆城市。公開資料不足時不會捏造景點；預設匯入會拒絕未達至少 200 城市、每城三筆或座標驗證不通過的資料。
+4. 執行 `npm run seed:city-catalog` 匯入 Firestore。需安裝專案依賴，並以 `gcloud auth application-default login` 設定管理者 ADC，確認帳號有目標 Firebase 專案的 Firestore 寫入權限。匯入腳本會先完整驗證 JSON，再以最多 400 筆操作的 Firestore `writeBatch` 寫入；固定文件 ID 允許修正資料後安全重跑。
+5. 執行 `npm run verify:city-catalog` 從 Firestore 回讀全部城市文件與景點子集合，逐筆驗證座標、來源、圖片署名、50 公里範圍與至少三筆景點。只有回讀驗證成功，才可判定資料庫匯入完成。
+6. 前端進入城市頁時先讀 Firestore 子集合；有效景點到達即更新卡片和 MapLibre 標記，並依標記 bounds 調整視野。無法證實圖片授權時顯示分類替代圖，不顯示未署名照片。公開資料、Nominatim 回應和服務可用度無法保證每次都能取得三筆百科景點，因此以產生報告與匯入前驗證為準。
 
 
 ## AI 旅程規劃

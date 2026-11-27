@@ -167,7 +167,7 @@ window.CountryView = {
       }
       return true;
     };
-    const spotQuality = spot => (spot.imageUrl || spot.thumbnail || spot.photoUrl ? 4 : 0)
+    const spotQuality = spot => (spot.imageUrl && spot.imageAttribution && spot.imageLicense ? 4 : 0)
       + (String(spot.description || spot.note || "").trim().length >= 24 ? 2 : 0)
       + (hasCoordinates(spot) ? 1 : 0);
     const imageFallback = category => {
@@ -456,7 +456,9 @@ window.CountryView = {
         const thumbEl = document.getElementById(`spot-thumb-${idx}`);
         if (thumbEl?.dataset.detailsRequested === "true") return;
         if (thumbEl) thumbEl.dataset.detailsRequested = "true";
-        const imageUrl = spot.imageUrl || spot.thumbnail || spot.photoUrl;
+        const hasCreditedImage = Boolean(spot.imageAttribution && spot.imageLicense
+          && /^https:\/\//i.test(String(spot.imageSourceUrl || "")));
+        const imageUrl = hasCreditedImage ? (spot.imageUrl || spot.thumbnail || spot.photoUrl) : "";
         if (spot.imageFailed) return;
         const addImage = (url, alt, sourceUrl, allowCommonsRetry = true) => {
           if (!url || !thumbEl || !isCurrentCity()) return;
@@ -478,6 +480,7 @@ window.CountryView = {
               try {
                 const safeSourceUrl = new URL(sourceUrl, window.location.href);
                 if (/^https?:$/.test(safeSourceUrl.protocol)) {
+                  attribution.textContent = getSpotImageAttributionText(spot);
                   attribution.href = safeSourceUrl.href;
                   attribution.hidden = false;
                 }
@@ -496,6 +499,11 @@ window.CountryView = {
                   thumbEl.title = "景點照片暫不可用，已顯示分類插圖";
                   return;
                 }
+                spot.imageAttribution = alternate.imageAttribution || "";
+                spot.imageSourceUrl = alternate.imageSourceUrl || alternate.pageUrl || "";
+                spot.imageArtist = alternate.imageArtist || "";
+                spot.imageLicense = alternate.imageLicense || "";
+                spot.imageLicenseUrl = alternate.imageLicenseUrl || "";
                 addImage(alternate.thumbnail, alt, alternate.pageUrl, false);
               }).catch(() => {
                 spot.imageFailed = true;
@@ -514,7 +522,14 @@ window.CountryView = {
           return;
         }
         window.SpotService.fetchSpotImage(spot.name, currentCity.name).then(image => {
-          if (image?.thumbnail && isCurrentCity()) addImage(image.thumbnail, image.title || spot.name, image.pageUrl);
+          if (image?.thumbnail && image.imageAttribution && image.imageLicense && isCurrentCity()) {
+            spot.imageAttribution = image.imageAttribution;
+            spot.imageSourceUrl = image.imageSourceUrl || image.pageUrl || "";
+            spot.imageArtist = image.imageArtist || "";
+            spot.imageLicense = image.imageLicense || "";
+            spot.imageLicenseUrl = image.imageLicenseUrl || "";
+            addImage(image.thumbnail, image.title || spot.name, image.pageUrl);
+          }
           else if (!image) spot.imageFailed = true;
         }).catch(error => console.warn("景點圖片載入失敗：", error));
       });

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
+import { resolveWikimediaImageMetadata } from "./wikimedia-image-metadata.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = relative => fs.readFile(path.join(root, relative), "utf8");
@@ -288,6 +289,12 @@ for (const city of cities) {
     : await enrichCity(city, filteredPrevious));
   console.log(`[${outputCities.length}/${cities.length}] ${city.name || city.id}: ${outputCities.at(-1).spots.length} 筆符合條件`);
 }
+
+const imageAttributionReport = await resolveWikimediaImageMetadata(
+  outputCities.flatMap(city => city.spots || []),
+  { clearUnverified: true }
+);
+console.log(`圖片署名補齊：${imageAttributionReport.matched} 張完成；${imageAttributionReport.unresolved + imageAttributionReport.unsupported} 張因無法核實而改用分類圖。`);
 
 const insufficientCities = outputCities.filter(city => city.spots.filter(spot => validCoordinate(spot.lat, spot.lng)
   && distanceKm(city, spot) <= 50 && isTravelAttraction(spot)).length < 3).map(city => ({

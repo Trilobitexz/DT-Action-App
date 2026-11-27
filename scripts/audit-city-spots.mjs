@@ -57,6 +57,9 @@ const totals = {
   spots: 0,
   qualifiedSpots: 0,
   missingImage: 0,
+  missingImageAttribution: 0,
+  missingImageSource: 0,
+  missingImageLicense: 0,
   missingDescription: 0,
   shortDescription: 0,
   missingCoordinates: 0,
@@ -122,6 +125,9 @@ for (const file of files) {
       const hasCoords = validCoordinate(lat, lng);
       const hasSource = /^https?:\/\//i.test(String(spot.sourceUrl || ""));
       const hasImage = Boolean(String(spot.imageUrl || spot.image || spot.thumbnail || "").trim());
+      const hasImageAttribution = Boolean(String(spot.imageAttribution || "").trim());
+      const hasImageSource = /^https:\/\//i.test(String(spot.imageSourceUrl || ""));
+      const hasImageLicense = Boolean(String(spot.imageLicense || "").trim());
       const isVisitPage = sandbox.window.SpotTextService?.isTravelAttraction(spot) ?? true;
       const duplicateKey = normalizedName(name);
       const isDuplicate = Boolean(duplicateKey && seenNames.has(duplicateKey));
@@ -130,6 +136,9 @@ for (const file of files) {
       const withinCity = distance === null || distance <= 50;
 
       if (!hasImage) totals.missingImage += 1;
+      if (hasImage && !hasImageAttribution) totals.missingImageAttribution += 1;
+      if (hasImage && !hasImageSource) totals.missingImageSource += 1;
+      if (hasImage && !hasImageLicense) totals.missingImageLicense += 1;
       if (!description) totals.missingDescription += 1;
       else if (description.length < 40) totals.shortDescription += 1;
       if (!hasCoords) totals.missingCoordinates += 1;
@@ -148,6 +157,9 @@ for (const file of files) {
       if (description && !hasAIContent) reasons.push("介紹少於 40 字，不符合 AI 行程資料條件");
       if (!hasCoords) reasons.push("座標格式錯誤或缺漏");
       if (!hasSource) reasons.push("缺少來源網址");
+      if (hasImage && (!hasImageAttribution || !hasImageSource || !hasImageLicense)) {
+        reasons.push("圖片缺少作者署名、授權或檔案來源頁");
+      }
       if (!isVisitPage) reasons.push("行政區、機構或事件條目，不列為可造訪景點");
       if (isCityItself) reasons.push("此條目是城市本身，不是景點");
       if (!withinCity) reasons.push(`距城市中心 ${distance.toFixed(1)} 公里（超過 50 公里）`);
@@ -166,14 +178,15 @@ for (const file of files) {
 
 console.log(`城市景點資料稽核：${files.length} 個檔案，${totals.cities} 座城市，${totals.spots} 筆原始景點`);
 console.log(`符合 AI 來源／座標／分類／介紹條件 ${totals.qualifiedSpots} 筆；每城至少 ${minimumSpotsPerCity} 筆：${totals.cities - cityCountsBelowMinimum.length}/${totals.cities}`);
-console.log(`缺圖片 ${totals.missingImage}；缺介紹 ${totals.missingDescription}；短介紹（少於 40 字）${totals.shortDescription}；缺座標 ${totals.missingCoordinates}；缺來源 ${totals.missingSource}；超過 50 公里 ${totals.overFiftyKm}；非景點條目 ${totals.nonVisitPages}；重複名稱 ${totals.duplicateNames}；城市中心錯置 ${centerMismatches.length}`);
+console.log(`缺圖片 ${totals.missingImage}；圖片缺署名 ${totals.missingImageAttribution}、來源頁 ${totals.missingImageSource}、授權 ${totals.missingImageLicense}；缺介紹 ${totals.missingDescription}；短介紹（少於 40 字）${totals.shortDescription}；缺座標 ${totals.missingCoordinates}；缺來源 ${totals.missingSource}；超過 50 公里 ${totals.overFiftyKm}；非景點條目 ${totals.nonVisitPages}；重複名稱 ${totals.duplicateNames}；城市中心錯置 ${centerMismatches.length}`);
 if (cityCountsBelowMinimum.length) {
   console.log("不足 3 筆的城市：" + cityCountsBelowMinimum.map(city => `${city.cityId} (${city.eligible}/${city.total})`).join(", "));
 }
 console.log(`需檢視的問題：${flags.length} 筆`);
 for (const item of flags.slice(0, 120)) console.log(`[REVIEW] ${item.file} / ${item.cityId} / ${item.name} — ${item.reason}`);
 if (flags.length > 120) console.log(`…另有 ${flags.length - 120} 筆，請檢查資料檔或依城市分批稽核。`);
-if (cityCountsBelowMinimum.length || totals.missingDescription || totals.shortDescription || totals.missingCoordinates || totals.missingSource
+if (cityCountsBelowMinimum.length || totals.missingImageAttribution || totals.missingImageSource || totals.missingImageLicense
+  || totals.missingDescription || totals.shortDescription || totals.missingCoordinates || totals.missingSource
   || totals.overFiftyKm || totals.nonVisitPages || totals.duplicateNames || centerMismatches.length) {
   process.exitCode = 1;
 }

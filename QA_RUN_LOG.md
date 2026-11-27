@@ -238,3 +238,11 @@
 - v129 程式變更以 `5acc58c` 推送至 `origin/main`；本次部署狀態記錄同步補入 QA 日誌。
 - GitHub Pages workflow #96（run `46035171464`）對應 `5acc58c` 並成功；正式頁重新載入成功，頁面標題、世界地圖與 200+ 城市探索介面正常顯示。
 - 此環境未安裝 Firebase CLI，也未部署 Firebase Rules；Firebase Console 的實際規則版本仍需確認。
+
+## v130 景點來源品質與圖片授權稽核
+
+- 匯入前驗證首次發現預建資料含 30 筆行政區、教育機構、航空公司或事件等非旅遊景點，雖然離線網站資料已排除這些項目，Firestore 匯入路徑仍會拒絕整份目錄。預建資料清理現在與離線目錄建置共用同一套景點、座標、來源及圖片授權條件，確認每城至少保留 3 筆後才寫回資料檔。
+- 清理後保留 200 座城市、839 筆合格景點；AI 可用來源、座標與 40 字介紹缺漏 0，超出 50 公里、非景點、重複名稱及城市中心錯置均為 0。774 張圖片有可核實作者、CC 授權及 Commons 檔案頁；其餘 65 筆使用分類替代圖。
+- `node scripts/build-city-spot-data.mjs`、`node scripts/seed-city-catalog.mjs --validate-only`、`node scripts/audit-city-spots.mjs`、`node scripts/enrich-image-attributions.mjs --check` 及 `node scripts/smoke-ai-planning.mjs` 通過；匯入前驗證只讀本機資料，沒有連線或寫入 Firestore。
+- 變更 JavaScript／MJS 語法檢查、7 份 JSON 解析、v130 頁面與 Service Worker 快取版號、`git diff --check` 通過。PowerShell/Git 對 LF 檔案顯示 CRLF 轉換提示，檢查未回報空白錯誤。
+- Firebase Rules 未部署。GitHub Pages 推送後 workflow 與正式頁狀態待本輪推送完成後記錄。

@@ -4,6 +4,9 @@
   "description": "旅途指南 Journey Atlas",
   "scripts": {
     "enrich:city-spots": "node scripts/enrich-city-spots.mjs",
+    "enrich:image-attributions": "node scripts/enrich-image-attributions.mjs",
+    "check:image-attributions": "node scripts/enrich-image-attributions.mjs --check",
+    "build:city-spot-data": "node scripts/build-city-spot-data.mjs",
     "seed:city-catalog": "node scripts/seed-city-catalog.mjs",
     "verify:city-catalog": "node scripts/verify-city-catalog.mjs",
     "sync:firestore-budget-rules": "node scripts/sync-firestore-budget-rules.mjs",

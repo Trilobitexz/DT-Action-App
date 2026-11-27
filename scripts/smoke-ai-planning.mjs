@@ -18,6 +18,7 @@ const sandbox = {
     setItem: (key, value) => { if (key === "journey-atlas-itineraries") storedItineraryJson = value; }
   },
   URL,
+  URLSearchParams,
   console,
   setTimeout,
   clearTimeout
@@ -29,6 +30,7 @@ for (const relative of [
   "src/js/services/spotTextService.js",
   "src/js/modules/plannerView.js",
   "src/js/modules/countryView.js",
+  "src/js/services/spotService.js",
   "src/js/services/cityCatalogService.js"
 ]) {
   vm.runInNewContext(fs.readFileSync(path.join(root, relative), "utf8"), sandbox, { filename: relative });
@@ -94,6 +96,18 @@ if (savedIdentity !== "riversidegarden" || savedIndexes?.length !== 1 || savedIn
 
 const prebuiltPath = path.join(root, "scripts", "data", "prebuilt-spots.json");
 const prebuilt = JSON.parse(fs.readFileSync(prebuiltPath, "utf8"));
+const unattributedPhotos = (prebuilt.cities || []).flatMap(city => (city.spots || [])
+  .filter(spot => {
+    const hasImage = Boolean(String(spot.imageUrl || "").trim());
+    const hasAttribution = Boolean(String(spot.imageAttribution || "").trim());
+    const hasLicense = Boolean(String(spot.imageLicense || "").trim());
+    const hasFilePage = /^https:\/\//i.test(String(spot.imageSourceUrl || ""));
+    return hasImage && (!hasAttribution || !hasLicense || !hasFilePage);
+  })
+  .map(spot => `${city.id}/${spot.name}`));
+if (unattributedPhotos.length) {
+  throw new Error(`Wikimedia photos are missing author, license or file-page attribution: ${unattributedPhotos.slice(0, 20).join(", ")}`);
+}
 const imageAttributionExamples = [
   ["manila", "聖地牙哥堡"],
   ["manila", "黎剎公園"],
@@ -119,6 +133,31 @@ for (const [cityId, name] of imageAttributionExamples) {
 const attributionLabel = sandbox.getSpotImageAttributionText({ imageAttribution: "Photographer · CC BY 4.0" });
 if (attributionLabel !== "圖片來源：Photographer · CC BY 4.0") {
   throw new Error("Spot image source labels did not show photographer and licence attribution.");
+}
+const spotService = sandbox.window.SpotService;
+const originalRequestJson = spotService.requestJson;
+spotService.requestJson = async () => ({ query: { pages: [{
+  title: "File:Verified Garden.jpg",
+  imageinfo: [{ extmetadata: {
+    Artist: { value: "<a href=\"https://commons.wikimedia.org/wiki/User:Example\">Example Photographer</a>" },
+    LicenseShortName: { value: "CC BY-SA 4.0" },
+    LicenseUrl: { value: "https://creativecommons.org/licenses/by-sa/4.0/" },
+    AttributionRequired: { value: "true" }
+  } }]
+}] } });
+const liveImageAttribution = await spotService.fetchWikimediaImageMetadata(
+  "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Verified_Garden.jpg/500px-Verified_Garden.jpg"
+);
+spotService.requestJson = originalRequestJson;
+if (liveImageAttribution?.imageArtist !== "Example Photographer"
+  || liveImageAttribution?.imageLicense !== "CC BY-SA 4.0"
+  || liveImageAttribution?.imageSourceUrl !== "https://commons.wikimedia.org/wiki/File:Verified_Garden.jpg") {
+  throw new Error("Live Wikimedia image lookup did not preserve author, license and file-page source.");
+}
+if (spotService.formatWikimediaImageAttribution({
+  Artist: { value: "Unverified Photographer" }, AttributionRequired: { value: "true" }
+}, "File:Unlicensed.jpg", "https://commons.wikimedia.org") !== null) {
+  throw new Error("An image without a verified license was treated as displayable.");
 }
 const attributedFort = prebuilt.cities.find(city => city.id === "manila")?.spots.find(spot => spot.name === "聖地牙哥堡");
 const cloudFort = {

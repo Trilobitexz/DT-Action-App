@@ -139,15 +139,89 @@ window.SpotService = {
   fetchCommonsImage: async function (spotName, cityName) {
     const cleanName = spotName.split("(")[0].trim();
     const query = encodeURIComponent(cityName ? `${cleanName} ${cityName}` : cleanName);
-    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${query}&gsrnamespace=6&gsrlimit=1&prop=imageinfo&iiprop=url&iiurlwidth=500&format=json&origin=*`;
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${query}&gsrnamespace=6&gsrlimit=1&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=500&format=json&origin=*`;
     const data = await this.requestJson(url);
     const page = Object.values(data.query?.pages || {})[0];
     const image = page?.imageinfo?.[0];
     if (!image?.thumburl && !image?.url) throw new Error("Wikimedia Commons 查無圖片");
+    const attribution = this.formatWikimediaImageAttribution(image.extmetadata, page.title, "https://commons.wikimedia.org");
+    if (!attribution) throw new Error("Wikimedia Commons 圖片缺少可核實的作者或授權資訊");
     return {
       thumbnail: image.thumburl || image.url,
-      pageUrl: `https://commons.wikimedia.org/wiki/${encodeURIComponent(page.title).replace(/%20/g, "_")}`
+      ...attribution,
+      pageUrl: attribution.imageSourceUrl
     };
+  },
+
+  formatWikimediaImageAttribution: function (metadata, pageTitle, wikiBase) {
+    const plain = value => String(value || "")
+      .replace(/<br\s*\/?>/gi, "; ")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;|&#160;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+      .replace(/&#x([\da-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+      .replace(/\s+/g, " ").trim();
+    const author = plain(metadata?.Artist?.value || "") || plain(metadata?.Credit?.value || "");
+    const license = plain(metadata?.LicenseShortName?.value || metadata?.UsageTerms?.value || "");
+    const attributionRequired = String(metadata?.AttributionRequired?.value || "").toLowerCase() === "true";
+    const noAuthorRequired = /\bcc0\b|public domain|\bpdm\b|\bpd[- ]/i.test(license)
+      || String(metadata?.AttributionRequired?.value || "").toLowerCase() === "false";
+    if (!license || (!author && !noAuthorRequired)) return null;
+    const fileName = String(pageTitle || "").replace(/^File:/i, "");
+    const imageAttribution = [fileName, author, license].filter(Boolean).join(" · ");
+    let imageLicenseUrl = "";
+    const rawLicenseUrl = plain(metadata?.LicenseUrl?.value || "");
+    try {
+      const parsed = new URL(rawLicenseUrl.startsWith("//") ? `https:${rawLicenseUrl}` : rawLicenseUrl);
+      if (parsed.protocol === "https:") imageLicenseUrl = parsed.href;
+    } catch (error) { /* Keep the textual license if its metadata link is malformed. */ }
+    const fileTitle = `File:${fileName.replace(/ /g, "_")}`;
+    return {
+      imageSourceUrl: `${wikiBase}/wiki/${encodeURIComponent(fileTitle).replace(/%3A/i, ":")}`,
+      imageAttribution,
+      imageArtist: author,
+      imageLicense: license,
+      imageLicenseUrl,
+      attributionRequired
+    };
+  },
+
+  fetchWikimediaImageMetadata: async function (imageUrl) {
+    let parsed;
+    try { parsed = new URL(String(imageUrl || "")); }
+    catch (error) { return null; }
+    if (parsed.protocol !== "https:") return null;
+    const parts = parsed.pathname.split("/").filter(Boolean).map(part => {
+      try { return decodeURIComponent(part); } catch (error) { return part; }
+    });
+    const filePathIndex = parts.findIndex(part => /^Special:FilePath$/i.test(part));
+    let project = "";
+    let fileName = "";
+    if (filePathIndex >= 0) {
+      project = "commons";
+      fileName = parts[filePathIndex + 1] || "";
+    } else {
+      const wikipediaIndex = parts.indexOf("wikipedia");
+      if (wikipediaIndex < 0) return null;
+      project = String(parts[wikipediaIndex + 1] || "").toLowerCase();
+      const thumbIndex = parts.indexOf("thumb", wikipediaIndex + 2);
+      fileName = thumbIndex >= 0 ? parts[thumbIndex + 3] : parts.at(-1);
+    }
+    if (!/^(?:commons|[a-z-]+)$/.test(project) || !fileName) return null;
+    const wikiBase = project === "commons" ? "https://commons.wikimedia.org" : `https://${project}.wikipedia.org`;
+    const api = new URL(`${wikiBase}/w/api.php`);
+    const params = new URLSearchParams({
+      action: "query", titles: `File:${fileName.replace(/_/g, " ")}`,
+      prop: "imageinfo", iiprop: "extmetadata", redirects: "1", format: "json", formatversion: "2"
+    });
+    const data = await this.requestJson(`${api.href}?${params.toString()}`);
+    const page = data.query?.pages?.[0] || Object.values(data.query?.pages || {})[0];
+    return this.formatWikimediaImageAttribution(page?.imageinfo?.[0]?.extmetadata, page?.title, wikiBase);
   },
 
   fetchSpotImage: function (spotName, cityName = "") {
@@ -160,9 +234,12 @@ window.SpotService = {
         const data = await this.requestJson(`https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanName)}`);
         const thumbnail = data.thumbnail?.source || null;
         if (thumbnail) {
+          const attribution = await this.fetchWikimediaImageMetadata(thumbnail);
+          if (!attribution) throw new Error("百科圖片缺少可核實的作者或授權資訊");
           const image = {
+            ...attribution,
             thumbnail,
-            pageUrl: data.content_urls?.desktop?.page || null,
+            pageUrl: attribution.imageSourceUrl,
             title: data.title || spotName
           };
           this.cache[cacheKey] = image;
