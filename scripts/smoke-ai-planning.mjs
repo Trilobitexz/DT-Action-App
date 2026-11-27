@@ -108,6 +108,108 @@ for (const spot of nonVisitorRegressions) {
 }
 
 const service = sandbox.window.CityCatalogService;
+const originalEnsureSpots = service.ensureSpots;
+const makeCandidate = (name, sourceUrl, lat, lng, description = "A verified cultural attraction with a detailed description suitable for itinerary planning.") => ({
+  name,
+  category: "歷史與文化遺產",
+  description,
+  lat,
+  lng,
+  sourceUrl
+});
+const liveExpansionCity = {
+  id: "candidate-expansion",
+  name: "候選補充測試城市",
+  spots: [1, 2, 3].map(index => makeCandidate(
+    `Curated Plaza ${index}`,
+    `https://example.org/curated/${index}`,
+    35 + index / 100,
+    139 + index / 100
+  ))
+};
+let enrichmentStartedWith = 0;
+service.ensureSpots = async (city, options) => {
+  if (options?.forceRefresh !== true || options?.limit !== 100) {
+    throw new Error("AI long-itinerary enrichment must explicitly refresh sourced city data.");
+  }
+  city.spots.push(...[1, 2, 3, 4].map(index => makeCandidate(
+    `Live Museum ${index}`,
+    `https://example.org/live/${index}`,
+    35.1 + index / 100,
+    139.1 + index / 100
+  )));
+  city.spots.push(makeCandidate("Unsourced live record", "javascript:alert(1)", 35.2, 139.2));
+};
+const expandedCandidates = await sandbox.window.PlannerView.loadAIPlanningCandidates(liveExpansionCity, 7, count => {
+  enrichmentStartedWith = count;
+});
+service.ensureSpots = originalEnsureSpots;
+if (enrichmentStartedWith !== 3 || expandedCandidates.length !== 7
+  || expandedCandidates.some(item => !/^https?:$/.test(new URL(item.spot.sourceUrl).protocol)
+    || String(item.spot.description || "").length < 40)) {
+  throw new Error("Long itineraries did not enrich missing candidates while preserving AI source and description requirements.");
+}
+const incompleteExpansionCity = {
+  id: "incomplete-expansion",
+  name: "不完整補充資料測試城市",
+  spots: liveExpansionCity.spots.slice(0, 3)
+};
+service.ensureSpots = async city => {
+  city.spots.push(
+    makeCandidate("No source record", "", 35.4, 139.4),
+    makeCandidate("Short description record", "https://example.org/short", 35.5, 139.5, "Short."),
+    makeCandidate("Invalid scheme record", "javascript:alert(1)", 35.6, 139.6)
+  );
+};
+const stillIncompleteCandidates = await sandbox.window.PlannerView.loadAIPlanningCandidates(incompleteExpansionCity, 7);
+service.ensureSpots = originalEnsureSpots;
+if (stillIncompleteCandidates.length !== 3) {
+  throw new Error("Incomplete live records were accepted when seven sourced candidates were still unavailable.");
+}
+
+const serviceMethods = {
+  readSpotCache: service.readSpotCache,
+  fetchPrebuiltSpots: service.fetchPrebuiltSpots,
+  fetchCity: service.fetchCity,
+  writeSpotCache: service.writeSpotCache
+};
+const previousSpotService = sandbox.window.SpotService;
+const refreshCity = {
+  id: "force-refresh-test",
+  name: "強制補載測試城市",
+  lat: 35,
+  lng: 139,
+  spots: Array.from({ length: 40 }, (_, index) => makeCandidate(
+    `Existing landmark ${index + 1}`,
+    `https://example.org/existing/${index + 1}`,
+    35 + index / 1000,
+    139 + index / 1000
+  ))
+};
+let liveRefreshCalled = false;
+service.spotCache.delete(refreshCity.id);
+service.readSpotCache = async () => null;
+service.fetchPrebuiltSpots = async () => [];
+service.fetchCity = async () => ({ city: { lat: 35, lng: 139 }, spots: [] });
+service.writeSpotCache = async () => {};
+sandbox.window.SpotService = {
+  fetchNearbyPlaces: async () => {
+    liveRefreshCalled = true;
+    return [];
+  }
+};
+await service.ensureSpots(refreshCity, { limit: 100, forceRefresh: true });
+service.readSpotCache = serviceMethods.readSpotCache;
+service.fetchPrebuiltSpots = serviceMethods.fetchPrebuiltSpots;
+service.fetchCity = serviceMethods.fetchCity;
+service.writeSpotCache = serviceMethods.writeSpotCache;
+service.spotCache.delete(refreshCity.id);
+if (previousSpotService === undefined) delete sandbox.window.SpotService;
+else sandbox.window.SpotService = previousSpotService;
+if (!liveRefreshCalled) {
+  throw new Error("Forced candidate refresh skipped live sources when 40 already-loaded spots were still insufficient for AI.");
+}
+
 const knownYangon = service.getKnownCityCoordinates("yangon");
 if (knownYangon?.lat !== 16.80528 || knownYangon?.lng !== 96.15611) {
   throw new Error("The GeoNames Yangon coordinate was not selected.");
@@ -158,4 +260,6 @@ if (cloudResult?.city?.lat !== 16.80528 || cloudResult?.city?.lng !== 96.15611
 
 const minimumCandidates = Math.min(...cityCandidates.map(city => city.count));
 console.log(`AI candidate smoke check passed: ${cityCandidates.length} cities; minimum ${minimumCandidates} complete sourced candidates per city; generic station rejected.`);
+console.log("Long-itinerary smoke check passed: valid live candidates fill shortages; missing sources and short descriptions remain excluded.");
+console.log("Forced-refresh smoke check passed: live sources are retried even when 40 non-AI spots are cached.");
 console.log("Cloud catalog smoke check passed: stale Yangon center corrected; invalid-coordinate spot excluded.");

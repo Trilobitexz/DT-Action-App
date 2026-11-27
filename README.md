@@ -8,7 +8,7 @@
 
 ### 發布版本命名規則
 
-- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v123`，下一次發布時統一遞增為 `v124`。
+- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v124`，下一次發布時統一遞增為 `v125`。
 - 所有本地 CSS、JavaScript、城市資料、景點 JSON、manifest 與圖示的快取查詢參數使用相同的 `?v=N`，並在 `index.html`、`sw.js` 與程式內的動態靜態資料 URL 保持一致。
 - Service Worker 快取名稱使用 `journey-atlas-shell-vN`，與資源參數和發布提交訊息中的版本一致。更新 HTML 資源參數時，必須同步更新 Service Worker 的預快取清單及快取名稱。
 - 外部 CDN／API 使用供應商版本或 API URL，不改成專案版號；`index.html` 與 `sw.js` 自身不加查詢參數，避免影響導覽快取與 Service Worker 更新檢查。
@@ -219,6 +219,12 @@ AI 候選還必須具備有效座標、名稱、分類、40 字以上介紹，�
 - `node scripts/audit-city-spots.mjs` 通過：839 筆合格 AI 景點，200 城每城至少 3 筆；缺來源、缺座標、缺介紹、少於 40 字介紹、超距、非景點與重複名稱均為 0。54 筆沒有可核實圖片，顯示分類替代圖。
 - `node scripts/smoke-ai-planning.mjs` 增加歷史景點名稱與機構、事件、行政區、規劃中設施的回歸案例，確保歷史敘述不會誤排除真景點，也不會把非景點頁面送入 AI。
 - 藍廟縮圖網址已修復 UTF-8 編碼；AI 候選仍須具備來源網址、座標、分類及至少 40 字介紹。
+
+### v124 長天數 AI 行程候選補充
+
+- 離線目錄目前每城 3–5 筆完整 AI 候選；行程規劃原本提供 3、5、7 天選項，長行程遇到候選不足時會直接失敗。
+- AI 候選不足以安排所選天數時，先強制更新城市景點資料，再重新使用來源、座標、分類、40 字介紹及真實景點條件篩選；資料仍不足時保留原行程並顯示明確提示。
+- `node scripts/smoke-ai-planning.mjs` 驗證 7 天規劃可透過補充資料取得足額候選，且無來源資料仍不會進入 AI 候選。
 
 首次使用前，請依照 [`Firebase 維運與發布流程`](./FIREBASE_OPERATIONS.md) 在 Firebase Console 註冊 App Check reCAPTCHA Enterprise Web App，並確認 GitHub Pages 網域列入允許清單。網站金鑰已放在 `src/js/firebase-ai-config.js`，屬公開識別碼；不要放入 reCAPTCHA secret key 或 App Check debug token。先確認有效 token，再於 Console 逐步啟用 Firebase AI Logic enforcement。
 

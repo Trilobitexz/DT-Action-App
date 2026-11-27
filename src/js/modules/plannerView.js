@@ -175,6 +175,17 @@ window.PlannerView = {
     return candidates.sort((a, b) => b.score - a.score || a.index - b.index)
       .slice(0, maxCandidates).map(item => ({ ...item, key: this.getPlanningSpotKey(item.spot) }));
   },
+  loadAIPlanningCandidates: async function (city, days, onEnrichmentNeeded = null) {
+    let candidates = this.rankAIPlanningSpots(city, days);
+    if (candidates.length >= days || typeof window.CityCatalogService?.ensureSpots !== "function") return candidates;
+    if (typeof onEnrichmentNeeded === "function") onEnrichmentNeeded(candidates.length);
+    try {
+      await window.CityCatalogService.ensureSpots(city, { limit: 100, forceRefresh: true });
+    } catch (error) {
+      console.warn(`無法補充 ${city?.name || city?.id || "目的地"} 的景點候選；將使用已載入資料。`, error);
+    }
+    return this.rankAIPlanningSpots(city, days);
+  },
   getPlanningSpotKey: function (spot) {
     const name = String(spot?.name || "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
     const identity = spot?.id || spot?.wikidataId || spot?.sourceUrl || "";
@@ -708,9 +719,11 @@ window.PlannerView = {
             usedCatalog = sourcedCatalogSpots.length > 0;
           }
         }
-        const allPlanningSpots = this.getPlanningSpots(city);
-        const planningCandidates = this.rankAIPlanningSpots(city, this.itineraryDays);
+        const planningCandidates = await this.loadAIPlanningCandidates(city, this.itineraryDays, currentCount => {
+          status.textContent = `目前有 ${currentCount} 筆合格景點，正在補充可追溯資料以支援 ${this.itineraryDays} 天行程…`;
+        });
         const planningSpots = planningCandidates.map(item => item.spot);
+        const allPlanningSpots = this.getPlanningSpots(city);
         if (!planningSpots.length) throw createItineraryError("ai/no-sourced-spots", "\u76EE\u524D\u6C92\u6709\u9644\u53EF\u8FFD\u6EAF\u4F86\u6E90\u7684\u666F\u9EDE\u8CC7\u6599\u3002");
         if (planningSpots.length < this.itineraryDays) {
           throw createItineraryError("ai/insufficient-sourced-spots", `目前只有 ${planningSpots.length} 筆同時具備來源、有效座標及 40 字以上介紹的景點，至少需要 ${this.itineraryDays} 筆才能為每天安排景點。請載入更多資料或縮短行程天數；原行程已保留。`);

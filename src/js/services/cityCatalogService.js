@@ -345,10 +345,10 @@
         };
       });
     },
-    ensureSpots: function (city, { radius = 20000, limit = 100, onCatalogReady = null } = {}) {
+    ensureSpots: function (city, { radius = 20000, limit = 100, onCatalogReady = null, forceRefresh = false } = {}) {
       if (!city?.id) return Promise.resolve([]);
       const key = String(city.id);
-      if (this.spotCache.has(key)) {
+      if (!forceRefresh && this.spotCache.has(key)) {
         city.spots = this.spotCache.get(key);
         city._spotCatalogReady = true;
         return Promise.resolve(city.spots);
@@ -422,7 +422,7 @@
         // Three database landmarks are enough for a fast first paint, but a city
         // guide should keep enriching toward a fuller selection in the background.
         const locatedSpotCount = preferredSpots.filter(spot => this.hasValidSpotCoordinates(spot, city)).length;
-        const shouldEnrichWithLivePlaces = locatedSpotCount < Math.min(40, limit);
+        const shouldEnrichWithLivePlaces = forceRefresh || locatedSpotCount < Math.min(40, limit);
         let liveSpots = [];
         if (shouldEnrichWithLivePlaces && window.SpotService) {
           let coordinates = Number.isFinite(city.lat) && Number.isFinite(city.lng)

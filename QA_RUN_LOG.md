@@ -184,3 +184,10 @@
 - `node scripts/audit-city-spots.mjs`：839 筆合格候選、200/200 城每城至少 3 筆；缺來源、缺座標、缺介紹、短介紹、超距、非景點及重複名稱均為 0。
 - `node scripts/smoke-ai-planning.mjs`：通過 200 城完整來源候選檢查、歷史地點與非景點分類回歸、仰光雲端中心修正及無效座標排除。
 - `node --check`（spotTextService.js、smoke-ai-planning.mjs、sw.js）、資源版號一致性、資料 URL 格式檢查及 `git diff --check` 通過；未以登入帳戶呼叫真實 Firebase AI Logic。
+
+## v124 長天數 AI 行程候選補充
+
+- 發現離線目錄每城只有 3–5 筆合格 AI 景點，但行程介面提供 3、5、7 天；95 城離線資料少於預設 5 天，200 城均無法單靠離線候選完成 7 天規劃。
+- AI 候選不足所選天數時，現在會要求 CityCatalogService 強制更新城市景點資料，再重新套用來源、座標、分類、40 字介紹及真實景點條件。更新仍不足時保留原行程並顯示資料不足，不以搜尋建議或無來源資料代替景點。
+- `node scripts/smoke-ai-planning.mjs` 模擬只載入 3 筆、需 7 筆的流程，確認觸發強制更新；只納入 4 筆有來源完整資料，排除無效 scheme，最終得到 7 筆合格候選。另以 40 筆已快取一般景點確認強制刷新仍呼叫即時來源；即時資料為 mock，未登入 Firebase 或呼叫外部地圖服務。
+- 待本輪完成 JavaScript 語法、資料稽核、資源版號與 `git diff --check` 後提交推送。
