@@ -169,7 +169,7 @@ Firebase 初始化與 Web SDK 設定位於 [`src/js/firebase.js`](./src/js/fireb
 
 1. 確認 Web App 的 Firebase 設定與 `src/js/firebase.js` 中 `firebaseConfig` 相符。
 2. 在 **Authentication → Sign-in method** 啟用 **Google**。如登入回報 `auth/operation-not-allowed`，請在此頁確認 Google 提供者已啟用。
-3. 在 **Authentication → Settings → Authorized domains** 加入 `trilobitexz.github.io`（目前 GitHub Pages 網址為 `https://trilobitexz.github.io/DT-Action-App/`；GitHub 授權網域只填主機名稱，不要加 `https://` 或路徑）。本機測試使用 `localhost`。
+3. 在 **Authentication → Settings → Authorized domains** 加入 `trilobitexz.github.io`（目前 GitHub Pages 網址為 `https://trilobitexz.github.io/Journey-Atlas/`；GitHub 授權網域只填主機名稱，不要加 `https://` 或路徑）。本機測試使用 `localhost`。
 4. 確認 Google 登入提供者的支援電子郵件與 OAuth 設定已完成。
 5. 本專案正式網站使用 GitHub Pages；Firebase Hosting 並非登入必要條件。
 

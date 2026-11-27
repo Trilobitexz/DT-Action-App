@@ -134,7 +134,7 @@
 - 驗證：本機靜態頁載入上海後，標題顯示「中國」且簡介中的「北側／裝潢／更換」均為繁體，瀏覽器沒有 JavaScript error。`node --check`、景點稽核（200 城／884 筆）、匯入前驗證、v115 資源版號一致性與 `git diff --check` 全數通過；另比對 33 個 HTML 本機資源參照均存在且已列入 Service Worker 預快取。本次未登入帳戶或修改收藏、行程。
 - 桌面瀏覽器流程（776 CSS px）：全球搜尋能列出東京建議；城市目錄與比較抽屜能開關，Escape 後焦點回到觸發按鈕；2D／3D 控制可往返切換；全程無 JavaScript error。手機寬度尚未覆蓋。
 - 文件一致性檢查發現 `DESIGN_SPEC.md` 誤寫 Email/Password 註冊登入，與前端 Google-only 登入及 Firebase 設定不符；規格已修正為目前支援範圍。此為文件專屬變更，不需改網站快取版號。
-- 以 `origin` repository 名稱與正式頁面 URL 交叉核對，修正 `README.md`、`FIREBASE_OPERATIONS.md` 過時的 `/journey-atla/` 路徑為目前 `/DT-Action-App/`。
+- 以 `origin` repository 名稱與正式頁面 URL 交叉核對，先發現 `/journey-atla/` 過時路徑。推送時 GitHub 回報 repository 已搬遷至 `Journey-Atlas`，正式頁於新路徑載入 v116 後，再將 `README.md`、`FIREBASE_OPERATIONS.md` 修正為 `/Journey-Atlas/`。
 
 ## v116 地圖署名連結安全與文件一致性
 
@@ -143,3 +143,4 @@
 - 本機瀏覽器載入 v116 後，探索底圖 3 個外連均有安全 rel；切換到衛星底圖（顯示 Esri 歸屬）再切回探索底圖後仍正確。2D／3D、搜尋與抽屜流程正常，未見 JavaScript error。
 - DOM 結構掃描：重複 ID、失效 `aria-controls`、空名稱按鈕、缺少 alt 的圖片均為 0；世界之最詳情的動態標題關聯在打開後有效。掃描在 1280 CSS px 執行；手機寬度、Firebase 登入與跨帳戶驗收尚未完成。
 - `node --check`（`mapManager.js`、`sw.js`）、景點資料與匯入前驗證、HTML／Service Worker／快取名稱版號一致性與 `git diff --check` 通過。
+- GitHub Pages workflow #76 執行成功；正式頁 `https://trilobitexz.github.io/Journey-Atlas/` 載入 v116 資源、SVG 圖示及含安全 rel 的地圖署名連結，瀏覽器沒有 JavaScript error。
