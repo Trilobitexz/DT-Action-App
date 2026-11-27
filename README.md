@@ -8,7 +8,7 @@
 
 ### 發布版本命名規則
 
-- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v119`，下一次發布時統一遞增為 `v120`。
+- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v120`，下一次發布時統一遞增為 `v121`。
 - 所有本地 CSS、JavaScript、城市資料、景點 JSON、manifest 與圖示的快取查詢參數使用相同的 `?v=N`，並在 `index.html`、`sw.js` 與程式內的動態靜態資料 URL 保持一致。
 - Service Worker 快取名稱使用 `journey-atlas-shell-vN`，與資源參數和發布提交訊息中的版本一致。更新 HTML 資源參數時，必須同步更新 Service Worker 的預快取清單及快取名稱。
 - 外部 CDN／API 使用供應商版本或 API URL，不改成專案版號；`index.html` 與 `sw.js` 自身不加查詢參數，避免影響導覽快取與 Service Worker 更新檢查。
@@ -70,6 +70,7 @@ flowchart LR
 3. 城市頁先用內建資料呈現，再並行查詢 Firestore 公開城市目錄及 OSM／Wikipedia／Wikidata 等來源；景點依明確精選標記、來源與座標完整度排序，同等資料品質保留資料庫順序。查詢設有逾時和備援，結果會快取 7 至 14 天。景點卡片可直接開啟 Google Maps URL（不需 Google Maps API key），並從 Wikipedia／Wikimedia Commons 載入縮圖與圖片來源連結。圖片只為目前顯示的景點載入，展開更多景點時才補查其餘項目。資料服務失敗時保留可用資料、提供地圖搜尋入口及重新載入按鈕。
 4. 預算、收藏、比較、最近瀏覽及行程先存在目前瀏覽器的本機儲存空間。Google 登入成功後，Firebase Auth UID 作為使用者識別，資料同步至 `users/{uid}/appData/{dataId}`；Firestore 規則只允許該 UID 存取自己的受限資料文件。
 5. AI 行程由已載入的候選景點產生，Firebase AI Logic 呼叫 Gemini；App Check 使用 reCAPTCHA Enterprise 驗證應用程式。AI 不寫入公開城市目錄；使用者的行程保存仍透過個人資料同步流程。
+   - AI 候選只採用附可追溯 HTTP(S) 來源連結的地點；行程卡片顯示每站來源，無來源的手動項目會明確提示核驗。
 6. Service Worker 快取同源網站殼層，以便離線開啟已下載資源；地圖底圖、Firebase 與即時外部資料仍需要網路。
 
 ### 新增公開資料來源與降級方式
@@ -193,6 +194,8 @@ Firestore 安全規則位於 [`firestore.rules`](./firestore.rules)，僅允許�
 城市規劃工具新增 AI 行程規劃，可依旅行天數、交通方式與旅客偏好，從已載入的城市景點安排每日順序；景點不足時會查詢周邊公開資料，資料來源暫時無回應時仍會提供地圖搜尋入口。結果可拖曳調整，沿用既有行程保存與登入後的 Firestore 同步。模型使用 Firebase AI Logic（Gemini Developer API）與 Gemini 3.8 Flash，輸出以結構化 JSON 驗證，避免模型捏造清單以外的景點。
 
 送入模型的偏好及城市目錄文字會以 JSON 資料區傳遞，並明確視為資料而非指令；AI 行程快取也會隨景點來源標籤或來源網址變更而更新。提供出發日期時，AI 會從 Day 1 開始依序規劃，將星期作為柔性安排參考並標示各日日期，日期會納入快取鍵；國定假日仍以獨立資料服務查詢，不代表景點營業狀態已確認。未知 AI 服務錯誤只顯示通用提示；已知輸入或回應格式問題會顯示對應的可理解原因。
+
+AI 僅採用帶有效 HTTP(S) 來源連結的候選，來源會列在行程卡與複製／列印內容；無來源的手動景點會明確標示，完全沒有可追溯來源時不呼叫模型。
 
 首次使用前，請依照 [`Firebase 維運與發布流程`](./FIREBASE_OPERATIONS.md) 在 Firebase Console 註冊 App Check reCAPTCHA Enterprise Web App，並確認 GitHub Pages 網域列入允許清單。網站金鑰已放在 `src/js/firebase-ai-config.js`，屬公開識別碼；不要放入 reCAPTCHA secret key 或 App Check debug token。先確認有效 token，再於 Console 逐步啟用 Firebase AI Logic enforcement。
 

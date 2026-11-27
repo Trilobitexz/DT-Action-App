@@ -2302,6 +2302,8 @@ body {
 .itinerary-spot-card .itinerary-transport { color: #2d8f83; }
 .itinerary-drag-hint { color: #8a938f; font-size: .62rem; font-weight: 500; }
 .itinerary-opening { color: #687477; font-size: .64rem; }
+.itinerary-source { color: #687477; font-size: .64rem; overflow-wrap: anywhere; }
+.itinerary-source a { color: #315f4f; font-weight: 700; text-underline-offset: 2px; }
 .itinerary-data-warning { color: #a56525; font-size: .62rem; }
 .itinerary-empty-day { margin: .4rem 0; color: #77817e; font-size: .7rem; }
 .itinerary-remove { margin-top: .4rem; }
