@@ -5,7 +5,7 @@
 ## 目前架構
 
 - 登入：Firebase Authentication，只使用 Google Popup。使用者資料以 Firebase UID 作為隔離邊界。
-- 使用者資料：`users/{uid}/appData/{dataId}`。Firestore 規則限制使用者只能讀寫自己的文件。
+- 使用者資料：`users/{uid}/appData/{dataId}`。Firestore 規則限制使用者只能讀寫自己的文件；預算 ID 僅允許現行城市清單的 200 個固定 ID，預算文件上限 20 KB，其他應用資料上限 700 KB。
 - 城市目錄：`cities/{cityId}` 與子集合 `spots` 公開讀取、客戶端禁止寫入；由可信任的 Admin SDK 匯入。
 - AI 行程：Firebase AI Logic；App Check 使用 reCAPTCHA Enterprise 網站金鑰。網站金鑰屬公開設定，secret key 與 debug token 不可提交。
 - 網站發布：GitHub Pages。Firebase CLI 部署命令只部署 Authentication/Firestore 設定，不會發布 Hosting 網站。
@@ -26,10 +26,13 @@
 
 ```sh
 npx firebase-tools login
+npm run check:firestore-budget-rules
 npm run deploy:firebase-config
 ```
 
-此命令會將 `firebase.json` 的 Google 登入設定與 `firestore.rules`、`firestore.indexes.json` 部署至 `.firebaserc` 指定的 `dt-action-app`。部署後回到 Console 核對 Google provider、Authorized domains、Firestore Rules 與索引狀態。它不建立 Firestore 資料庫、不設定 App Check、不建立帳單連結，也不部署 GitHub Pages。
+此命令會將 `firebase.json` 的 Google 登入設定與 `firestore.rules`、`firestore.indexes.json` 部署至 `.firebaserc` 指定的 `dt-action-app`。Firestore 預算資料文件只允許目前城市目錄中的 200 個固定 ID；若新增或移除城市，先執行 `npm run sync:firestore-budget-rules` 更新規則，再執行 `npm run check:firestore-budget-rules` 確認清單相符。部署後回到 Console 核對 Google provider、Authorized domains、Firestore Rules 與索引狀態。它不建立 Firestore 資料庫、不設定 App Check、不建立帳單連結，也不部署 GitHub Pages。
+
+若只變更 Firestore 規則，可執行 `npm run deploy:firestore-rules`；此專用命令會先檢查城市 allowlist，只部署 Firestore Rules，不會變更 Authentication 設定或索引。
 
 ## 匯入城市目錄
 

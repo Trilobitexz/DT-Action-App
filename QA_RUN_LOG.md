@@ -227,3 +227,12 @@
 - `node scripts/smoke-ai-planning.mjs` 驗證舊手動行程在畫面狀態與複製／列印文字中都有安全提示，新行程索引仍只接受有效整數。
 - `node --check`（plannerView.js、smoke-ai-planning.mjs）、`node scripts/audit-city-spots.mjs`、資源版號一致性及 `git diff --check` 通過。
 - GitHub Pages workflow #46032762396 對應提交 `13311dd` 並成功；正式頁回應 HTTP 200，HTML 載入 v128 資源。
+
+## v129 Firestore 預算文件資源限制
+
+- 規則審查發現任一登入使用者可在自己的 `appData` 集合建立任意數量的 `budget-{任意字串}` 文件，造成專案儲存與寫入成本風險。
+- `budget-*` 文件 ID 現在限定為 `scripts/data/prebuilt-spots.json` 中 200 個城市；預算資料最大 20 KB，其他個人應用文件維持 700 KB 上限。create/update 僅接受白名單，owner 可刪除舊規則下建立的自有預算文件以清理歷史資料。
+- 新增 `scripts/sync-firestore-budget-rules.mjs` 與 npm sync/check 命令；部署 Firebase 規則前會先確認清單與城市目錄相符。
+- `node scripts/sync-firestore-budget-rules.mjs --check`、規則來源靜態檢查、`node --check`（firebase.js、規則同步腳本）、`node scripts/smoke-ai-planning.mjs`、AI 資料稽核及 `git diff --check` 通過。此環境未安裝 npm 或 Firebase CLI，因此未執行 Rules Emulator 編譯；`package.json` JSON 格式檢查通過。
+- 本輪僅更新專案規則來源；Firebase Console 的實際已部署規則需另行確認，不在本輪遠端部署。
+- 待提交、推送並確認 GitHub Pages 部署結果。

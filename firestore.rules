@@ -4,7 +4,7 @@
 // users/{uid}/appData/{dataId}
 // Each document stores one private Journey Atlas preference/data item.
 // dataId: compare | favorites | recent | itineraries | budget-{cityId}
-// Fields: value (JSON string, required, max 700,000 chars),
+// Fields: value (JSON string, required; max 700,000 bytes, 20,000 for budgets),
 //         updatedAt (server timestamp, required; immutable to client time).
 // A user may list their own appData collection and read/write only supported
 // documents; no public or cross-user reads.
@@ -23,7 +23,19 @@ service cloud.firestore {
 
     function isAllowedDataId(dataId) {
       return dataId in ['compare', 'favorites', 'recent', 'itineraries']
-        || dataId.matches('^budget-[A-Za-z0-9_-]{1,120}$');
+        || isAllowedBudgetDataId(dataId);
+    }
+
+    // Generated from scripts/data/prebuilt-spots.json; run
+    // `npm run sync:firestore-budget-rules` after changing city IDs.
+    function isAllowedBudgetDataId(dataId) {
+      return dataId.matches('^budget-(addis-ababa|agra|ahmedabad|akureyri|alexandria|amritsar|amsterdam|antalya|arequipa|athens|auckland|ayutthaya|baghdad|bali|bandung|bangalore|bangkok|barcelona|beijing|bergen|berlin|bordeaux|boston|brisbane|brussels|bucharest|budapest|buenos-aires|busan|cairo|cancun|cape-town|cartagena|casablanca|cebu-city|chengdu|chennai|chiang-mai|chiang-rai|chicago|chongqing|christchurch|colombo|copenhagen|cusco|da-nang|dalian|dallas|davao|delhi|denver|dhaka|doha|dubai|dublin|dubrovnik|edinburgh|florence|fukuoka|george-town|gold-coast|guadalajara|guangzhou|guilin|hakodate|hamburg|hangzhou|hanoi|harbin|havana|helsinki|hiroshima|ho-chi-minh|hoi-an|hong-kong|honolulu|hue|incheon|istanbul|jaipur|jakarta|jeju|jerusalem|johannesburg|kanazawa|karachi|kathmandu|khartoum|kinshasa|kochi|kolkata|krakow|kuala-lumpur|kunming|kyoto|lagos|lahore|las-vegas|lhasa|lima|lisbon|london|los-angeles|luanda|luang-prabang|luxor|lyon|madrid|maldives|manchester|manila|marrakesh|marseille|medellin|melaka|melbourne|mexico-city|miami|milan|montevideo|montreal|moscow|mumbai|munich|nagasaki|nagoya|nairobi|nanjing|nara|new-orleans|new-york|nice|okinawa|osaka|oslo|oxford|panaji|panama-city|paris|pattaya|perth|phnom-penh|phuket|porto|prague|qingdao|queenstown|quito|rabat|reykjavik|rio|riyadh|rome|rotorua|salvador-bahia|san-diego|san-francisco|santiago|santo-domingo|santorini|sao-paulo|sapporo|sarajevo|seattle|sendai|seoul|seville|shanghai|shenzhen|siem-reap|singapore|sofia|split|stockholm|surabaya|suzhou|sydney|taipei|tallinn|tehran|tianjin|tokyo|toronto|valencia|vancouver|varanasi|venice|vienna|vik|warsaw|washington-dc|wellington|wuhan|xiamen|xian|yangon|yogyakarta|yokohama|zagreb|zurich)$');
+    }
+
+    function isLegacyBudgetDataId(dataId) {
+      // Permit owners to remove unsupported budget documents created under the
+      // former open-ended ID rule; create and update remain allowlisted.
+      return dataId.matches('^budget-[A-Za-z0-9_-]{1,120}$');
     }
 
     function isValidAppData(dataId) {
@@ -31,7 +43,8 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll(['value', 'updatedAt'])
         && request.resource.data.keys().hasOnly(['value', 'updatedAt'])
         && request.resource.data.value is string
-        && request.resource.data.value.size() <= 700000
+        && ((isAllowedBudgetDataId(dataId) && request.resource.data.value.size() <= 20000)
+          || (!isAllowedBudgetDataId(dataId) && request.resource.data.value.size() <= 700000))
         && request.resource.data.updatedAt is timestamp
         && request.resource.data.updatedAt == request.time;
     }
@@ -56,7 +69,7 @@ service cloud.firestore {
       allow list: if isOwner(userId);
       allow create: if isOwner(userId) && isValidAppData(dataId);
       allow update: if isOwner(userId) && isValidAppData(dataId);
-      allow delete: if isOwner(userId) && isAllowedDataId(dataId);
+      allow delete: if isOwner(userId) && (isAllowedDataId(dataId) || isLegacyBudgetDataId(dataId));
     }
 
     match /{document=**} {

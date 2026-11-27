@@ -6,7 +6,10 @@
     "enrich:city-spots": "node scripts/enrich-city-spots.mjs",
     "seed:city-catalog": "node scripts/seed-city-catalog.mjs",
     "verify:city-catalog": "node scripts/verify-city-catalog.mjs",
-    "deploy:firebase-config": "npx firebase-tools deploy --only auth,firestore:rules,firestore:indexes --project dt-action-app"
+    "sync:firestore-budget-rules": "node scripts/sync-firestore-budget-rules.mjs",
+    "check:firestore-budget-rules": "node scripts/sync-firestore-budget-rules.mjs --check",
+    "deploy:firestore-rules": "npm run check:firestore-budget-rules && npx firebase-tools deploy --only firestore:rules --project dt-action-app",
+    "deploy:firebase-config": "npm run check:firestore-budget-rules && npx firebase-tools deploy --only auth,firestore:rules,firestore:indexes --project dt-action-app"
   },
   "dependencies": {
     "firebase": "^11.0.2",

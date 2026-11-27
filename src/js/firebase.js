@@ -268,7 +268,9 @@
 
     function writeCloudValue(uid, key, value) {
       if (!isCloudDataKey(key)) return Promise.resolve();
-      if (typeof value !== "string" || new Blob([value]).size > 700000) {
+      var dataId = key.slice(managedStoragePrefix.length);
+      var maxBytes = dataId.indexOf("budget-") === 0 ? 20000 : 700000;
+      if (typeof value !== "string" || new Blob([value]).size > maxBytes) {
         var sizeError = new Error("這筆資料超過雲端同步上限；資料仍保存在目前裝置。請整理較舊的行程或收藏後再試。");
         sizeError.code = "firestore/local-data-too-large";
         return Promise.reject(sizeError);
