@@ -190,4 +190,5 @@
 - 發現離線目錄每城只有 3–5 筆合格 AI 景點，但行程介面提供 3、5、7 天；95 城離線資料少於預設 5 天，200 城均無法單靠離線候選完成 7 天規劃。
 - AI 候選不足所選天數時，現在會要求 CityCatalogService 強制更新城市景點資料，再重新套用來源、座標、分類、40 字介紹及真實景點條件。更新仍不足時保留原行程並顯示資料不足，不以搜尋建議或無來源資料代替景點。
 - `node scripts/smoke-ai-planning.mjs` 模擬只載入 3 筆、需 7 筆的流程，確認觸發強制更新；只納入 4 筆有來源完整資料，排除無效 scheme，最終得到 7 筆合格候選。另以 40 筆已快取一般景點確認強制刷新仍呼叫即時來源；即時資料為 mock，未登入 Firebase 或呼叫外部地圖服務。
-- 待本輪完成 JavaScript 語法、資料稽核、資源版號與 `git diff --check` 後提交推送。
+- `node --check`（plannerView.js、cityCatalogService.js、smoke-ai-planning.mjs）、AI 資料稽核（200 城、839 筆候選、來源／介紹／座標缺漏 0）、資源版號一致性及 `git diff --check` 通過。
+- GitHub Pages workflow #46015498910 對應提交 `77eaeb1` 並成功；正式頁回應 HTTP 200，HTML 載入 v124 資源。
