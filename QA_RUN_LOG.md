@@ -210,4 +210,4 @@
 - `node scripts/smoke-ai-planning.mjs` 通過完整候選與缺來源、無效座標、短介紹、搜尋建議、一般車站拒絕案例；完整資料集 200 城每城至少 3 筆。
 - `node scripts/audit-city-spots.mjs` 通過：839 筆 AI 候選，缺來源、座標、介紹、短介紹、超距、非景點、重複名稱及城市中心錯置均為 0；缺可核實圖片 50 筆，使用分類替代圖。
 - `node --check`（spotTextService.js、plannerView.js、firebase.js、smoke-ai-planning.mjs）及 `git diff --check` 通過。未以登入帳戶呼叫真實 Firebase AI Logic。
-- 待提交、推送並確認 GitHub Pages 部署結果。
+- GitHub Pages workflow #46030966449 對應提交 `baf0b4d` 並成功；正式頁回應 HTTP 200，HTML 載入 v126 資源。AI 真實登入流程仍待以使用者帳戶實測。
