@@ -247,3 +247,10 @@
 - 變更 JavaScript／MJS 語法檢查、7 份 JSON 解析、v130 頁面與 Service Worker 快取版號、`git diff --check` 通過。PowerShell/Git 對 LF 檔案顯示 CRLF 轉換提示，檢查未回報空白錯誤。
 - GitHub Pages workflow #98（run `46038499248`）對應提交 `00f8e75` 並成功；正式頁回應 HTTP 200，HTML 載入 v130 資源，標題與版本均正確。`origin/main` 已確認指向 `00f8e75`，本機工作樹乾淨。
 - Firebase Rules 未部署；此輪只做本機匯入前驗證，沒有連線或寫入 Firestore。
+
+## v131 AI 強制刷新競態修正
+
+- 發現 AI 候選不足時發出的強制刷新會與正在進行的一般目錄載入共用同一個 Promise，導致 AI 等到舊請求結束後就停止，沒有實際再查即時資料源。
+- 目錄服務現在記錄進行中的請求是否已是強制刷新；強制刷新遇到一般請求時會先等待，再重試資料載入。已在進行中的強制刷新仍由併發呼叫共用，完成清理也只移除目前請求本身。
+- AI smoke 新增受控的並行情境：一般請求停在即時來源時觸發強制刷新，確認完成後第二次查詢確實發出，並把新增的有效景點納入候選。原有 40 筆快取資料仍會觸發即時來源檢查。
+- `node scripts/smoke-ai-planning.mjs`、`node --check src/js/services/cityCatalogService.js`、`node --check scripts/smoke-ai-planning.mjs` 及 `git diff --check` 通過。資源與 Service Worker 快取版號升至 v131。

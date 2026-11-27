@@ -372,6 +372,54 @@ if (!liveRefreshCalled) {
   throw new Error("Forced candidate refresh skipped live sources when 40 already-loaded spots were still insufficient for AI.");
 }
 
+const concurrentRefreshCity = {
+  id: "concurrent-force-refresh-test",
+  name: "並行刷新測試城市",
+  lat: 35,
+  lng: 139,
+  spots: Array.from({ length: 3 }, (_, index) => makeCandidate(
+    `Cached attraction ${index + 1}`,
+    `https://example.org/cached/${index + 1}`,
+    35 + index / 1000,
+    139 + index / 1000
+  ))
+};
+let concurrentLiveCalls = 0;
+let releaseInitialLiveRequest;
+let notifyInitialLiveRequestStarted;
+const initialLiveRequestStarted = new Promise(resolve => { notifyInitialLiveRequestStarted = resolve; });
+const initialLiveRequestGate = new Promise(resolve => { releaseInitialLiveRequest = resolve; });
+service.spotCache.delete(concurrentRefreshCity.id);
+service.readSpotCache = async () => null;
+service.fetchPrebuiltSpots = async () => [];
+service.fetchCity = async () => ({ city: { lat: 35, lng: 139 }, spots: [] });
+service.writeSpotCache = async () => {};
+sandbox.window.SpotService = {
+  fetchNearbyPlaces: async () => {
+    concurrentLiveCalls += 1;
+    if (concurrentLiveCalls === 1) {
+      notifyInitialLiveRequestStarted();
+      return initialLiveRequestGate;
+    }
+    return [makeCandidate("Freshly refreshed museum", "https://example.org/fresh-museum", 35.02, 139.02)];
+  }
+};
+const initialCatalogLoad = service.ensureSpots(concurrentRefreshCity, { limit: 100 });
+await initialLiveRequestStarted;
+const forcedCatalogRefresh = service.ensureSpots(concurrentRefreshCity, { limit: 100, forceRefresh: true });
+releaseInitialLiveRequest([]);
+await Promise.all([initialCatalogLoad, forcedCatalogRefresh]);
+service.readSpotCache = serviceMethods.readSpotCache;
+service.fetchPrebuiltSpots = serviceMethods.fetchPrebuiltSpots;
+service.fetchCity = serviceMethods.fetchCity;
+service.writeSpotCache = serviceMethods.writeSpotCache;
+service.spotCache.delete(concurrentRefreshCity.id);
+sandbox.window.SpotService = previousSpotService;
+if (concurrentLiveCalls !== 2
+  || !concurrentRefreshCity.spots.some(spot => spot.name === "Freshly refreshed museum")) {
+  throw new Error("A forced refresh during an in-flight catalog load reused stale results instead of querying live sources.");
+}
+
 const knownYangon = service.getKnownCityCoordinates("yangon");
 if (knownYangon?.lat !== 16.80528 || knownYangon?.lng !== 96.15611) {
   throw new Error("The GeoNames Yangon coordinate was not selected.");
@@ -427,6 +475,6 @@ if (cloudResult?.city?.lat !== 16.80528 || cloudResult?.city?.lng !== 96.15611
 const minimumCandidates = Math.min(...cityCandidates.map(city => city.count));
 console.log(`AI candidate smoke check passed: ${cityCandidates.length} cities; minimum ${minimumCandidates} complete sourced candidates per city; generic station rejected.`);
 console.log("Long-itinerary smoke check passed: valid live candidates fill shortages; missing sources and short descriptions remain excluded.");
-console.log("Forced-refresh smoke check passed: live sources are retried even when 40 non-AI spots are cached.");
+console.log("Forced-refresh smoke check passed: live sources are retried with cached spots and during an in-flight catalog request.");
 console.log("Image attribution smoke check passed: Commons source, author and licence display and survive cloud/local merges.");
 console.log("Cloud catalog smoke check passed: stale Yangon center corrected; invalid-coordinate spot excluded.");

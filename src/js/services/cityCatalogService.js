@@ -9,6 +9,7 @@
     cache: new Map(),
     spotCache: new Map(),
     spotRequests: new Map(),
+    spotRequestForceRefresh: new Map(),
     cityRequests: new Map(),
     prebuiltCityRequests: new Map(),
     failedCityReads: new Map(),
@@ -370,7 +371,13 @@
         city._spotCatalogReady = true;
         return Promise.resolve(city.spots);
       }
-      if (this.spotRequests.has(key)) return this.spotRequests.get(key);
+      const activeRequest = this.spotRequests.get(key);
+      if (activeRequest) {
+        if (!forceRefresh || this.spotRequestForceRefresh.get(key) === true) return activeRequest;
+        return activeRequest.catch(() => []).then(() => this.ensureSpots(city, {
+          radius, limit, onCatalogReady, forceRefresh: true
+        }));
+      }
 
       const request = (async () => {
         const localKey = `journey-atlas-city-spots-v3-${key}`;
@@ -488,8 +495,14 @@
           onCatalogReady(spots, { city: cloudCatalog?.city || null, source: "final", cacheMeta: city.spotsCacheMeta || null });
         }
         return spots;
-      })().finally(() => this.spotRequests.delete(key));
+      })().finally(() => {
+        if (this.spotRequests.get(key) === request) {
+          this.spotRequests.delete(key);
+          this.spotRequestForceRefresh.delete(key);
+        }
+      });
       this.spotRequests.set(key, request);
+      this.spotRequestForceRefresh.set(key, forceRefresh);
       return request;
     }
   };
