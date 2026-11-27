@@ -93,6 +93,17 @@ class MapManager {
   }
   syncAllSources() { Object.keys(this.geojson).forEach(key => this.syncSource(key)); }
 
+  secureAttributionLinks(container) {
+    if (!container) return;
+    const secure = () => container.querySelectorAll('.maplibregl-ctrl-attrib a[target="_blank"]').forEach(link => {
+      link.relList.add("noopener", "noreferrer");
+    });
+    secure();
+    if (this.attributionObserver || !window.MutationObserver) return;
+    this.attributionObserver = new window.MutationObserver(secure);
+    this.attributionObserver.observe(container, { childList: true, subtree: true });
+  }
+
   init() {
     const container = document.getElementById(this.containerId);
     const status = document.getElementById("map-load-status");
@@ -125,6 +136,7 @@ class MapManager {
       if (this.currentCityContext && event?.originalEvent) this.cityContextUserInteracted = true;
     });
     this.map.addControl(new window.maplibregl.AttributionControl({ compact: true }), "bottom-right");
+    this.secureAttributionLinks(container);
     this.map.on("error", event => { if (event?.error) console.warn("MapLibre map/tile error:", event.error); });
     this.map.on("load", () => {
       window.clearTimeout(this.initialMapLoadTimer);

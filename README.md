@@ -8,7 +8,7 @@
 
 ### 發布版本命名規則
 
-- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v115`，下一次發布時統一遞增為 `v116`。
+- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v116`，下一次發布時統一遞增為 `v117`。
 - 所有本地 CSS、JavaScript、城市資料、景點 JSON、manifest 與圖示的快取查詢參數使用相同的 `?v=N`，並在 `index.html`、`sw.js` 與程式內的動態靜態資料 URL 保持一致。
 - Service Worker 快取名稱使用 `journey-atlas-shell-vN`，與資源參數和發布提交訊息中的版本一致。更新 HTML 資源參數時，必須同步更新 Service Worker 的預快取清單及快取名稱。
 - 外部 CDN／API 使用供應商版本或 API URL，不改成專案版號；`index.html` 與 `sw.js` 自身不加查詢參數，避免影響導覽快取與 Service Worker 更新檢查。
@@ -169,7 +169,7 @@ Firebase 初始化與 Web SDK 設定位於 [`src/js/firebase.js`](./src/js/fireb
 
 1. 確認 Web App 的 Firebase 設定與 `src/js/firebase.js` 中 `firebaseConfig` 相符。
 2. 在 **Authentication → Sign-in method** 啟用 **Google**。如登入回報 `auth/operation-not-allowed`，請在此頁確認 Google 提供者已啟用。
-3. 在 **Authentication → Settings → Authorized domains** 加入 `trilobitexz.github.io`（GitHub Pages 的專案網址路徑會隨儲存庫名稱變更，例如 `/journey-atla/`；授權網域只填主機名稱，不要加 `https://` 或路徑）。本機測試使用 `localhost`。
+3. 在 **Authentication → Settings → Authorized domains** 加入 `trilobitexz.github.io`（目前 GitHub Pages 網址為 `https://trilobitexz.github.io/DT-Action-App/`；GitHub 授權網域只填主機名稱，不要加 `https://` 或路徑）。本機測試使用 `localhost`。
 4. 確認 Google 登入提供者的支援電子郵件與 OAuth 設定已完成。
 5. 本專案正式網站使用 GitHub Pages；Firebase Hosting 並非登入必要條件。
 

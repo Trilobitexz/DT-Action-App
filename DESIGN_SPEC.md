@@ -162,4 +162,4 @@
 
 ## Firebase 帳戶登入
 
-頁面右上角提供帳戶選單，支援 Firebase Authentication Google 登入，以及電子郵件／密碼註冊與登入。電子郵件註冊會寄送 Firebase 驗證信，未完成驗證的帳戶不能登入。首次部署需在 Firebase Console 啟用 Google 與 Email/Password 登入方式，並設定授權網域與電子郵件範本。請從 Firebase Console → Hosting 取得已連結的 `dt-action-app` 網站實際 HTTPS 網址後操作；不可用 file:// 直接驗證登入。登入狀態儲存於瀏覽器本機，登出後可由同一選單操作。
+頁面右上角的帳戶選單使用 Firebase Authentication Google Popup 登入；前端不提供 Email/Password 註冊或登入表單。首次部署需在 Firebase Console 啟用 Google 登入提供者，並設定授權網域與支援電子郵件。請從 Firebase Console → Hosting 確認已連結的 `dt-action-app` 網站 HTTPS 網址；不可用 `file://` 驗證登入。登入後，收藏、比較、最近瀏覽、預算與行程可同步至使用者自己的 Firestore 資料路徑；登出後可由同一選單操作。
