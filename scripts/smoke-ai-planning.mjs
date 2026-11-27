@@ -61,6 +61,17 @@ if (sandbox.window.PlannerView.getItinerary(itineraryCity, 5).some(day => day.le
   || !sandbox.window.PlannerView.getItineraryText(itineraryCity, 5).includes("舊版 AI 行程")) {
   throw new Error("A legacy AI itinerary without attraction identities was not safely withheld.");
 }
+storedItineraryJson = JSON.stringify({ "itinerary-key-test": { 3: [[1], [], []] } });
+if (sandbox.window.PlannerView.getItinerary(itineraryCity, 3).some(day => day.length)
+  || !sandbox.window.PlannerView.getItineraryIdentityWarning(itineraryCity, 3).includes("舊版手動行程")
+  || !sandbox.window.PlannerView.getItineraryText(itineraryCity, 3).includes("舊版手動行程")) {
+  throw new Error("A legacy manual itinerary without attraction identities was not safely withheld.");
+}
+storedItineraryJson = JSON.stringify({ "itinerary-key-test": { 3: [[1], [], []], "3SpotKeys": [] } });
+if (sandbox.window.PlannerView.getItinerary(itineraryCity, 3).some(day => day.length)
+  || !sandbox.window.PlannerView.getItineraryIdentityWarning(itineraryCity, 3).includes("舊版手動行程")) {
+  throw new Error("A malformed itinerary identity map was trusted as a valid mapping.");
+}
 storedItineraryJson = JSON.stringify({
   "itinerary-key-test": {
     5: [[0], ...emptyDays.slice(1)],

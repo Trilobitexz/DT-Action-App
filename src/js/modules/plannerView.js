@@ -1193,11 +1193,16 @@ window.PlannerView = {
     if (!savedCity || typeof savedCity !== "object") return "";
     const keysKey = `${days}SpotKeys`;
     const keysByDay = savedCity[keysKey];
+    const hasValidKeysByDay = Array.isArray(keysByDay) && keysByDay.length === days && keysByDay.every(Array.isArray);
+    const savedDays = savedCity[days];
+    const hasSavedSpots = Array.isArray(savedDays) && savedDays.some(day => Array.isArray(day) && day.length);
     const aiMeta = savedCity[`${days}Meta`];
-    if (Array.isArray(aiMeta) && aiMeta.length === days && !Array.isArray(keysByDay)) {
-      return "這份舊版 AI 行程沒有保存景點對應資料；為避免顯示錯誤景點，請重新產生行程。";
+    if (hasSavedSpots && !hasValidKeysByDay) {
+      return Array.isArray(aiMeta) && aiMeta.length === days
+        ? "這份舊版 AI 行程沒有保存景點對應資料；為避免顯示錯誤景點，請重新產生行程。"
+        : "這份舊版手動行程沒有保存景點對應資料；為避免顯示錯誤景點，請重新安排行程。";
     }
-    if (!Array.isArray(keysByDay)) return "";
+    if (!hasValidKeysByDay) return "";
     const currentKeys = new Set(this.getPlanningSpots(city).map(spot => this.getItinerarySpotKey(spot)));
     const missingCount = keysByDay.flatMap(day => Array.isArray(day) ? day : [])
       .filter(key => key && !currentKeys.has(key)).length;
@@ -1214,13 +1219,13 @@ window.PlannerView = {
     const savedCity = stored[city.id] || stored[legacyId];
     const saved = savedCity?.[days];
     const keysByDay = savedCity?.[`${days}SpotKeys`];
-    if (Array.isArray(keysByDay)) {
+    const hasValidKeysByDay = Array.isArray(keysByDay) && keysByDay.length === days && keysByDay.every(Array.isArray);
+    if (hasValidKeysByDay) {
       const currentIndexes = new Map(this.getPlanningSpots(city).map((spot, index) => [this.getItinerarySpotKey(spot), index]));
       return Array.from({ length: days }, (_, index) => (Array.isArray(keysByDay[index]) ? keysByDay[index] : [])
         .map(key => currentIndexes.get(key)).filter(Number.isInteger));
     }
-    const aiMeta = savedCity?.[`${days}Meta`];
-    if (Array.isArray(aiMeta) && aiMeta.length === days) return Array.from({ length: days }, () => []);
+    if (this.getItineraryIdentityWarning(city, days)) return Array.from({ length: days }, () => []);
     return Array.from({ length: days }, (_, index) => Array.isArray(saved?.[index]) ? saved[index] : []);
   },
 

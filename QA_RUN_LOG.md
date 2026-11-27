@@ -219,3 +219,11 @@
 - 複製與列印遇到過期或無法對應的景點時會回報需重新產生，不會匯出其他清單項目冒充原行程。
 - `node scripts/smoke-ai-planning.mjs` 覆蓋清單重排重新對應、缺少穩定鍵的舊 AI 行程，以及景點已移除的失效鍵案例；語法檢查與 `git diff --check` 通過。
 - GitHub Pages workflow #46032000211 對應提交 `de14348` 並成功；正式頁回應 HTTP 200，HTML 載入 v127 資源。工作樹與 `origin/main` 同步。
+
+## v128 舊版手動行程索引保護
+
+- 舊版手動行程和舊 AI 行程一樣只保存數字索引；若城市景點清單已排序或內容更新，索引可能顯示另一筆景點。
+- 缺少 `SpotKeys` 的舊手動行程現在不使用不確定的索引，顯示重新安排行程提示；已保存身份鍵但景點已移除時，提示重新載入或建立新行程。
+- `node scripts/smoke-ai-planning.mjs` 驗證舊手動行程在畫面狀態與複製／列印文字中都有安全提示，新行程索引仍只接受有效整數。
+- `node --check`（plannerView.js、smoke-ai-planning.mjs）、`node scripts/audit-city-spots.mjs`、資源版號一致性及 `git diff --check` 通過。
+- 待提交、推送並確認 GitHub Pages 部署結果。
