@@ -36,7 +36,12 @@ window.CountryView = {
 
     // 基本資訊標題
     document.getElementById("detail-country-flag").innerText = country.flag;
-    document.getElementById("detail-country-name").innerText = `${country.name} (${country.englishName})`;
+    const countryName = String(country.name || "").trim();
+    const englishCountryName = String(country.englishName || "").trim();
+    document.getElementById("detail-country-name").innerText = countryName && englishCountryName
+      && countryName.toLocaleLowerCase() !== englishCountryName.toLocaleLowerCase()
+      ? `${countryName} (${englishCountryName})`
+      : countryName || englishCountryName;
     // 即時匯率動態拉取
     const visaEl = document.getElementById("detail-currency-visa");
     visaEl.innerHTML = `幣別：${country.currency} ｜ 簽證：${country.visa} <span id="live-rate-tag" style="color:var(--primary); font-size:0.8rem; margin-left:6px;">(匯率載入中...)</span>`;
