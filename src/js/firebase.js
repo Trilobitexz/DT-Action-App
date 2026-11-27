@@ -1,4 +1,10 @@
 (function () {
+  function createAIPlannerError(code, message) {
+    var error = new Error(message);
+    error.code = code;
+    return error;
+  }
+
   var firebaseConfig = {
     apiKey: "AIzaSyCE0lWfxqFyylI7z13IUrW6Jv9PMEGCiMI",
     authDomain: "dt-action-app.firebaseapp.com",
@@ -98,7 +104,7 @@
           var spots = Array.isArray(input.spots)
             ? input.spots.filter(function (spot) { return spot && typeof spot === "object"; }).slice(0, 50)
             : [];
-          if (!spots.length) throw new Error("這座城市目前沒有可供 AI 安排的景點資料。");
+          if (!spots.length) throw createAIPlannerError("ai/no-spots", "這座城市目前沒有可供 AI 安排的景點資料。");
           var safeDays = Math.max(1, Math.min(7, Math.trunc(Number(input.days)) || 1));
           var safeText = function (value, maxLength) {
             return String(value == null ? "" : value).replace(/[\u0000-\u001F\u007F]/g, " ").slice(0, maxLength);
@@ -144,21 +150,21 @@
           var text = result.response.text();
           var parsed;
           try { parsed = JSON.parse(text); }
-          catch (parseError) { throw new Error("AI 回傳格式不完整，請再試一次。"); }
+          catch (parseError) { throw createAIPlannerError("ai/invalid-response", "AI 回傳格式不完整，請再試一次。"); }
           if (!parsed || !Array.isArray(parsed.days) || parsed.days.length !== safeDays) {
-            throw new Error("AI 回傳的行程天數不正確，請再試一次。");
+            throw createAIPlannerError("ai/invalid-days", "AI 回傳的行程天數不正確，請再試一次。");
           }
           var seen = new Set();
           var days = parsed.days.map(function (day) {
-            if (!day || !Array.isArray(day.spotIndexes)) throw new Error("AI 回傳的景點安排格式不正確。");
+            if (!day || !Array.isArray(day.spotIndexes)) throw createAIPlannerError("ai/invalid-day", "AI 回傳的景點安排格式不正確。");
             var indexes = day.spotIndexes.map(function (index) {
               if (!Number.isInteger(index) || index < 0 || index >= spots.length || seen.has(index)) {
-                throw new Error("AI 回傳了無效或重複的景點，請再試一次。");
+                throw createAIPlannerError("ai/invalid-spots", "AI 回傳了無效或重複的景點，請再試一次。");
               }
               seen.add(index);
               return index;
             });
-            if (indexes.length > 3 || (indexes.length < 1 && spots.length >= safeDays)) throw new Error("AI 每日景點數量超出規劃範圍，請再試一次。");
+            if (indexes.length > 3 || (indexes.length < 1 && spots.length >= safeDays)) throw createAIPlannerError("ai/invalid-count", "AI 每日景點數量超出規劃範圍，請再試一次。");
             return {
               spotIndexes: indexes,
               theme: String(day.theme || "城市探索").slice(0, 60),

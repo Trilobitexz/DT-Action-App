@@ -25,6 +25,23 @@ function formatPlannerDate(value) {
   return normalized ? normalized.replaceAll("-", "/") : "";
 }
 
+function createItineraryError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+const AI_ITINERARY_SAFE_ERROR_MESSAGES = Object.freeze({
+  "ai/no-spots": "這座城市目前沒有可供 AI 安排的景點資料。",
+  "ai/no-candidates": "尚未取得可安排的景點，請確認網路後再試。",
+  "ai/invalid-response": "AI 回傳格式不完整，請再試一次。",
+  "ai/invalid-days": "AI 回傳的行程天數不正確，請再試一次。",
+  "ai/invalid-day": "AI 回傳的景點安排格式不正確。",
+  "ai/invalid-spots": "AI 回傳了無效或重複的景點，請再試一次。",
+  "ai/invalid-count": "AI 每日景點數量超出規劃範圍，請再試一次。",
+  "ai/invalid-day-plan": "AI 沒有為每一天選到有效景點，請再試一次。"
+});
+
 function readStoredJson(key, fallback) {
   try {
     const rawValue = localStorage.getItem(key);
@@ -676,7 +693,7 @@ window.PlannerView = {
         const allPlanningSpots = this.getPlanningSpots(city);
         const planningCandidates = this.rankAIPlanningSpots(city, this.itineraryDays);
         const planningSpots = planningCandidates.map(item => item.spot);
-        if (!planningSpots.length) throw new Error("尚未取得可安排的景點，請確認網路後再試。");
+        if (!planningSpots.length) throw createItineraryError("ai/no-candidates", "尚未取得可安排的景點，請確認網路後再試。");
         const spotSelect = host.querySelector("#itinerary-spot-select");
         if (spotSelect) spotSelect.innerHTML = allPlanningSpots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}</option>`).join("");
         const preferences = host.querySelector("#itinerary-ai-preferences")?.value || "";
@@ -703,7 +720,7 @@ window.PlannerView = {
           .map(candidateIndex => currentIndexes.get(planningCandidates[candidateIndex]?.key))
           .filter(index => Number.isInteger(index)));
         if (selectedDays.some(day => !day.length) && planningSpots.length >= this.itineraryDays) {
-          throw new Error("AI 沒有為每一天選到有效景點，請再試一次。");
+          throw createItineraryError("ai/invalid-day-plan", "AI 沒有為每一天選到有效景點，請再試一次。");
         }
         this.saveItinerary(city, this.itineraryDays, selectedDays, response.days, departureDateValue);
         this.renderItinerary(city, this.itineraryDays);
@@ -716,9 +733,12 @@ window.PlannerView = {
           ? `AI 已從 ${planningSpots.length} 筆候選挑選 ${selectedCount} 個景點${cacheLabel}；含地圖搜尋建議，請開啟連結確認實際地點。`
           : `AI 已從 ${planningSpots.length} 筆候選挑選 ${selectedCount} 個景點，安排為 ${this.itineraryDays} 天行程${cacheLabel}；${unplannedCount ? `另有 ${unplannedCount} 筆候選未安排，可從手動新增清單挑選。` : "所有候選均已安排。"}`;
       } catch (error) {
-        console.error("AI 行程規劃失敗：", error);
+        console.error("AI 行程規劃失敗。錯誤代碼：", String(error?.code || "unknown").slice(0, 80));
         status.dataset.state = "error";
         const errorText = String(error?.message || "");
+        const safeInternalErrorMessage = Object.prototype.hasOwnProperty.call(AI_ITINERARY_SAFE_ERROR_MESSAGES, error?.code)
+          ? AI_ITINERARY_SAFE_ERROR_MESSAGES[error.code]
+          : "AI 暫時無法規劃，請稍後再試；原行程已保留。";
         const retryMatch = errorText.match(/after\s+(?:(\d+)m:)?(\d+)s/i);
         const isAppCheckThrottle = /appCheck\/(?:initial-)?throttle|appCheck\/throttled/i.test(String(error?.code || "")) || /appCheck\/(?:initial-)?throttle|appCheck\/throttled/i.test(errorText);
         if (isAppCheckThrottle) {
@@ -742,7 +762,7 @@ window.PlannerView = {
         else if (/quota|resource.?exhausted|429/i.test(String(error?.code || "") + " " + errorText)) status.textContent = "AI 目前的使用額度或請求頻率已達上限，請稍後再試。";
         else if (/network|fetch|offline|unavailable/i.test(String(error?.code || "") + " " + errorText)) status.textContent = "目前連線不穩，請確認網路後再試；已載入的城市景點會保留。";
         else if (/AppCheck|app.?check|permission-denied/i.test(errorText + " " + String(error?.code || ""))) status.textContent = "Firebase AI 權限或 App Check 驗證失敗。請確認 Firebase AI Logic 已啟用，並檢查 Web App 網站金鑰與授權網域。";
-        else status.textContent = error?.message || "AI 暫時無法規劃，請稍後再試。";
+        else status.textContent = safeInternalErrorMessage;
       } finally {
         aiGenerationInFlight = false;
         dayButtons.forEach(dayButton => { dayButton.disabled = false; });

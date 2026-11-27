@@ -161,3 +161,9 @@
 - 同一流程在 320、375、430 CSS px 下無水平溢位，未出現未捕捉 JavaScript 錯誤；`node --check`（`firebase.js`、`plannerView.js`、`sw.js`）、資源版號一致性與 `git diff --check` 通過。
 - 推送後 GitHub Pages workflow #80 成功（提交 `3d1d208`）；正式頁回應 HTTP 200，頁面標題正確且本機資源查詢版號為 v118。
 - 本次使用模擬 AI 驗證前端整合，尚未以登入帳戶呼叫 Firebase AI Logic；模型是否能依日期產生更合適的日程安排仍待真實服務驗收。
+
+## v119 AI 錯誤訊息安全處理
+
+- 未知 Firebase AI provider 錯誤不再把原始 `error.message` 顯示於行程狀態；改用通用提示並保留既有行程。前端只記錄錯誤代碼；已知的景點不足、格式、天數與索引問題使用內部錯誤代碼對應可理解提示。
+- 本機 Chrome 模擬 provider 回傳含假 token 的內部錯誤：畫面顯示通用提示、舊行程與出發日保留，錯誤字串未出現在 Console；再模擬 `ai/invalid-response`，正確顯示格式提示。日期、偏好、交通設定在失敗後恢復可用，無未捕捉 JavaScript 錯誤。
+- `node --check`（`firebase.js`、`plannerView.js`）、`git diff --check` 通過。此次沒有登入帳戶或呼叫 Firebase AI Logic；尚待真實服務錯誤分流驗收。

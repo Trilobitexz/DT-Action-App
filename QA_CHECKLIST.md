@@ -29,7 +29,7 @@
 - [ ] 離線或阻擋單一來源時，其他頁面仍可使用；已載入景點、收藏和行程保留。
 - [ ] 關閉 REST Countries／Nager.Date／Open-Meteo／OSM 請求後，狀態提示可辨識；假日查詢失敗後再次選日期可重試。
 - [ ] 城市景點快取過期、空資料或座標無效時，提供本地資料、清楚空狀態或 Google 地圖搜尋入口。
-- [ ] Firebase 未登入、Firestore 權限拒絕、AI App Check 節流及 API 額度錯誤時，提示不洩漏原始憑證或無關內部細節。
+- [ ] Firebase 未登入、Firestore 權限拒絕、AI App Check 節流、API 額度與未知 provider 錯誤時，提示不洩漏原始憑證或內部訊息；AI 失敗後原行程保留。
 - [ ] Service Worker 更新後確認載入新版本；重新開啟頁面不會持續使用前一版 HTML／JavaScript。
 
 ## Firebase 與安全性
