@@ -45,7 +45,7 @@ function createItineraryError(code, message) {
 const AI_ITINERARY_SAFE_ERROR_MESSAGES = Object.freeze({
   "ai/no-spots": "這座城市目前沒有可供 AI 安排的景點資料。",
   "ai/no-candidates": "尚未取得可安排的景點，請確認網路後再試。",
-  "ai/no-sourced-spots": "目前沒有附可追溯來源的景點資料，因此未產生 AI 行程；請重新載入景點或改用人工安排。",
+  "ai/no-sourced-spots": "目前沒有同時附來源、有效座標與完整介紹的景點資料，因此未產生 AI 行程；請重新載入景點或改用人工安排。",
   "ai/invalid-response": "AI 回傳格式不完整，請再試一次。",
   "ai/invalid-days": "AI 回傳的行程天數不正確，請再試一次。",
   "ai/invalid-day": "AI 回傳的景點安排格式不正確。",
@@ -149,14 +149,18 @@ window.PlannerView = {
   },
   rankAIPlanningSpots: function (city, days) {
     const all = this.getPlanningSpots(city).map((spot, index) => ({ spot, index, score: 0 }));
-    const sourced = all.filter(item => getPlannerSource(item.spot));
-    const real = sourced.filter(item => !item.spot.isSearchSuggestion);
-    const candidates = real.length >= days ? real : sourced;
     const hasCoordinates = spot => spot?.lat !== null && spot?.lat !== undefined && spot?.lat !== ""
       && spot?.lng !== null && spot?.lng !== undefined && spot?.lng !== ""
       && Number.isFinite(Number(spot.lat)) && Number(spot.lat) >= -90 && Number(spot.lat) <= 90
       && Number.isFinite(Number(spot.lng)) && Number(spot.lng) >= -180 && Number(spot.lng) <= 180
       && !(Number(spot.lat) === 0 && Number(spot.lng) === 0);
+    const candidates = all.filter(item => {
+      const spot = item.spot;
+      return !spot.isSearchSuggestion && Boolean(getPlannerSource(spot)) && hasCoordinates(spot)
+        && String(spot.name || "").trim() && String(spot.category || "").trim()
+        && String(spot.description || spot.summary || spot.note || "").trim().length >= 40
+        && (window.SpotTextService?.isTravelAttraction(spot) ?? true);
+    });
     candidates.forEach(item => {
       const spot = item.spot;
       item.score = (spot.isFeatured ? 2 : 0)
@@ -708,6 +712,9 @@ window.PlannerView = {
         const planningCandidates = this.rankAIPlanningSpots(city, this.itineraryDays);
         const planningSpots = planningCandidates.map(item => item.spot);
         if (!planningSpots.length) throw createItineraryError("ai/no-sourced-spots", "\u76EE\u524D\u6C92\u6709\u9644\u53EF\u8FFD\u6EAF\u4F86\u6E90\u7684\u666F\u9EDE\u8CC7\u6599\u3002");
+        if (planningSpots.length < this.itineraryDays) {
+          throw createItineraryError("ai/insufficient-sourced-spots", `目前只有 ${planningSpots.length} 筆同時具備來源、有效座標及 40 字以上介紹的景點，至少需要 ${this.itineraryDays} 筆才能為每天安排景點。請載入更多資料或縮短行程天數；原行程已保留。`);
+        }
         const spotSelect = host.querySelector("#itinerary-spot-select");
         if (spotSelect) spotSelect.innerHTML = allPlanningSpots.map((spot, index) => `<option value="${index}">${escapePlannerText(spot.name)}${getPlannerSource(spot) ? "" : "\uFF08\u5C1A\u7121\u4F86\u6E90\uFF09"}</option>`).join("");
         const preferences = host.querySelector("#itinerary-ai-preferences")?.value || "";
@@ -740,12 +747,9 @@ window.PlannerView = {
         this.renderItinerary(city, this.itineraryDays);
         status.dataset.state = "success";
         const selectedCount = selectedDays.reduce((sum, day) => sum + day.length, 0);
-        const hasSuggestions = selectedDays.flat().some(index => allPlanningSpots[index]?.isSearchSuggestion);
         const unplannedCount = Math.max(0, planningSpots.length - selectedCount);
         const cacheLabel = usedPlanCache ? "（使用已驗證快取）" : "";
-        status.textContent = hasSuggestions
-          ? `AI 已從 ${planningSpots.length} 筆候選挑選 ${selectedCount} 個景點${cacheLabel}；含地圖搜尋建議，請開啟連結確認實際地點。`
-          : `AI 已從 ${planningSpots.length} 筆候選挑選 ${selectedCount} 個景點，安排為 ${this.itineraryDays} 天行程${cacheLabel}；${unplannedCount ? `另有 ${unplannedCount} 筆候選未安排，可從手動新增清單挑選。` : "所有候選均已安排。"}`;
+        status.textContent = `AI 已從 ${planningSpots.length} 筆候選挑選 ${selectedCount} 個景點，安排為 ${this.itineraryDays} 天行程${cacheLabel}；${unplannedCount ? `另有 ${unplannedCount} 筆候選未安排，可從手動新增清單挑選。` : "所有候選均已安排。"}`;
       } catch (error) {
         console.error("AI 行程規劃失敗。錯誤代碼：", String(error?.code || "unknown").slice(0, 80));
         status.dataset.state = "error";
@@ -772,6 +776,7 @@ window.PlannerView = {
           if (cooldownActive) cooldownTimer = window.setInterval(showCooldown, 1000);
         }
         else if (error?.code === "ai/missing-app-check-site-key") status.textContent = "尚缺 App Check reCAPTCHA Enterprise 網站金鑰，請依設定說明完成啟用。";
+        else if (error?.code === "ai/insufficient-sourced-spots") status.textContent = errorText;
         else if (error?.code === "ai/auth-required") status.textContent = "請先使用 Google 帳戶登入。";
         else if (/quota|resource.?exhausted|429/i.test(String(error?.code || "") + " " + errorText)) status.textContent = "AI 目前的使用額度或請求頻率已達上限，請稍後再試。";
         else if (/network|fetch|offline|unavailable/i.test(String(error?.code || "") + " " + errorText)) status.textContent = "目前連線不穩，請確認網路後再試；已載入的城市景點會保留。";

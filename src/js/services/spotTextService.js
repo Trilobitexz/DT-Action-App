@@ -87,7 +87,7 @@ window.SpotTextService = (() => {
     const title = toTraditional(name);
     const category = toTraditional(spot.category || "");
     const summary = toTraditional(spot.description || spot.summary || spot.note || "");
-    const visitorSite = /(?:\b(?:museum|memorial|monument|heritage|historic|old town|arts district|cultural district|botanical|viewpoint|park|garden|temple|church|mosque|cathedral|castle|palace|shrine|market|square|bridge|tower|theatre|theater|zoo|aquarium|beach|waterfall|mountain|island|cave|stadium|opera|library|plaza|scenic area|protected area)\b|風景區|风景区|自然保護區|自然保护区|公園|公园|花園|花园|植物園|植物园|寺廟|寺庙|教堂|清真寺|修道院|神社|博物館|美術館|美术馆|紀念館|纪念馆|紀念堂|纪念堂|紀念碑|纪念碑|遺址|遗址|古蹟|古迹|歷史街區|历史街区|老城區|老城区|文化區|文化区|藝術區|艺术区|文化遺產|文化遗产|歷史與文化遺產|歷史与文化遗产|世界遺產|世界遗产|王城區|王城区|觀景台|观景台|觀景點|观景点|市集|市場|市场|廣場|广场|動物園|动物园|水族館|水族馆|海灘|海滩|瀑布|山岳|島嶼|岛屿|洞穴|體育場|体育场|歌劇院|歌剧院|圖書館|图书馆)/iu;
+    const visitorSite = /(?:\b(?:museum|memorial|monument|heritage|historic|old town|arts district|cultural district|botanical|viewpoint|park|garden|temple|church|mosque|cathedral|castle|palace|shrine|market|square|bridge|tower|theatre|theater|zoo|aquarium|beach|waterfall|mountain|island|cave|stadium|opera|library|plaza|scenic area|protected area)\b|風景區|风景区|自然保護區|自然保护区|公園|公园|花園|花园|植物園|植物园|寺廟|寺庙|教堂|清真寺|修道院|神社|宗教建築|宗教建筑|聖殿|圣殿|大教堂|博物館|美術館|美术馆|紀念館|纪念馆|紀念堂|纪念堂|紀念碑|纪念碑|遺址|遗址|古蹟|古迹|歷史街區|历史街区|老城區|老城区|文化區|文化区|藝術區|艺术区|文化遺產|文化遗产|歷史與文化遺產|歷史与文化遗产|世界遺產|世界遗产|王城區|王城区|觀景台|观景台|觀景點|观景点|市集|市場|市场|廣場|广场|動物園|动物园|水族館|水族馆|海灘|海滩|瀑布|山岳|島嶼|岛屿|洞穴|體育場|体育场|歌劇院|歌剧院|圖書館|图书馆)/iu;
     const administrativeTitle = /(?:\b(?:electoral|congressional|administrative)?\s*district(?:\s+of\s+[\p{L}\p{M} .'-]+)?|\bmunicipality|\bcounty|\bprovince|\bprefecture|\bgovernorate|\bsubdistrict|\btownship|\bward|\bborough)\s*$/iu.test(name)
       || /^(?:district|county|province|municipality)\s+of\b/iu.test(name)
       || /(?:行政區|行政区|市轄區|市辖区|區政府|区政府|(?:縣|县|省|州|郡|區|区))\s*$/u.test(title);
@@ -103,7 +103,11 @@ window.SpotTextService = (() => {
       && !/(?:\b(?:landmark|heritage|historic|monument|architectural)\b|地標|古蹟|歷史建築|文化遺產|文物保護)/iu.test(`${title} ${summary}`);
     const cityOrInstitutionPage = ((administrativeTitle || administrativeSummary || institutionalTitle) && !namedVisitorSite)
       || accommodationOnly;
-    return !cityOrInstitutionPage && !(eventTitle && !namedVisitorSite);
+    const transitFacility = /(?:\b(?:railway|train|metro|subway|bus|transit)\s+(?:station|terminal|stop)\b|\b(?:station|terminal|stop)\b|火車站|火车站|鐵路車站|铁路车站|地鐵站|地铁站|捷運站|捷运站|車站|车站|[駅站])$/iu.test(name);
+    const notableFacility = namedVisitorSite
+      || /\b(?:historic|heritage|museum|monument|memorial|landmark|old town|station building)\b|歷史建築|历史建筑|古蹟|古迹|博物館|博物馆|紀念館|纪念馆|遺址|遗址|地標|地标/iu.test(`${title} ${summary}`);
+    const nonVisitorFacility = transitFacility && !notableFacility;
+    return !cityOrInstitutionPage && !nonVisitorFacility && !(eventTitle && !namedVisitorSite);
   }
   return { toTraditional, normalizeSpot, isTravelAttraction };
 })();

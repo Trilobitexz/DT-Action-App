@@ -115,6 +115,26 @@
         }, 100);
       });
     },
+    getKnownCityCoordinates: function (cityId) {
+      const valid = location => location
+        && location.lat !== null && location.lat !== undefined && location.lat !== ""
+        && location.lng !== null && location.lng !== undefined && location.lng !== ""
+        && Number.isFinite(Number(location.lat)) && Number(location.lat) >= -90 && Number(location.lat) <= 90
+        && Number.isFinite(Number(location.lng)) && Number(location.lng) >= -180 && Number(location.lng) <= 180
+        && !(Number(location.lat) === 0 && Number(location.lng) === 0);
+      const candidates = [
+        window.CITY_GEONAMES?.[cityId],
+        window.CITY_COORDINATES?.[cityId],
+        ...(window.TRAVEL_DATA?.globalCities || []).filter(city => city.id === cityId),
+        ...(window.TRAVEL_DATA?.countries || []).flatMap(country => country.cities || []).filter(city => city.id === cityId)
+      ];
+      const location = candidates.find(valid);
+      return location ? {
+        lat: Number(location.lat),
+        lng: Number(location.lng),
+        sourceUrl: location.sourceUrl || location.coordinateSource?.sourceUrl || null
+      } : null;
+    },
     fetchCity: function (cityId) {
       const key = String(cityId || "");
       if (!key) return Promise.resolve(null);
@@ -138,10 +158,14 @@
           read,
           new Promise((_, reject) => { timeoutId = window.setTimeout(() => reject(new Error("Firestore 城市目錄查詢逾時")), 3000); })
         ]).finally(() => window.clearTimeout(timeoutId));
-        const city = citySnapshot.exists ? citySnapshot.data() : null;
+        const storedCity = citySnapshot.exists ? citySnapshot.data() : null;
         const coordinate = value => value !== null && value !== undefined && value !== ""
           && Number.isFinite(Number(value)) ? Number(value) : null;
-        const cityCoordinates = { lat: coordinate(city?.lat), lng: coordinate(city?.lng) };
+        const knownCoordinates = this.getKnownCityCoordinates(key);
+        const city = storedCity && knownCoordinates
+          ? { ...storedCity, lat: knownCoordinates.lat, lng: knownCoordinates.lng }
+          : storedCity;
+        const cityCoordinates = knownCoordinates || { lat: coordinate(city?.lat), lng: coordinate(city?.lng) };
         const spots = [];
         spotSnapshot.forEach(doc => {
           const data = doc.data();
