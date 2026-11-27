@@ -267,6 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
     openDrawer("planner-drawer", triggerButton);
     return true;
   };
+  window.openPlannerDrawerForCurrentCity = () => openPlannerForCity(document.querySelector('[data-sidebar-action="planner"]'));
   sidebarItems.forEach(item => item.addEventListener("click", () => {
     setMobileNavOpen(false);
     const action = item.dataset.sidebarAction;

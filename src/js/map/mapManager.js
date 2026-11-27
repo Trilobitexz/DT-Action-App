@@ -250,6 +250,7 @@ class MapManager {
 
   handleMapClick(event) {
     if (!this.map) return;
+    if (event.originalEvent?.target?.closest?.(".itinerary-route-marker")) return;
     const layers = ["itinerary-stop-circles", "itinerary-stop-labels", "spot-circles", "spot-labels", "airport-circles", "airport-labels", "city-center", "route-lines-hit-area", "itinerary-route-hit-area", "continent-symbols", "city-circles", "city-symbols", "global-city-symbols", "global-city-labels", "global-city-clusters", "global-city-cluster-count"];
     const features = this.map.queryRenderedFeatures(event.point, { layers: layers.filter(id => this.map.getLayer(id)) });
     const priority = ["stop", "spot", "airport", "center", "route", "airport-city", "direct-flight", "transit-flight", "continent", "local-city", "global-city"];
@@ -960,14 +961,30 @@ class MapManager {
       element.addEventListener("mouseleave", () => this.setItineraryStopHover(dayIndex, stop.spotIndex, false));
       element.addEventListener("focus", () => this.setItineraryStopHover(dayIndex, stop.spotIndex, true));
       element.addEventListener("blur", () => this.setItineraryStopHover(dayIndex, stop.spotIndex, false));
+      ["pointerdown", "mousedown", "touchstart", "click"].forEach(type => {
+        element.addEventListener(type, event => event.stopPropagation(), type === "touchstart" ? { passive: true } : undefined);
+      });
       element.addEventListener("click", event => {
-        event.stopPropagation();
         if (requestToken !== this.itineraryRouteToken) return;
-        const card = document.querySelector(`.itinerary-spot-card[data-day-index="${dayIndex}"][data-spot-index="${stop.spotIndex}"]`);
-        card?.scrollIntoView({ behavior: this.prefersReducedMotion ? "auto" : "smooth", block: "center" });
-        card?.focus({ preventScroll: true });
-        card?.classList.add("is-route-target");
-        window.setTimeout(() => card?.classList.remove("is-route-target"), 1500);
+        const focusCard = () => {
+          const card = document.querySelector(`.itinerary-spot-card[data-day-index="${dayIndex}"][data-spot-index="${stop.spotIndex}"]`);
+          const day = card?.closest(".itinerary-day-card");
+          if (day && !day.open) {
+            document.querySelectorAll(".itinerary-day-card").forEach(item => { item.open = item === day; });
+          }
+          window.requestAnimationFrame(() => {
+            const currentCard = document.querySelector(`.itinerary-spot-card[data-day-index="${dayIndex}"][data-spot-index="${stop.spotIndex}"]`);
+            currentCard?.scrollIntoView({ behavior: this.prefersReducedMotion ? "auto" : "smooth", block: "center" });
+            currentCard?.focus({ preventScroll: true });
+            currentCard?.classList.add("is-route-target");
+            window.setTimeout(() => currentCard?.classList.remove("is-route-target"), 1800);
+          });
+        };
+        const plannerDrawer = document.getElementById("planner-drawer");
+        if (plannerDrawer?.getAttribute("aria-hidden") === "true") {
+          window.openPlannerDrawerForCurrentCity?.();
+          window.setTimeout(focusCard, 320);
+        } else focusCard();
       });
       const marker = new window.maplibregl.Marker({ element, anchor: "center", subpixelPositioning: true }).setLngLat(stop.coordinates).addTo(this.map);
       this.itineraryDomMarkers.set(`${dayIndex}:${stop.spotIndex}`, marker);
