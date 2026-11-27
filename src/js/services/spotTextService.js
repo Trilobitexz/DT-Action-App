@@ -119,5 +119,27 @@ window.SpotTextService = (() => {
     const nonVisitorFacility = transitFacility && !notableFacility;
     return !cityOrInstitutionPage && !nonVisitorFacility && !activityOrProjectPage && !(eventTitle && !namedVisitorSite);
   }
-  return { toTraditional, normalizeSpot, isTravelAttraction };
+  function isCompleteAIPlanningSpot(spot) {
+    if (!spot || typeof spot !== "object" || spot.isSearchSuggestion) return false;
+    if (!String(spot.name || "").trim() || !String(spot.category || "").trim()) return false;
+    const description = String(spot.description || spot.summary || spot.note || "").trim();
+    if (description.length < 40 || !isTravelAttraction(spot)) return false;
+    const lat = spot.lat === null || spot.lat === undefined || spot.lat === "" ? NaN : Number(spot.lat);
+    const lng = spot.lng === null || spot.lng === undefined || spot.lng === "" ? NaN : Number(spot.lng);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180
+      || (lat === 0 && lng === 0)) return false;
+    try {
+      const source = new URL(String(spot.sourceUrl || ""));
+      return /^https?:$/.test(source.protocol) && Boolean(source.hostname);
+    } catch (error) { return false; }
+  }
+  function validateAIPlanningSpots(spots, days) {
+    if (!Array.isArray(spots) || !spots.length) return { valid: false, code: "ai/no-spots" };
+    const requiredDays = Math.max(1, Math.min(7, Math.trunc(Number(days)) || 1));
+    const invalidIndex = spots.findIndex(spot => !isCompleteAIPlanningSpot(spot));
+    if (invalidIndex >= 0) return { valid: false, code: "ai/incomplete-spots", invalidIndex };
+    if (spots.length < requiredDays) return { valid: false, code: "ai/insufficient-sourced-spots" };
+    return { valid: true, code: "" };
+  }
+  return { toTraditional, normalizeSpot, isTravelAttraction, isCompleteAIPlanningSpot, validateAIPlanningSpots };
 })();

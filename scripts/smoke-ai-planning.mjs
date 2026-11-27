@@ -72,20 +72,12 @@ if (mergedFort?.imageAttribution !== attributedFort?.imageAttribution
 }
 
 const cityCandidates = [];
+if (typeof sandbox.window.SpotTextService.isCompleteAIPlanningSpot !== "function") {
+  throw new Error("The shared AI candidate completeness validator is missing.");
+}
 for (const city of prebuilt.cities || []) {
   const candidates = sandbox.window.PlannerView.rankAIPlanningSpots(city, 3).map(item => item.spot);
-  const invalid = candidates.find(spot => {
-    let validSource = false;
-    try { validSource = /^https?:$/.test(new URL(String(spot.sourceUrl || "")).protocol); }
-    catch (error) { validSource = false; }
-    const hasCoordinates = Number.isFinite(Number(spot.lat)) && Number(spot.lat) >= -90 && Number(spot.lat) <= 90
-      && Number.isFinite(Number(spot.lng)) && Number(spot.lng) >= -180 && Number(spot.lng) <= 180
-      && !(Number(spot.lat) === 0 && Number(spot.lng) === 0);
-    return !validSource || !hasCoordinates || !String(spot.name || "").trim()
-      || !String(spot.category || "").trim()
-      || String(spot.description || spot.summary || spot.note || "").trim().length < 40
-      || !sandbox.window.SpotTextService.isTravelAttraction(spot);
-  });
+  const invalid = candidates.find(spot => !sandbox.window.SpotTextService.isCompleteAIPlanningSpot(spot));
   if (invalid) throw new Error(`AI candidate is incomplete or not a visitor site: ${city.id}/${invalid.name}`);
   cityCandidates.push({ cityId: city.id, count: candidates.length });
 }
@@ -101,6 +93,35 @@ const genericStation = {
 };
 if (sandbox.window.SpotTextService.isTravelAttraction(genericStation)) {
   throw new Error("A generic station passed the visitor-site filter.");
+}
+const completeAIExample = {
+  name: "Central Museum",
+  category: "博物館",
+  lat: 35.6,
+  lng: 139.7,
+  description: "This museum preserves regional history through permanent galleries and public exhibitions.",
+  sourceUrl: "https://example.org/central-museum"
+};
+if (!sandbox.window.SpotTextService.isCompleteAIPlanningSpot(completeAIExample)) {
+  throw new Error("A complete sourced attraction was rejected by the shared AI validator.");
+}
+if (!sandbox.window.SpotTextService.validateAIPlanningSpots([completeAIExample], 1).valid
+  || sandbox.window.SpotTextService.validateAIPlanningSpots([completeAIExample], 2).code !== "ai/insufficient-sourced-spots"
+  || sandbox.window.SpotTextService.validateAIPlanningSpots([], 1).code !== "ai/no-spots") {
+  throw new Error("AI request validation did not enforce candidate presence and per-day availability.");
+}
+const incompleteAIExamples = [
+  { ...completeAIExample, sourceUrl: "javascript:alert(1)" },
+  { ...completeAIExample, lat: 0, lng: 0 },
+  { ...completeAIExample, description: "A short museum summary." },
+  { ...completeAIExample, isSearchSuggestion: true },
+  { ...genericStation, lat: 35.6, lng: 139.7, sourceUrl: "https://example.org/station" }
+];
+if (incompleteAIExamples.some(spot => sandbox.window.SpotTextService.isCompleteAIPlanningSpot(spot))) {
+  throw new Error("The shared AI validator accepted an incomplete, unsafe, suggested or non-attraction candidate.");
+}
+if (incompleteAIExamples.some(spot => sandbox.window.SpotTextService.validateAIPlanningSpots([spot], 1).code !== "ai/incomplete-spots")) {
+  throw new Error("AI request validation allowed an incomplete candidate to reach the model boundary.");
 }
 const visitorSiteRegressions = [
   {

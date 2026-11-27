@@ -46,6 +46,7 @@ const AI_ITINERARY_SAFE_ERROR_MESSAGES = Object.freeze({
   "ai/no-spots": "這座城市目前沒有可供 AI 安排的景點資料。",
   "ai/no-candidates": "尚未取得可安排的景點，請確認網路後再試。",
   "ai/no-sourced-spots": "目前沒有同時附來源、有效座標與完整介紹的景點資料，因此未產生 AI 行程；請重新載入景點或改用人工安排。",
+  "ai/incomplete-spots": "AI 候選資料不完整，未送出規劃；請重新載入景點資料後再試。",
   "ai/invalid-response": "AI 回傳格式不完整，請再試一次。",
   "ai/invalid-days": "AI 回傳的行程天數不正確，請再試一次。",
   "ai/invalid-day": "AI 回傳的景點安排格式不正確。",
@@ -154,13 +155,7 @@ window.PlannerView = {
       && Number.isFinite(Number(spot.lat)) && Number(spot.lat) >= -90 && Number(spot.lat) <= 90
       && Number.isFinite(Number(spot.lng)) && Number(spot.lng) >= -180 && Number(spot.lng) <= 180
       && !(Number(spot.lat) === 0 && Number(spot.lng) === 0);
-    const candidates = all.filter(item => {
-      const spot = item.spot;
-      return !spot.isSearchSuggestion && Boolean(getPlannerSource(spot)) && hasCoordinates(spot)
-        && String(spot.name || "").trim() && String(spot.category || "").trim()
-        && String(spot.description || spot.summary || spot.note || "").trim().length >= 40
-        && (window.SpotTextService?.isTravelAttraction(spot) ?? true);
-    });
+    const candidates = all.filter(item => window.SpotTextService?.isCompleteAIPlanningSpot(item.spot) === true);
     candidates.forEach(item => {
       const spot = item.spot;
       item.score = (spot.isFeatured ? 2 : 0)

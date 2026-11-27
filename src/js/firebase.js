@@ -101,11 +101,19 @@
             authError.code = "ai/auth-required";
             throw authError;
           }
-          var spots = Array.isArray(input.spots)
-            ? input.spots.filter(function (spot) { return spot && typeof spot === "object"; }).slice(0, 50)
-            : [];
+          var spots = Array.isArray(input.spots) ? input.spots.slice(0, 50) : [];
           if (!spots.length) throw createAIPlannerError("ai/no-spots", "這座城市目前沒有可供 AI 安排的景點資料。");
           var safeDays = Math.max(1, Math.min(7, Math.trunc(Number(input.days)) || 1));
+          var candidateValidation = window.SpotTextService?.validateAIPlanningSpots(spots, safeDays);
+          if (!candidateValidation?.valid) {
+            var validationMessages = {
+              "ai/no-spots": "這座城市目前沒有可供 AI 安排的景點資料。",
+              "ai/incomplete-spots": "AI 候選必須具備可靠來源、有效座標及完整介紹，未完整的資料不會送出規劃。",
+              "ai/insufficient-sourced-spots": "附有來源、座標與完整介紹的候選景點不足以安排每天行程。"
+            };
+            var validationCode = candidateValidation?.code || "ai/incomplete-spots";
+            throw createAIPlannerError(validationCode, validationMessages[validationCode] || validationMessages["ai/incomplete-spots"]);
+          }
           var safeText = function (value, maxLength) {
             return String(value == null ? "" : value).replace(/[\u0000-\u001F\u007F]/g, " ").slice(0, maxLength);
           };

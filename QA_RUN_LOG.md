@@ -202,3 +202,12 @@
 - `seed-city-catalog.mjs` 與 `cityCatalogService.js` 保留圖片歸屬欄位，以便未來受控匯入／雲端讀取。此輪沒有寫入 Firestore。
 - `node --check`（countryView.js、cityCatalogService.js、seed-city-catalog.mjs、smoke-ai-planning.mjs）、`node scripts/build-city-spot-data.mjs`、`node scripts/smoke-ai-planning.mjs`、`node scripts/audit-city-spots.mjs` 及 `git diff --check` 通過。稽核缺圖數 50；缺來源、座標及介紹仍為 0。
 - GitHub Pages workflow #46018062853 對應提交 `e4808fc` 並成功；正式頁回應 HTTP 200，HTML 載入 v125 資源。推送後 `main` 與 `origin/main` 一致，工作樹乾淨。
+
+## v126 AI 候選完整性共用守門
+
+- 將名稱、分類、HTTP(S) 來源、有效座標、40 字介紹、搜尋建議與真實景點判定集中於 `SpotTextService.isCompleteAIPlanningSpot`；規劃頁排序與 Firebase AI 服務入口共用同一資格檢查。
+- Firebase AI 服務不再靜默過濾輸入陣列；任何候選不完整就於模型呼叫前拒絕，避免索引重排造成來源／景點錯配。候選數少於行程天數也會在呼叫模型前拒絕。
+- `node scripts/smoke-ai-planning.mjs` 通過完整候選與缺來源、無效座標、短介紹、搜尋建議、一般車站拒絕案例；完整資料集 200 城每城至少 3 筆。
+- `node scripts/audit-city-spots.mjs` 通過：839 筆 AI 候選，缺來源、座標、介紹、短介紹、超距、非景點、重複名稱及城市中心錯置均為 0；缺可核實圖片 50 筆，使用分類替代圖。
+- `node --check`（spotTextService.js、plannerView.js、firebase.js、smoke-ai-planning.mjs）及 `git diff --check` 通過。未以登入帳戶呼叫真實 Firebase AI Logic。
+- 待提交、推送並確認 GitHub Pages 部署結果。
