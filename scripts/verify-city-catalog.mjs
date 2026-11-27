@@ -1,15 +1,26 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import admin from "firebase-admin";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const inputPath = path.join(root, "scripts", "data", "prebuilt-spots.json");
+const qualitySandbox = { window: {} };
+vm.runInNewContext(await fs.readFile(path.join(root, "src", "js", "services", "spotTextService.js"), "utf8"), qualitySandbox);
+const isTravelAttraction = spot => qualitySandbox.window.SpotTextService?.isTravelAttraction(spot) ?? true;
+const normalizeSpot = spot => qualitySandbox.window.SpotTextService?.normalizeSpot(spot) || spot;
+const normalizeName = value => String(qualitySandbox.window.SpotTextService?.toTraditional(value) || value || "")
+  .normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+const isCityItself = (city, spot) => {
+  const name = normalizeName(spot?.name);
+  return Boolean(name && [city?.id, city?.name, city?.englishName].some(alias => normalizeName(alias) === name));
+};
 const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "dt-action-app";
 const minimumCityCount = 200;
 const minimumSpotsPerCity = 3;
 const validCoordinate = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng)
-  && lat !== 0 && lng !== 0 && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  && !(lat === 0 && lng === 0) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 const distanceKm = (a, b) => {
   const radians = Math.PI / 180;
   const dLat = (b.lat - a.lat) * radians;
@@ -47,11 +58,13 @@ for (let offset = 0; offset < cities.length; offset += concurrency) {
     let validCount = 0;
     let invalidCount = 0;
     spotSnapshot.forEach(document => {
-      const spot = document.data();
+      const spot = normalizeSpot(document.data());
       const valid = Boolean(String(spot.name || "").trim())
         && typeof spot.category === "string"
         && typeof spot.description === "string"
         && typeof spot.imageUrl === "string"
+        && isTravelAttraction(spot)
+        && !isCityItself(city, spot)
         && validCoordinate(spot.lat, spot.lng)
         && /^https?:\/\//i.test(String(spot.sourceUrl || ""))
         && validCoordinate(center.lat, center.lng)
@@ -63,7 +76,9 @@ for (let offset = 0; offset < cities.length; offset += concurrency) {
           cityId: city.id,
           spotId: document.id,
           name: spot.name || "",
-          reason: !validCoordinate(spot.lat, spot.lng) ? "座標格式錯誤"
+          reason: isCityItself(city, spot) ? "城市本身條目，不是景點"
+            : !isTravelAttraction(spot) ? "非適合旅客造訪的景點條目"
+            : !validCoordinate(spot.lat, spot.lng) ? "座標格式錯誤或缺漏（僅排除 [0, 0]）"
             : !/^https?:\/\//i.test(String(spot.sourceUrl || "")) ? "來源網址缺漏"
               : distanceKm(center, spot) > 50 ? "超過 50 公里"
                 : "category、description 或 imageUrl 欄位缺漏"

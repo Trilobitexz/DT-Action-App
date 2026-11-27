@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = relative => fs.readFile(path.join(root, relative), "utf8");
 const window = {};
+vm.runInNewContext(await read("src/js/services/spotTextService.js"), { window }, { filename: "src/js/services/spotTextService.js" });
+const isTravelAttraction = spot => window.SpotTextService?.isTravelAttraction(spot) ?? true;
 // Evaluate the browser data files in their dependency order inside a sandbox.
 const loadTravelData = async () => {
   for (const relative of [
@@ -41,10 +43,10 @@ const throttleWikidata = async () => {
   await pauseUntil(nextWikidataRequestAt);
   nextWikidataRequestAt = Date.now() + wikidataGapMs;
 };
-const validCoordinate = (lat, lng, { rejectZero = false } = {}) =>
+const validCoordinate = (lat, lng) =>
   Number.isFinite(lat) && Number.isFinite(lng)
   && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
-  && (!rejectZero || (lat !== 0 && lng !== 0));
+  && !(lat === 0 && lng === 0);
 const distanceKm = (a, b) => {
   const radians = Math.PI / 180;
   const dLat = (b.lat - a.lat) * radians;
@@ -53,8 +55,13 @@ const distanceKm = (a, b) => {
     + Math.cos(a.lat * radians) * Math.cos(b.lat * radians) * Math.sin(dLng / 2) ** 2;
   return 6371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 };
-const normalize = value => String(value || "").normalize("NFKC").trim().toLocaleLowerCase()
+const displayName = value => window.SpotTextService?.toTraditional(value) || String(value || "");
+const normalize = value => displayName(value).normalize("NFKC").trim().toLocaleLowerCase()
   .replace(/[\s\p{P}]+/gu, "");
+const isCityItself = (city, spot) => {
+  const name = normalize(spot?.name);
+  return Boolean(name && [city?.id, city?.name, city?.englishName].some(alias => normalize(alias) === name));
+};
 const categoryFor = (text, language) => {
   if (/(museum|gallery|博物館|美術館|藝術館|紀念館)/i.test(text)) return "博物館與藝術";
   if (/(park|garden|botanical|waterfall|mountain|beach|island|nature reserve|公園|花園|植物園|瀑布|山岳|海灘|自然保護區)/i.test(text)) return "公園與自然";
@@ -64,13 +71,13 @@ const categoryFor = (text, language) => {
   if (language === "zh") return "地標與建築";
   return "地標與建築";
 };
-const attractionSignal = /(tourist attraction|museum|gallery|monument|memorial|park|garden|temple|church|mosque|cathedral|castle|palace|historic|heritage|archaeolog|landmark|monastery|shrine|square|bridge|tower|theatre|theater|zoo|aquarium|fort|beach|waterfall|mountain|botanical|island|cave|stadium|opera|library|market|district|plaza|building|protected area|博物館|美術館|公園|花園|寺|廟|教堂|清真寺|紀念館|紀念碑|遺址|古蹟|遺產|城堡|宮殿|廣場|橋|塔|動物園|水族館|海灘|瀑布|山|植物園|洞穴|歌劇院|圖書館|市集|市場|街區|地標|建築|神社|修道院)/i;
-const nonAttractionSignal = /(railway station|train station|metro station|subway station|bus station|railway line|railway company|airport|residential building|office building|shopping mall|department store|university department|車站|地鐵站|鐵路線|公車站|住宅大樓|辦公大樓|購物中心|百貨公司|大學院系)/i;
+const attractionSignal = /(tourist attraction|museum|gallery|monument|memorial|park|garden|temple|church|mosque|cathedral|castle|palace|historic|heritage|archaeolog|landmark|monastery|shrine|square|bridge|tower|theatre|theater|zoo|aquarium|fort|beach|waterfall|mountain|botanical|island|cave|stadium|opera|library|market|plaza|building|protected area|博物館|美術館|公園|花園|寺|廟|教堂|清真寺|紀念館|紀念碑|遺址|古蹟|遺產|城堡|宮殿|廣場|橋|塔|動物園|水族館|海灘|瀑布|山|植物園|洞穴|歌劇院|圖書館|市集|市場|街區|地標|建築|神社|修道院)/i;
+const nonAttractionSignal = /(railway station|train station|metro station|subway station|bus station|railway line|railway company|airport|residential building|office building|shopping mall|department store|university department|electoral district|municipality|county|province|university|college|school|central bank|headquarters|administrative division|車站|地鐵站|鐵路線|公車站|住宅大樓|辦公大樓|購物中心|百貨公司|大學院系|行政區|行政区|區政府|区政府|中央銀行|中央银行)/i;
 const requestJson = async (url, label) => {
   const response = await fetch(url, {
     headers: {
       Accept: "application/json",
-      "User-Agent": "DT-Action-App-city-catalog/1.0 (+https://github.com/trilobitexz/DT-Action-App)"
+      "User-Agent": "journey-atla-city-catalog/1.0 (+https://github.com/trilobitexz/journey-atla)"
     },
     signal: AbortSignal.timeout(timeoutMs)
   });
@@ -130,9 +137,10 @@ async function fetchWikipediaSpots(city, language) {
     const name = String(page.title || "").trim();
     const summary = String(page.extract || "").replace(/\s+/g, " ").trim();
     const categories = (page.categories || []).map(item => item.title || "").join(" ");
-    if (!name || !validCoordinate(lat, lng, { rejectZero: true })
+    if (!name || !validCoordinate(lat, lng)
       || nonAttractionSignal.test(`${name} ${categories}`)
-      || !attractionSignal.test(`${name} ${categories} ${summary}`)) return null;
+      || !attractionSignal.test(`${name} ${categories} ${summary}`)
+      || !isTravelAttraction({ name, category: categories, summary })) return null;
     const distance = distanceKm(city, { lat, lng });
     if (distance > 50) return null;
     const articlePath = encodeURIComponent(name.replaceAll(" ", "_"));
@@ -180,7 +188,7 @@ async function fetchWikidataSpots(city) {
     const lat = match ? Number(match[2]) : NaN;
     const distance = Number(binding.distance?.value);
     const itemUrl = binding.item?.value || "";
-    if (!name || !validCoordinate(lat, lng, { rejectZero: true }) || !Number.isFinite(distance) || distance > 50
+    if (!name || !validCoordinate(lat, lng) || !Number.isFinite(distance) || distance > 50
       || !itemUrl || seen.has(itemUrl)) return null;
     seen.add(itemUrl);
     const sourceUrl = binding.article?.value || itemUrl;
@@ -199,22 +207,27 @@ async function fetchWikidataSpots(city) {
   }).filter(Boolean);
 }
 
-async function enrichCity(city) {
+async function enrichCity(city, previous = null) {
   const coordinates = await resolveCityCoordinates(city).catch(error => {
     console.warn(`城市座標查詢失敗（${city.id}）：${error.message}`);
     return null;
-  });
+  }) || (validCoordinate(Number(previous?.lat), Number(previous?.lng))
+    ? { lat: Number(previous.lat), lng: Number(previous.lng), sourceUrl: previous.coordinateSource || "" }
+    : null);
   if (!coordinates) return { id: city.id, name: city.name, englishName: city.englishName, countryName: city.countryName, lat: null, lng: null, spots: [] };
   const normalizedCity = { ...city, lat: coordinates.lat, lng: coordinates.lng };
   const collected = [];
   const seen = new Set();
-  const appendUnique = spots => spots.forEach(spot => {
+  const appendUnique = spots => spots.forEach(rawSpot => {
+    const spot = window.SpotTextService?.normalizeSpot(rawSpot) || rawSpot;
     const key = normalize(spot.name);
-    if (!key || seen.has(key) || !validCoordinate(spot.lat, spot.lng, { rejectZero: true })
-      || distanceKm(normalizedCity, spot) > 50 || !/^https?:\/\//i.test(spot.sourceUrl || "")) return;
+    if (!key || seen.has(key) || isCityItself(city, spot) || !validCoordinate(spot.lat, spot.lng)
+      || !isTravelAttraction(spot) || distanceKm(normalizedCity, spot) > 50
+      || !/^https?:\/\//i.test(spot.sourceUrl || "")) return;
     seen.add(key);
     collected.push(spot);
   });
+  appendUnique(previous?.spots || []);
   try {
     appendUnique(await fetchWikipediaSpots(normalizedCity, "zh"));
   } catch (error) {
@@ -263,20 +276,29 @@ if (retryIncompleteOnly) {
 for (const city of cities) {
   if (!city?.id) continue;
   const previous = existingById.get(city.id);
-  const previousIsComplete = Array.isArray(previous?.spots) && previous.spots.length >= 3
+  const previousSpots = (previous?.spots || []).map(spot => window.SpotTextService?.normalizeSpot(spot) || spot)
+    .filter(spot => !isCityItself(city, spot) && validCoordinate(Number(spot.lat), Number(spot.lng))
+      && distanceKm(previous, { lat: Number(spot.lat), lng: Number(spot.lng) }) <= 50 && isTravelAttraction(spot));
+  const previousValidSpots = previousSpots;
+  const previousIsComplete = previousValidSpots.length >= 3
     && validCoordinate(previous.lat, previous.lng);
-  outputCities.push(retryIncompleteOnly && previousIsComplete ? previous : await enrichCity(city));
+  const filteredPrevious = previous ? { ...previous, spots: previousSpots } : null;
+  outputCities.push(retryIncompleteOnly && previousIsComplete
+    ? filteredPrevious
+    : await enrichCity(city, filteredPrevious));
   console.log(`[${outputCities.length}/${cities.length}] ${city.name || city.id}: ${outputCities.at(-1).spots.length} 筆符合條件`);
 }
 
-const insufficientCities = outputCities.filter(city => city.spots.length < 3).map(city => ({
-  id: city.id, name: city.name, spotCount: city.spots.length,
+const insufficientCities = outputCities.filter(city => city.spots.filter(spot => validCoordinate(spot.lat, spot.lng)
+  && distanceKm(city, spot) <= 50 && isTravelAttraction(spot)).length < 3).map(city => ({
+  id: city.id, name: city.name, spotCount: city.spots.filter(spot => validCoordinate(spot.lat, spot.lng)
+    && distanceKm(city, spot) <= 50 && isTravelAttraction(spot)).length,
   reason: !validCoordinate(city.lat, city.lng) ? "缺少可驗證的城市座標" : "公開百科資料不足三筆符合條件的景點"
 }));
 const report = {
   generatedAt: new Date().toISOString(),
   source: "Chinese and English Wikipedia geosearch with Wikidata fallback; city coordinates from project gazetteer or Nominatim",
-  validation: { minimumSpotsPerCity: 3, maximumSpotsPerCity: 5, maximumDistanceKm: 50, zeroSpotCoordinatesRejected: true },
+  validation: { minimumSpotsPerCity: 3, maximumSpotsPerCity: 5, maximumDistanceKm: 50, rejectsOnlyNullIslandCoordinates: true, excludesNonVisitPages: true },
   cityCount: outputCities.length,
   successfulCityCount: outputCities.length - insufficientCities.length,
   insufficientCities,

@@ -763,7 +763,7 @@ class MapManager {
     const visibleSpots = sourceSpots.slice(0, MapManager.MAX_CITY_SPOT_MARKERS);
     visibleSpots.forEach((spot, index) => {
       const hasCoords = Number.isFinite(spot.lat) && Number.isFinite(spot.lng)
-        && spot.lat !== 0 && spot.lng !== 0
+        && !(spot.lat === 0 && spot.lng === 0)
         && spot.lat >= -90 && spot.lat <= 90 && spot.lng >= -180 && spot.lng <= 180
         && this.distanceKm([city.lng, city.lat], [spot.lng, spot.lat]) <= 50;
       const feature = hasCoords
@@ -785,7 +785,7 @@ class MapManager {
       let nextIndex = sourceSpots.length;
       places.forEach(spot => {
         if (this.geojson.spots.features.filter(feature => feature.properties?.kind === "spot").length >= MapManager.MAX_CITY_SPOT_MARKERS) return;
-        if (!Number.isFinite(spot?.lat) || !Number.isFinite(spot?.lng) || spot.lat === 0 || spot.lng === 0
+        if (!Number.isFinite(spot?.lat) || !Number.isFinite(spot?.lng) || (spot.lat === 0 && spot.lng === 0)
           || spot.lat < -90 || spot.lat > 90 || spot.lng < -180 || spot.lng > 180) return;
         spot = window.SpotTextService?.normalizeSpot(spot) || spot;
         if (!(window.SpotTextService?.isTravelAttraction(spot) ?? true)) return;
@@ -1133,7 +1133,8 @@ class MapManager {
     const normalize = items => items.map(spot => window.SpotTextService?.normalizeSpot(spot) || spot)
       .filter(spot => window.SpotTextService?.isTravelAttraction(spot) ?? true).filter(spot => {
       const normalizeName = value => (window.SpotTextService?.toTraditional(value) || String(value || ""))
-        .normalize("NFKC").toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+        .normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC")
+        .toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
       const cityName = normalizeName(city?.name);
       const englishName = normalizeName(city?.englishName);
       const spotName = normalizeName(spot?.name);

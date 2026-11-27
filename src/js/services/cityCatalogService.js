@@ -13,6 +13,7 @@
     prebuiltCityRequests: new Map(),
     failedCityReads: new Map(),
     spotCacheDbPromise: null,
+    spotCacheDataVersion: appVersion,
     spotCacheTtlMs: 14 * 24 * 60 * 60 * 1000,
     spotCacheMaxStaleMs: 180 * 24 * 60 * 60 * 1000,
     getSpotCacheDb: function () {
@@ -53,13 +54,29 @@
         });
       } catch (error) { console.warn("IndexedDB 城市景點快取讀取失敗，改用舊快取。", error); }
       if (!record) record = readLegacy();
-      if (!Array.isArray(record?.spots) || !Number.isFinite(record.fetchedAt)) return null;
+      if (!Array.isArray(record?.spots) || !Number.isFinite(record.fetchedAt)
+        || record.schemaVersion !== 2 || String(record.dataVersion || "") !== this.spotCacheDataVersion) {
+        if (record?.cityId) {
+          try {
+            const db = await this.getSpotCacheDb();
+            if (db) db.transaction("citySpots", "readwrite").objectStore("citySpots").delete(String(cityId));
+          } catch (error) { /* 舊快取已忽略；清理失敗不影響新資料載入。 */ }
+        }
+        try { localStorage.removeItem(legacyKey); } catch (error) { /* 私密瀏覽模式可能停用儲存。 */ }
+        return null;
+      }
       const age = Date.now() - record.fetchedAt;
       if (age > this.spotCacheMaxStaleMs) return null;
       return { ...record, isStale: age > this.spotCacheTtlMs };
     },
     writeSpotCache: async function (cityId, legacyKey, record) {
-      const normalized = { ...record, cityId: String(cityId), schemaVersion: 1, accessedAt: Date.now() };
+      const normalized = {
+        ...record,
+        cityId: String(cityId),
+        schemaVersion: 2,
+        dataVersion: this.spotCacheDataVersion,
+        accessedAt: Date.now()
+      };
       try {
         const db = await this.getSpotCacheDb();
         if (!db) throw new Error("瀏覽器不支援 IndexedDB");
@@ -78,7 +95,7 @@
         });
         try { localStorage.removeItem(legacyKey); } catch (error) { /* IndexedDB remains authoritative. */ }
       } catch (error) {
-        try { localStorage.setItem(legacyKey, JSON.stringify(record)); }
+        try { localStorage.setItem(legacyKey, JSON.stringify(normalized)); }
         catch (storageError) { console.warn("城市景點快取寫入失敗；資料仍可由來源重新載入。", storageError); }
       }
     },
@@ -151,13 +168,19 @@
             imageSourceUrl: data.imageSourceUrl || "",
             closedDays: data.closedDays || "",
             visitHours: Number.isFinite(Number(data.visitHours)) && Number(data.visitHours) > 0 ? Number(data.visitHours) : null,
-            hasCoordinates: data.hasCoordinates === true || (Number.isFinite(Number(data.lat)) && Number.isFinite(Number(data.lng))),
+            hasCoordinates: data.lat !== null && data.lat !== undefined && data.lat !== ""
+              && data.lng !== null && data.lng !== undefined && data.lng !== ""
+              && Number.isFinite(Number(data.lat)) && Number.isFinite(Number(data.lng))
+              && !(Number(data.lat) === 0 && Number(data.lng) === 0),
             hasDescription: data.hasDescription === true || Boolean(String(data.description || data.note || "").trim()),
             rating: data.rating !== null && data.rating !== undefined && data.rating !== "" && Number.isFinite(Number(data.rating)) && Number(data.rating) >= 0 && Number(data.rating) <= 5 ? Number(data.rating) : null,
             ratingSource: typeof data.ratingSource === "string" && data.ratingSource.trim() ? data.ratingSource.trim() : null,
             publishedAt: data.publishedAt?.toMillis ? data.publishedAt.toMillis() : null
           };
-          if (this.hasValidSpotCoordinates(spot, cityCoordinates)) spots.push(spot);
+          if (this.hasValidSpotCoordinates(spot, cityCoordinates)
+            && (window.SpotTextService?.isTravelAttraction(spot) ?? true)) {
+            spots.push(window.SpotTextService?.normalizeSpot(spot) || spot);
+          }
         });
         const result = { city: city || null, spots };
         this.cache.set(key, result);
@@ -173,14 +196,25 @@
       return request;
     },
     normalizeSpotName: function (value) {
-      return String(value || "").normalize("NFKC").trim().toLocaleLowerCase()
+      const traditional = window.SpotTextService?.toTraditional(value) || String(value || "");
+      return traditional.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase()
         .replace(/[\s\p{P}]+/gu, "");
     },
+    normalizeSpot: function (spot) {
+      const normalized = window.SpotTextService?.normalizeSpot(spot) || { ...spot };
+      const coordinate = value => value === null || value === undefined || value === "" ? null : Number(value);
+      return {
+        ...normalized,
+        name: String(normalized.name || "").trim(),
+        lat: coordinate(normalized.lat),
+        lng: coordinate(normalized.lng)
+      };
+    },
     hasValidSpotCoordinates: function (spot, city = null) {
-      const lat = spot?.lat;
-      const lng = spot?.lng;
+      const lat = spot?.lat === null || spot?.lat === undefined || spot?.lat === "" ? NaN : Number(spot.lat);
+      const lng = spot?.lng === null || spot?.lng === undefined || spot?.lng === "" ? NaN : Number(spot.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)
-        || lat === 0 || lng === 0 || lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+        || (lat === 0 && lng === 0) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
       if (Number.isFinite(city?.lat) && Number.isFinite(city?.lng)) {
         const radians = Math.PI / 180;
         const dLat = (lat - city.lat) * radians;
@@ -225,7 +259,7 @@
       const merged = [];
       const names = new Set();
       groups.flat().forEach(spot => {
-        const item = typeof spot === "string" ? { name: spot } : spot;
+        const item = this.normalizeSpot(typeof spot === "string" ? { name: spot } : spot || {});
         const name = String(item?.name || "").trim();
         const normalized = this.normalizeSpotName(name);
         if (!normalized || names.has(normalized)) return;
@@ -234,9 +268,23 @@
       });
       return merged;
     },
+    filterTravelSpots: function (spots, city) {
+      const normalizeName = value => this.normalizeSpotName(value);
+      const cityNames = new Set([city?.name, city?.englishName, city?.nameEn].map(normalizeName).filter(Boolean));
+      return (Array.isArray(spots) ? spots : []).filter(spot => {
+        const item = this.normalizeSpot(spot);
+        const hasDescription = String(item.description || item.summary || item.note || "").trim().length > 0;
+        const hasSource = /^https?:\/\//i.test(String(item.sourceUrl || ""));
+        if (!item.name || !String(item.category || "").trim() || !hasDescription || !hasSource
+          || item.isSearchSuggestion || !this.hasValidSpotCoordinates(item, city)) return false;
+        if (cityNames.has(normalizeName(item.name))) return false;
+        return window.SpotTextService?.isTravelAttraction(item) ?? true;
+      });
+    },
     sortSpotsByQuality: function (spots) {
       const hasCoords = spot => Number.isFinite(spot?.lat) && spot.lat >= -90 && spot.lat <= 90
-        && Number.isFinite(spot?.lng) && spot.lng >= -180 && spot.lng <= 180;
+        && Number.isFinite(spot?.lng) && spot.lng >= -180 && spot.lng <= 180
+        && !(spot.lat === 0 && spot.lng === 0);
       const quality = spot => (spot.imageUrl || spot.thumbnail || spot.photoUrl ? 4 : 0)
         + (String(spot.description || spot.note || "").trim().length >= 24 ? 2 : 0)
         + (hasCoords(spot) ? 1 : 0);
@@ -284,7 +332,9 @@
       if (this.spotRequests.has(key)) return this.spotRequests.get(key);
 
       const request = (async () => {
-        const localKey = `journey-atlas-city-spots-v2-${key}`;
+        const localKey = `journey-atlas-city-spots-v3-${key}`;
+        try { localStorage.removeItem(`journey-atlas-city-spots-v2-${key}`); }
+        catch (error) { /* 舊版 localStorage 清理不應阻斷離線目錄載入。 */ }
         let cacheReadTimer;
         const [saved, prebuiltSpots] = await Promise.all([
           Promise.race([
@@ -293,15 +343,12 @@
           ]).finally(() => window.clearTimeout(cacheReadTimer)),
           this.fetchPrebuiltSpots(city)
         ]);
-        if (saved && !saved.cityId) {
-          this.writeSpotCache(key, localKey, { fetchedAt: saved.fetchedAt, source: saved.source || "舊版本機快取", spots: saved.spots }).catch(error => {
-            console.warn("遷移舊版城市景點快取失敗：", error);
-          });
-        }
         if (saved) city.spotsCacheMeta = { fetchedAt: saved.fetchedAt, source: saved.source || "離線快取", stale: saved.isStale === true };
         const cachedSpots = Array.isArray(saved?.spots) ? saved.spots : [];
         if (prebuiltSpots.length) {
-          const instantSpots = this.sortSpotsByQuality(this.mergeSpots(prebuiltSpots, city.spots || [], cachedSpots, city.spotCandidates || []));
+          const instantSpots = this.sortSpotsByQuality(this.filterTravelSpots(
+            this.mergeSpots(prebuiltSpots, city.spots || [], cachedSpots, city.spotCandidates || []), city
+          ));
           city.spots = instantSpots;
           city._spotCatalogReady = true;
           city.spotsSource = "prebuilt";
@@ -320,7 +367,9 @@
               city.lat = catalogCity.lat;
               city.lng = catalogCity.lng;
             }
-            const earlySpots = this.sortSpotsByQuality(this.mergeSpots(catalog.spots, city.spots || [], cachedSpots, city.spotCandidates || []));
+            const earlySpots = this.sortSpotsByQuality(this.filterTravelSpots(
+              this.mergeSpots(catalog.spots, city.spots || [], cachedSpots, city.spotCandidates || []), city
+            ));
             if (!earlySpots.some(spot => this.hasValidSpotCoordinates(spot, city))
               && (!Number.isFinite(city.lat) || !Number.isFinite(city.lng))) return;
             onCatalogReady(earlySpots, catalog);
@@ -343,7 +392,9 @@
           }
         }
         const cloudSpots = cloudCatalog?.spots || [];
-        const preferredSpots = this.sortSpotsByQuality(this.mergeSpots(cloudSpots, city.spots || [], cachedSpots, city.spotCandidates || []));
+        const preferredSpots = this.sortSpotsByQuality(this.filterTravelSpots(
+          this.mergeSpots(cloudSpots, city.spots || [], cachedSpots, city.spotCandidates || []), city
+        ));
         // Three database landmarks are enough for a fast first paint, but a city
         // guide should keep enriching toward a fuller selection in the background.
         const locatedSpotCount = preferredSpots.filter(spot => this.hasValidSpotCoordinates(spot, city)).length;
@@ -375,7 +426,9 @@
             })
             : [];
         }
-        let spots = this.mergeSpots(cloudSpots, city.spots || [], cachedSpots, liveSpots, city.spotCandidates || []);
+        let spots = this.filterTravelSpots(
+          this.mergeSpots(cloudSpots, city.spots || [], cachedSpots, liveSpots, city.spotCandidates || []), city
+        );
         spots = this.sortSpotsByQuality(spots);
         if (!spots.length) spots = this.createMapSearchSuggestions(city);
         city.spots = spots;

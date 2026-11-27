@@ -49,7 +49,7 @@ npm run seed:city-catalog
 
 1. 本機檢視變更與瀏覽器功能，再提交到 Git。
 2. 推送至 GitHub 預設分支，使用現有 GitHub Pages workflow 發布網站。
-3. 網站發布後以 `https://trilobitexz.github.io/DT-Action-App/` 驗證 Google Popup、個人資料同步、城市景點讀取及 AI 行程。
+3. 網站發布後以 `https://trilobitexz.github.io/journey-atla/` 驗證 Google Popup、個人資料同步、城市景點讀取及 AI 行程。
 4. 若 Firebase 規則或登入設定有問題，修正來源檔後重新執行 `npm run deploy:firebase-config`；網站程式則透過 GitHub Pages 回復／重新發布。
 
 ## 發布前核對表

@@ -1,4 +1,4 @@
-# DT-Action-App 專案規範
+# journey-atla 專案規範
 
 ## 架構與相依性
 

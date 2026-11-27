@@ -4,6 +4,7 @@ window.NationalInfoService = {
   holidayCache: new Map(),
   timeoutMs: 6500,
   offlineCountryFacts: {
+    CN: { languages: ["普通話（國家通用語言）"], timezones: ["UTC+08:00（中國標準時間）"], drivingSide: "right", callingCode: "+86", currencies: ["人民幣 (CNY)"], capitals: ["北京"] },
     IS: { languages: ["冰島語"], timezones: ["UTC+00:00（雷克雅維克）"], drivingSide: "right", callingCode: "+354", currencies: ["冰島克朗 (ISK)"], capitals: ["雷克雅維克"] },
     KH: { languages: ["高棉語"], timezones: ["UTC+07:00"], drivingSide: "right", callingCode: "+855", currencies: ["柬埔寨瑞爾 (KHR)"], capitals: ["金邊"] },
     MA: { languages: ["阿拉伯語", "阿馬齊格語"], timezones: ["UTC+01:00（夏令時間可能調整）"], drivingSide: "right", callingCode: "+212", currencies: ["摩洛哥迪拉姆 (MAD)"], capitals: ["拉巴特"] },

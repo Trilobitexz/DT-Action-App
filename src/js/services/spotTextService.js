@@ -31,8 +31,21 @@ window.SpotTextService = (() => {
     "给給", "尔爾", "补補", "强強", "坛壇", "达達", "际際", "围圍", "亿億", "费費",
     "后後", "图圖", "线線", "数數", "观觀", "历歷", "达達", "业業", "录錄", "将將"
   ];
-  const chars = new Map(pairs.map(pair => [pair[0], pair[1]]));
+  const supplementalPairs = [
+    "饭飯", "词詞", "类類", "宾賓", "检檢", "测測", "坚堅", "历歷", "资資", "数數",
+    "质質", "强強", "见見", "线線", "区區", "举舉", "华華", "当當", "尽盡", "备備",
+    "价價", "饭飯", "际際", "坛壇", "简簡", "顺順", "报報", "闭閉", "闻聞", "网網",
+    "读讀", "药藥", "灵靈", "欢歡", "画畫", "区區", "乌烏", "广廣", "优優", "顾顧",
+    "务務", "饭飯", "馆館", "输輸", "评評", "价價", "获獲", "际際", "齐齊", "汇匯",
+    "币幣", "权權", "验驗", "证證", "识識", "题題", "验驗", "术術", "译譯", "纪紀",
+    "严嚴", "响響", "毕畢", "庆慶", "毕畢", "设設", "计計", "园園", "楼樓", "层層",
+    "鲁魯", "总總", "创創"
+  ];
+  const chars = new Map([...pairs, ...supplementalPairs].map(pair => [pair[0], pair[1]]));
   const phrases = new Map([
+    ["秘鲁", "秘魯"],
+    ["总教区", "總教區"],
+    ["创建", "創建"],
     ["卡萨布兰卡露德圣母堂", "卡薩布蘭卡露德聖母堂"],
     ["卡萨布兰卡圣心主教座堂", "卡薩布蘭卡聖心主教座堂"],
     ["卡萨布兰卡主教座堂", "卡薩布蘭卡主教座堂"],
@@ -47,10 +60,14 @@ window.SpotTextService = (() => {
     ["人民大会堂", "人民大會堂"],
     ["国家图书馆", "國家圖書館"],
     ["科学博物馆", "科學博物館"],
-    ["纪念碑", "紀念碑"]
+    ["纪念碑", "紀念碑"],
+    ["国际饭店", "國際飯店"],
+    ["静安区", "靜安區"],
+    ["静安寺", "靜安寺"]
   ]);
+  const phrasePattern = new RegExp([...phrases.keys()].sort((a, b) => b.length - a.length).join("|"), "g");
   function toTraditional(value) {
-    return String(value ?? "").replace(/先贤祠|明治神宫|博物馆|图书馆|战争纪念|战争|人民大会堂|国家图书馆|科学博物馆|纪念碑/g, phrase => phrases.get(phrase))
+    return String(value ?? "").replace(phrasePattern, phrase => phrases.get(phrase))
       .replace(/[\u3400-\u9fff]/g, character => chars.get(character) || character);
   }
   function normalizeSpot(spot) {
@@ -61,11 +78,32 @@ window.SpotTextService = (() => {
     });
     return normalized;
   }
-  // Encyclopedia event pages can be close to city coordinates but are not
-  // visitable attractions. Keep them out of cards, maps, and AI itineraries.
+  // Filter encyclopedia pages that describe administrative units, institutions,
+  // or events rather than places a traveller can visit. Named museums,
+  // memorials, heritage areas, and other explicit visitor sites remain eligible.
   function isTravelAttraction(spot) {
-    const text = `${spot?.name || ""} ${spot?.englishName || ""} ${spot?.category || ""}`;
-    return !/(?:墜機|坠机|空難|空难|恐攻|恐怖襲擊|恐怖袭击|襲擊事件|袭击事件|爆炸事件|槍擊事件|枪击事件|軍事行動|军事行动|火山爆發|火山爆发|事故|disaster|terrorist attack|air crash|military operation)/iu.test(text);
+    if (!spot) return false;
+    const name = `${spot.name || ""} ${spot.englishName || ""}`.trim();
+    const title = toTraditional(name);
+    const category = toTraditional(spot.category || "");
+    const summary = toTraditional(spot.description || spot.summary || spot.note || "");
+    const visitorSite = /(?:\b(?:museum|memorial|monument|heritage|historic|old town|arts district|cultural district|botanical|viewpoint|park|garden|temple|church|mosque|cathedral|castle|palace|shrine|market|square|bridge|tower|theatre|theater|zoo|aquarium|beach|waterfall|mountain|island|cave|stadium|opera|library|plaza|scenic area|protected area)\b|風景區|风景区|自然保護區|自然保护区|公園|公园|花園|花园|植物園|植物园|寺廟|寺庙|教堂|清真寺|修道院|神社|博物館|美術館|美术馆|紀念館|纪念馆|紀念堂|纪念堂|紀念碑|纪念碑|遺址|遗址|古蹟|古迹|歷史街區|历史街区|老城區|老城区|文化區|文化区|藝術區|艺术区|文化遺產|文化遗产|歷史與文化遺產|歷史与文化遗产|世界遺產|世界遗产|王城區|王城区|觀景台|观景台|觀景點|观景点|市集|市場|市场|廣場|广场|動物園|动物园|水族館|水族馆|海灘|海滩|瀑布|山岳|島嶼|岛屿|洞穴|體育場|体育场|歌劇院|歌剧院|圖書館|图书馆)/iu;
+    const administrativeTitle = /(?:\b(?:electoral|congressional|administrative)?\s*district(?:\s+of\s+[\p{L}\p{M} .'-]+)?|\bmunicipality|\bcounty|\bprovince|\bprefecture|\bgovernorate|\bsubdistrict|\btownship|\bward|\bborough)\s*$/iu.test(name)
+      || /^(?:district|county|province|municipality)\s+of\b/iu.test(name)
+      || /(?:行政區|行政区|市轄區|市辖区|區政府|区政府|(?:縣|县|省|州|郡|區|区))\s*$/u.test(title);
+    const administrativeSummary = /^(?:.{0,90}\b(?:is|was|are)\s+(?:(?:an?|the)\s+)?(?:administrative\s+)?(?:district|municipality|county|province|university|college|school|central bank|capital(?:\s+city)?|city|town|borough)\b|.{0,32}(?:是|為)(?:一個|一所|一座)?(?:城市|首都|城鎮|城镇|市轄區|市辖区|行政區|行政区|大學|大学|學院|学院|中央銀行|中央银行))/iu.test(summary);
+    const institutionalTitle = /^(?:the\s+)?(?:university|college|school|central bank|bank of|ministry of|department of)\b/iu.test(name)
+      || /^(?:中央銀行|中央银行|大學|大学|學院|学院|專科學校|专科学校)/u.test(title);
+    const eventTitle = /(?:air\s+crash|plane\s+crash|bombing|terrorist attack|massacre|shooting|earthquake|volcanic eruption|disaster|military operation|襲擊事件|袭击事件|墜機|坠机|空難|空难|恐攻|恐怖襲擊|恐怖袭击|爆炸事件|槍擊事件|枪击事件|屠殺|屠杀|地震|火山爆發|火山爆发|事故)/iu.test(`${name} ${category}`);
+    // A location mentioned inside an administrative page's description must not
+    // turn that district itself into an attraction (for example, Ermita mentions Intramuros).
+    const namedVisitorSite = visitorSite.test(`${title} ${category}`);
+    const accommodationOnly = /(?:\b(?:hotel|resort|hostel|guesthouse|inn)\b|酒店|飯店|旅館|旅店|民宿)/iu.test(title)
+      && /(?:\b(?:hotel|resort|hostel|guesthouse|inn|accommodation)\b|酒店|飯店|旅館|旅店|民宿|五星級)/iu.test(summary)
+      && !/(?:\b(?:landmark|heritage|historic|monument|architectural)\b|地標|古蹟|歷史建築|文化遺產|文物保護)/iu.test(`${title} ${summary}`);
+    const cityOrInstitutionPage = ((administrativeTitle || administrativeSummary || institutionalTitle) && !namedVisitorSite)
+      || accommodationOnly;
+    return !cityOrInstitutionPage && !(eventTitle && !namedVisitorSite);
   }
   return { toTraditional, normalizeSpot, isTravelAttraction };
 })();

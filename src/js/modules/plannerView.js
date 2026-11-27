@@ -102,7 +102,11 @@ window.PlannerView = {
     const all = this.getPlanningSpots(city).map((spot, index) => ({ spot, index, score: 0 }));
     const real = all.filter(item => !item.spot.isSearchSuggestion);
     const candidates = real.length >= days ? real : all;
-    const hasCoordinates = spot => Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lng));
+    const hasCoordinates = spot => spot?.lat !== null && spot?.lat !== undefined && spot?.lat !== ""
+      && spot?.lng !== null && spot?.lng !== undefined && spot?.lng !== ""
+      && Number.isFinite(Number(spot.lat)) && Number(spot.lat) >= -90 && Number(spot.lat) <= 90
+      && Number.isFinite(Number(spot.lng)) && Number(spot.lng) >= -180 && Number(spot.lng) <= 180
+      && !(Number(spot.lat) === 0 && Number(spot.lng) === 0);
     candidates.forEach(item => {
       const spot = item.spot;
       item.score = (spot.isFeatured ? 2 : 0)
@@ -295,13 +299,16 @@ window.PlannerView = {
     const country = suppliedCountry || (window.TRAVEL_DATA.countries || []).find(item =>
       item.id === city?.countryId || (city?.countryName && item.name === city.countryName)
     );
-    const validCoordinates = place => Number.isFinite(Number(place?.lat)) && Number.isFinite(Number(place?.lng))
+    const validCoordinates = place => place?.lat !== null && place?.lat !== undefined && place?.lat !== ""
+      && place?.lng !== null && place?.lng !== undefined && place?.lng !== ""
+      && Number.isFinite(Number(place?.lat)) && Number.isFinite(Number(place?.lng))
       && Number(place.lat) >= -90 && Number(place.lat) <= 90
       && Number(place.lng) >= -180 && Number(place.lng) <= 180
       && !(Number(place.lat) === 0 && Number(place.lng) === 0);
     const spotList = Array.isArray(city?.spots) ? city.spots : Array.isArray(city?.spotCandidates) ? city.spotCandidates : [];
     const verifiedSpots = spotList.filter(spot => !spot?.isSearchSuggestion
-      && /^https?:\/\//i.test(String(spot?.sourceUrl || "")) && validCoordinates(spot));
+      && /^https?:\/\//i.test(String(spot?.sourceUrl || "")) && validCoordinates(spot)
+      && (window.SpotTextService?.isTravelAttraction(spot) ?? true));
     const sourcedSpotStats = {
       total: verifiedSpots.length,
       withImage: verifiedSpots.filter(spot => /^https?:\/\//i.test(String(spot.imageUrl || spot.image || ""))).length,
@@ -435,10 +442,13 @@ window.PlannerView = {
     };
     const getSpotStats = city => {
       const spots = Array.isArray(city.spots) ? city.spots : Array.isArray(city.spotCandidates) ? city.spotCandidates : [];
-      const sourced = spots.filter(spot => spot && /^https?:\/\//i.test(String(spot.sourceUrl || ""))
+      const sourced = spots.filter(spot => spot && spot.lat !== null && spot.lat !== undefined && spot.lat !== ""
+        && spot.lng !== null && spot.lng !== undefined && spot.lng !== ""
+        && /^https?:\/\//i.test(String(spot.sourceUrl || ""))
         && Number.isFinite(Number(spot.lat)) && Number(spot.lat) >= -90 && Number(spot.lat) <= 90
         && Number.isFinite(Number(spot.lng)) && Number(spot.lng) >= -180 && Number(spot.lng) <= 180
-        && !(Number(spot.lat) === 0 && Number(spot.lng) === 0));
+        && !(Number(spot.lat) === 0 && Number(spot.lng) === 0)
+        && (window.SpotTextService?.isTravelAttraction(spot) ?? true));
       const rated = sourced.filter(spot => Number.isFinite(Number(spot.rating))
         && Number(spot.rating) >= 0 && Number(spot.rating) <= 5 && String(spot.ratingSource || "").trim());
       return { total: spots.length, sourced: sourced.length, rated };
@@ -769,7 +779,8 @@ window.PlannerView = {
     const coordinates = orderedSpots.map(({ spot }) => {
       if (spot?.lng === null || spot?.lng === undefined || spot?.lng === "" || spot?.lat === null || spot?.lat === undefined || spot?.lat === "") return null;
       const lng = Number(spot.lng), lat = Number(spot.lat);
-      return Number.isFinite(lng) && Number.isFinite(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90 ? [lng, lat] : null;
+      return Number.isFinite(lng) && Number.isFinite(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90
+        && !(lat === 0 && lng === 0) ? [lng, lat] : null;
     });
     if (coordinates.length < 2 || coordinates.some(point => !point)) {
       status.textContent = "部分景點缺少座標，暫時無法估算完整駕車路線。";
@@ -1142,10 +1153,14 @@ window.PlannerView = {
   },
 
   googleMapsDayUrl: function (city, orderedSpots, mode = "transit") {
-    const stops = (orderedSpots || []).filter(spot => spot && (spot.name || Number.isFinite(Number(spot.lat))));
+    const hasCoordinates = spot => spot?.lat !== null && spot?.lat !== undefined && spot?.lat !== ""
+      && spot?.lng !== null && spot?.lng !== undefined && spot?.lng !== ""
+      && Number.isFinite(Number(spot.lat)) && Number(spot.lat) >= -90 && Number(spot.lat) <= 90
+      && Number.isFinite(Number(spot.lng)) && Number(spot.lng) >= -180 && Number(spot.lng) <= 180
+      && !(Number(spot.lat) === 0 && Number(spot.lng) === 0);
+    const stops = (orderedSpots || []).filter(spot => spot && (spot.name || hasCoordinates(spot)));
     if (!stops.length) return "";
-    const destinationText = spot => Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lng))
-      && spot.lat !== null && spot.lng !== null ? `${Number(spot.lat)},${Number(spot.lng)}` : `${spot.name}, ${city.name}`;
+    const destinationText = spot => hasCoordinates(spot) ? `${Number(spot.lat)},${Number(spot.lng)}` : `${spot.name}, ${city.name}`;
     const origin = stops.length > 1 ? destinationText(stops[0]) : city.name;
     const destination = destinationText(stops[stops.length - 1]);
     const params = new URLSearchParams({ api: "1", origin, destination, travelmode: mode === "walking" ? "walking" : mode === "driving" ? "driving" : "transit" });

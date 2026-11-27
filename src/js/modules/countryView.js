@@ -133,6 +133,7 @@ window.CountryView = {
     const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     })[character]);
+    const displayText = value => window.SpotTextService?.toTraditional(value) ?? String(value ?? "");
     const safeHttpUrl = value => {
       try {
         const url = new URL(value);
@@ -143,8 +144,9 @@ window.CountryView = {
       && Number.isFinite(Number(spot.rating))
       && Number(spot.rating) >= 0 && Number(spot.rating) <= 5 && Boolean(String(spot.ratingSource || "").trim());
     const hasCoordinates = spot => {
-      const lat = Number(spot?.lat), lng = Number(spot?.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0
+      const lat = spot?.lat === null || spot?.lat === undefined || spot?.lat === "" ? NaN : Number(spot.lat);
+      const lng = spot?.lng === null || spot?.lng === undefined || spot?.lng === "" ? NaN : Number(spot.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)
         || lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
       if (Number.isFinite(currentCity?.lat) && Number.isFinite(currentCity?.lng)) {
         const radians = Math.PI / 180;
@@ -191,10 +193,17 @@ window.CountryView = {
     const currentCity = country.cities.find(ci => ci.id === state.selectedCityId) || country.cities[0];
     if (!currentCity) return;
     const normalizePlaceName = value => (window.SpotTextService?.toTraditional(value) || String(value || ""))
-      .normalize("NFKC").toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+      .normalize("NFKD").replace(/[\u0300-\u036f]/g, "").normalize("NFKC")
+      .toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
     const cityNames = new Set([currentCity.name, currentCity.englishName, currentCity.nameEn]
       .map(normalizePlaceName).filter(Boolean));
     const isCityItself = spot => spot?.category === "city" || cityNames.has(normalizePlaceName(spot?.name));
+    const filterPublishedSpots = items => {
+      const vetted = window.CityCatalogService?.filterTravelSpots
+        ? window.CityCatalogService.filterTravelSpots(items, currentCity)
+        : (items || []).filter(spot => !isCityItself(spot) && (window.SpotTextService?.isTravelAttraction(spot) ?? true));
+      return vetted.length ? vetted : (items || []).filter(spot => spot?.isSearchSuggestion === true);
+    };
     spotsContainer.onmouseover = event => {
       const card = event.target.closest(".spot-item[data-spot-index]");
       if (card && !card.contains(event.relatedTarget)) window.mapManager?.setSpotCardHighlight?.(card.dataset.cityId, Number(card.dataset.spotIndex), true);
@@ -216,8 +225,10 @@ window.CountryView = {
         try {
           [cityKey, displayCityKey].forEach(key => {
             localStorage.removeItem(`journey-atlas-city-spots-v2-${key}`);
+            localStorage.removeItem(`journey-atlas-city-spots-v3-${key}`);
             localStorage.removeItem(`journey-atlas-verified-places-v4-${key}`);
             localStorage.removeItem(`journey-atlas-verified-places-v5-${key}`);
+            localStorage.removeItem(`journey-atlas-verified-places-v6-${key}`);
           });
         } catch (error) { /* 私密瀏覽模式不支援快取 */ }
         window.CountryView.render(state);
@@ -255,10 +266,22 @@ window.CountryView = {
       const locationText = Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng)
         ? `座標 ${currentCity.lat.toFixed(4)}, ${currentCity.lng.toFixed(4)}`
         : "尚無已確認的座標";
-      cityDescription.innerText = currentCity.descriptionSource?.text
+      cityDescription.textContent = currentCity.descriptionSource?.text || currentCity.description
         || (currentCity._citySummaryLookupFailed
-          ? "目前找不到相符的城市百科摘要；景點清單與地圖仍可使用。"
+          ? "城市百科暫時無法連線；請參考下方可追溯來源的景點與地圖資料。"
           : `${currentCity.name}（${currentCity.englishName}）位於${currentCity.countryName || country.name}，${locationText}。`);
+      if (currentCity._citySummaryLookupFailed) {
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "country-facts-retry";
+        retry.textContent = "重新載入城市介紹";
+        retry.addEventListener("click", () => {
+          currentCity._citySummaryLookupStarted = false;
+          currentCity._citySummaryLookupFailed = false;
+          window.CountryView.render(state);
+        });
+        cityDescription.append(document.createElement("br"), retry);
+      }
     }
     const cityHeading = document.querySelector("#view-country .city-tabs-card h3");
     if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：${currentCity.destinationType === "island" ? "目的地資訊" : "城市資訊"}與景點資料`;
@@ -365,7 +388,8 @@ window.CountryView = {
     ];
     const fallbackSuggestions = (currentCity._spotCatalogReady || !window.CityCatalogService?.ensureSpots)
       ? (window.CityCatalogService?.createMapSearchSuggestions(currentCity) || []) : [];
-    const spots = sortSpotsByQuality(availableSpots.length ? availableSpots : fallbackSuggestions);
+    const spots = sortSpotsByQuality(availableSpots.length ? availableSpots : fallbackSuggestions)
+      .map(spot => window.SpotTextService?.normalizeSpot(spot) || spot);
     currentCity.spots = spots;
     currentCity.attractions = spots.map(spot => spot.name);
     window.PlannerView?.renderCityTools(currentCity, state, country);
@@ -380,12 +404,12 @@ window.CountryView = {
           <div class="spot-main" style="flex:1;">
             <h5>
               <span style="color:var(--primary); font-weight:800;">#${idx + 1}</span>
-              ${escapeHtml(spot.name)}
-              ${spot.tag && !/公開資料|地圖搜尋|即時地圖|資料編目/i.test(spot.tag) ? `<span class="spot-badge">${escapeHtml(spot.tag)}</span>` : ""}
-              <span class="spot-badge" style="background:#f1f5f9; color:#475569;">${escapeHtml(spot.category || "景點")}</span>
+              ${escapeHtml(displayText(spot.name))}
+              ${spot.tag && !/公開資料|地圖搜尋|即時地圖|資料編目/i.test(spot.tag) ? `<span class="spot-badge">${escapeHtml(displayText(spot.tag))}</span>` : ""}
+              <span class="spot-badge" style="background:#f1f5f9; color:#475569;">${escapeHtml(displayText(spot.category || "景點"))}</span>
               ${spot.isSearchSuggestion ? '<span class="spot-badge" style="background:#fff7ed;color:#9a3412;">地圖搜尋入口</span>' : ""}
             </h5>
-            <div class="spot-note" id="spot-note-${idx}">${escapeHtml(spot.note || "")}</div>
+            <div class="spot-note" id="spot-note-${idx}">${escapeHtml(displayText(spot.note || ""))}</div>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.4rem;">
             <div class="spot-score">${hasSourcedRating(spot) ? `★ ${Number(spot.rating).toFixed(1)} · ${escapeHtml(spot.ratingSource)}` : `<a class="spot-rating-link" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${spot.name}, ${currentCity.name}, ${currentCity.countryName || country.name}`)}" target="_blank" rel="noopener noreferrer">前往 Google 地圖查看評價 ↗</a>`}</div>
@@ -432,7 +456,7 @@ window.CountryView = {
             if (!/^https?:$/.test(safeImageUrl.protocol)) return;
           } catch (error) { return; }
           const image = document.createElement("img");
-          image.alt = alt || spot.name;
+          image.alt = displayText(alt || spot.name);
           image.loading = "lazy";
           image.decoding = "async";
           image.referrerPolicy = "no-referrer";
@@ -490,7 +514,7 @@ window.CountryView = {
       const catalogLoad = window.CityCatalogService.ensureSpots(catalogCity, {
         onCatalogReady: (publishedSpots, publishedCatalog) => {
           if (!isCurrentCity()) return;
-          const catalogCityData = publishedCatalog.city || {};
+          const catalogCityData = publishedCatalog?.city || {};
           currentCity.spotsCacheMeta = publishedCatalog.cacheMeta || catalogCity.spotsCacheMeta || currentCity.spotsCacheMeta;
           if ((!Number.isFinite(currentCity.lat) || !Number.isFinite(currentCity.lng))
             && Number.isFinite(catalogCityData.lat) && Number.isFinite(catalogCityData.lng)) {
@@ -503,14 +527,14 @@ window.CountryView = {
               sourceUrl: catalogCityData.coordinateSourceUrl || ""
             };
           }
-          publishedSpots = publishedSpots.filter(spot => !isCityItself(spot) && (window.SpotTextService?.isTravelAttraction(spot) ?? true));
+          publishedSpots = filterPublishedSpots(publishedSpots);
           currentCity.spots = publishedSpots;
           currentCity.attractions = publishedSpots.map(spot => spot.name);
           currentCity.spotsSource = publishedCatalog?.source === "prebuilt" ? "prebuilt" : "firestore";
           catalogCity.spotsSource = currentCity.spotsSource;
           currentCity._spotCatalogReady = true;
           catalogCity._spotCatalogReady = true;
-          if (publishedCatalog.city?.description && !currentCity.descriptionSource?.text) {
+          if (publishedCatalog?.city?.description && !currentCity.descriptionSource?.text) {
             currentCity.descriptionSource = {
               text: publishedCatalog.city.description,
               pageUrl: publishedCatalog.city.sourceUrl || null,
@@ -545,7 +569,8 @@ window.CountryView = {
         catalogTimer = window.setTimeout(() => reject(new Error("城市景點載入逾時，已切換備援搜尋")), 18000);
       });
       Promise.race([catalogLoad, catalogDeadline]).then(spots => {
-        currentCity.spots = spots;
+        const publishedSpots = filterPublishedSpots(spots);
+        currentCity.spots = publishedSpots;
         currentCity._spotCatalogReady = true;
         currentCity.spotsSource = catalogCity.spotsSource;
         if (isCurrentCity()) {
@@ -566,14 +591,26 @@ window.CountryView = {
     if (!currentCity._citySummaryLookupStarted && !cityDescription?.textContent?.includes("正在向 OpenStreetMap") && cityDescription && window.SpotService?.fetchCitySummary
       && Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng)) {
       currentCity._citySummaryLookupStarted = true;
-      cityDescription.textContent = "正在查詢與城市座標相符的百科介紹…";
+      cityDescription.setAttribute("aria-busy", "true");
       window.SpotService.fetchCitySummary(currentCity.englishName || currentCity.name, currentCity.countryName || country.name, currentCity).then(summary => {
         if (!isCurrentCity()) return;
         const description = document.getElementById("city-description-text");
         if (!description) return;
+        description.setAttribute("aria-busy", "false");
         if (!summary?.extract) {
           currentCity._citySummaryLookupFailed = true;
-          description.textContent = "目前找不到相符的城市百科摘要；景點清單與地圖仍可使用。";
+          const savedDescription = currentCity.descriptionSource?.text || currentCity.description || "";
+          description.replaceChildren(document.createTextNode(savedDescription || "城市百科介紹目前無法取得；景點清單與地圖資料仍可使用。"));
+          const retry = document.createElement("button");
+          retry.type = "button";
+          retry.className = "country-facts-retry";
+          retry.textContent = "重新載入城市介紹";
+          retry.addEventListener("click", () => {
+            currentCity._citySummaryLookupStarted = false;
+            currentCity._citySummaryLookupFailed = false;
+            window.CountryView.render(state);
+          });
+          description.append(document.createElement("br"), retry);
           return;
         }
         currentCity.descriptionSource = { text: summary.extract, pageUrl: summary.pageUrl || null, sourceLabel: summary.sourceLabel || "百科資料" };
@@ -592,7 +629,11 @@ window.CountryView = {
         if (isCurrentCity()) {
           currentCity._citySummaryLookupFailed = true;
           const description = document.getElementById("city-description-text");
-          if (description) description.textContent = "城市百科摘要暫時無法載入；景點清單與地圖仍可使用。";
+          if (description) {
+            description.setAttribute("aria-busy", "false");
+            const savedDescription = currentCity.descriptionSource?.text || currentCity.description || "";
+            description.textContent = savedDescription || "城市百科介紹暫時無法取得；景點清單與地圖資料仍可使用。";
+          }
         }
       });
     }

@@ -3,6 +3,7 @@ window.SpotService = {
   cache: {},
   openTripMapApiKey: "",
   requestTimeoutMs: 4000,
+  citySummaryTimeoutMs: 11000,
   requestQueue: [],
   nearbyPlaceRequests: {},
   cityLocationRequests: {},
@@ -17,9 +18,15 @@ window.SpotService = {
   nominatimTail: Promise.resolve(),
   nextNominatimAt: 0,
 
-  requestJson: function (url, timeoutMs = this.requestTimeoutMs) {
+  requestJson: function (url, timeoutMs = this.requestTimeoutMs, signal = null) {
     return new Promise((resolve, reject) => {
-      this.requestQueue.push({ url, expiresAt: Date.now() + timeoutMs, resolve, reject });
+      if (signal?.aborted) {
+        const abortError = new Error("Request aborted");
+        abortError.name = "AbortError";
+        reject(abortError);
+        return;
+      }
+      this.requestQueue.push({ url, expiresAt: Date.now() + timeoutMs, resolve, reject, signal });
       this.processRequestQueue();
     });
   },
@@ -33,6 +40,13 @@ window.SpotService = {
       this.scheduledRequests += 1;
       window.setTimeout(() => {
         this.scheduledRequests -= 1;
+        if (request.signal?.aborted) {
+          const abortError = new Error("Request aborted");
+          abortError.name = "AbortError";
+          request.reject(abortError);
+          this.processRequestQueue();
+          return;
+        }
         const remainingMs = request.expiresAt - Date.now();
         if (remainingMs <= 0) {
           const timeoutError = new Error("Request timed out");
@@ -42,7 +56,7 @@ window.SpotService = {
           return;
         }
         this.activeRequests += 1;
-        this.runRequest(request.url, remainingMs)
+        this.runRequest(request.url, remainingMs, request.signal)
           .then(request.resolve, request.reject)
           .finally(() => {
             this.activeRequests -= 1;
@@ -52,15 +66,19 @@ window.SpotService = {
     }
   },
 
-  runRequest: async function (url, timeoutMs = this.requestTimeoutMs) {
+  runRequest: async function (url, timeoutMs = this.requestTimeoutMs, externalSignal = null) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const abortFromCaller = () => controller.abort();
+    if (externalSignal?.aborted) controller.abort();
+    else externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
     try {
       const res = await fetch(url, { headers: { "Accept": "application/json" }, signal: controller.signal });
       if (!res.ok) throw new Error(`旅遊資料 API 回應異常 (${res.status})`);
       return await res.json();
     } finally {
       clearTimeout(timeoutId);
+      externalSignal?.removeEventListener("abort", abortFromCaller);
     }
   },
 
@@ -82,18 +100,24 @@ window.SpotService = {
     return earthRadiusKm * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
   },
 
-  fetchSource: async function (baseUrl, spotName) {
+  fetchSource: async function (baseUrl, spotName, timeoutMs = this.requestTimeoutMs, signal = null) {
     const cleanName = spotName.split("(")[0].trim();
+    const deadline = Date.now() + timeoutMs;
     let data;
     try {
-      data = await this.requestJson(`${baseUrl}${encodeURIComponent(cleanName)}`);
+      data = await this.requestJson(`${baseUrl}${encodeURIComponent(cleanName)}`, Math.max(1, deadline - Date.now()), signal);
     } catch (error) {
+      if (signal?.aborted || error?.name === "AbortError") throw error;
       const apiRoot = baseUrl.replace("/api/rest_v1/page/summary/", "/w/api.php");
       const searchUrl = `${apiRoot}?action=query&list=search&srsearch=${encodeURIComponent(cleanName)}&srlimit=1&format=json&origin=*`;
-      const searchData = await this.requestJson(searchUrl);
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) throw error;
+      const searchData = await this.requestJson(searchUrl, remainingMs, signal);
       const match = searchData.query?.search?.[0];
       if (!match?.title) throw error;
-      data = await this.requestJson(`${baseUrl}${encodeURIComponent(match.title)}`);
+      const finalRemainingMs = deadline - Date.now();
+      if (finalRemainingMs <= 0) throw error;
+      data = await this.requestJson(`${baseUrl}${encodeURIComponent(match.title)}`, finalRemainingMs, signal);
     }
     return {
       title: data.title,
@@ -201,15 +225,20 @@ window.SpotService = {
     };
   },
 
-  fetchWikidata: async function (spotName, cityName) {
+  fetchWikidata: async function (spotName, cityName, timeoutMs = this.requestTimeoutMs, signal = null) {
+    const deadline = Date.now() + timeoutMs;
     const search = cityName ? `${spotName} ${cityName}` : spotName;
     const searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(search)}&language=zh&uselang=zh&limit=1&format=json&origin=*`;
-    const searchData = await this.requestJson(searchUrl);
+    const searchData = await this.requestJson(searchUrl, Math.max(1, deadline - Date.now()), signal);
     const entityId = searchData.search?.[0]?.id;
     if (!entityId) throw new Error("Wikidata 查無景點");
 
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) throw new Error("Wikidata 城市介紹查詢逾時");
     const entityData = await this.requestJson(
-      `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(entityId)}&props=labels|descriptions|sitelinks|claims&languages=zh|en&format=json&origin=*`
+      `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(entityId)}&props=labels|descriptions|sitelinks|claims&languages=zh|en&format=json&origin=*`,
+      remainingMs,
+      signal
     );
     const entity = entityData.entities?.[entityId];
     const description = entity?.descriptions?.zh?.value || entity?.descriptions?.en?.value || "";
@@ -239,27 +268,41 @@ window.SpotService = {
       ? `${cityCoordinates.lat.toFixed(3)},${cityCoordinates.lng.toFixed(3)}` : "unlocated";
     const cacheKey = `city-summary|${cityName}|${countryName}|${coordinateKey}`;
     if (this.cache[cacheKey]) return this.cache[cacheKey];
+    const chineseName = String(cityCoordinates?.name || cityName || "").trim();
+    const englishName = String(cityCoordinates?.englishName || "").trim();
+    const aliases = [...new Set([chineseName, englishName, cityName].filter(Boolean))];
     const sources = [
-      {
-        fetch: () => this.fetchSource("https://zh.wikivoyage.org/api/rest_v1/page/summary/", cityName),
-        label: "中文 Wikivoyage 旅遊指南"
-      },
-      {
-        fetch: () => this.fetchSource("https://zh.wikipedia.org/api/rest_v1/page/summary/", cityName),
+      { fetch: (timeout, signal) => this.fetchSource("https://zh.wikivoyage.org/api/rest_v1/page/summary/", chineseName, timeout, signal), label: "中文 Wikivoyage 旅遊指南" },
+      ...aliases.filter(name => name === chineseName).map(name => ({
+        fetch: (timeout, signal) => this.fetchSource("https://zh.wikipedia.org/api/rest_v1/page/summary/", name, timeout, signal),
         label: "中文 Wikipedia 百科"
-      },
+      })),
+      ...aliases.filter(name => name === englishName && name !== chineseName).map(name => ({
+        fetch: (timeout, signal) => this.fetchSource("https://zh.wikipedia.org/api/rest_v1/page/summary/", name, timeout, signal),
+        label: "中文 Wikipedia 百科"
+      })),
+      ...(englishName ? [{
+        fetch: (timeout, signal) => this.fetchSource("https://en.wikipedia.org/api/rest_v1/page/summary/", englishName, timeout, signal),
+        label: "English Wikipedia"
+      }] : []),
       {
-        fetch: () => this.fetchWikidata(cityName, countryName),
+        fetch: (timeout, signal) => this.fetchWikidata(chineseName || englishName, countryName, timeout, signal),
         label: "Wikidata 中文結構化資料"
       }
     ];
     const normalizeTitle = value => String(value || "").replace(/_/g, " ").normalize("NFKD")
       .replace(/[\u0300-\u036f]/g, "").normalize("NFKC").trim().toLocaleLowerCase()
       .replace(/[\s\p{P}]+/gu, "");
-    const requestedCity = normalizeTitle(cityName);
+    const requestedCities = new Set(aliases.map(normalizeTitle));
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), this.citySummaryTimeoutMs);
+    const deadline = Date.now() + this.citySummaryTimeoutMs;
     for (const source of sources) {
+      if (controller.signal.aborted) break;
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) break;
       try {
-        const result = await source.fetch();
+        const result = await source.fetch(Math.min(this.requestTimeoutMs, remainingMs), controller.signal);
         const isDisambiguation = result?.type === "disambiguation"
           || /(?:可以指|可能指的是|消歧義|may refer to)/i.test(result?.extract || "");
         if (isDisambiguation) continue;
@@ -267,7 +310,7 @@ window.SpotService = {
         const verifiedLocation = Number.isFinite(cityCoordinates?.lat) && Number.isFinite(cityCoordinates?.lng)
           && Number.isFinite(location?.latitude) && Number.isFinite(location?.longitude)
           && this.distanceKm(cityCoordinates.lat, cityCoordinates.lng, location.latitude, location.longitude) <= 35;
-        const matchingArticle = requestedCity && normalizeTitle(result?.title) === requestedCity;
+        const matchingArticle = requestedCities.has(normalizeTitle(result?.title));
         if (result?.extract && (verifiedLocation || matchingArticle)) {
           const summary = {
             extract: result.extract,
@@ -276,6 +319,7 @@ window.SpotService = {
           };
           this.cache[cacheKey] = summary;
           this.trimCache();
+          window.clearTimeout(timeoutId);
           return summary;
         }
       } catch (error) {
@@ -284,6 +328,7 @@ window.SpotService = {
         }
       }
     }
+    window.clearTimeout(timeoutId);
     return null;
   },
 
@@ -349,13 +394,14 @@ window.SpotService = {
 
   fetchNearbyPlaces: async function (city, { radius = 20000, limit = 250 } = {}) {
     if (!Number.isFinite(city?.lat) || !Number.isFinite(city?.lng)) return [];
-    const cacheKey = `journey-atlas-verified-places-v5-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
+    const cacheKey = `journey-atlas-verified-places-v6-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
     const cacheTtl = 7 * 24 * 60 * 60 * 1000;
     try {
       const legacyCacheKey = `journey-atlas-osm-places-v3-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
       localStorage.removeItem(legacyCacheKey);
       localStorage.removeItem(legacyCacheKey.replace("-v3-", "-v2-"));
       localStorage.removeItem(`journey-atlas-verified-places-v4-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`);
+      localStorage.removeItem(`journey-atlas-verified-places-v5-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`);
       const saved = JSON.parse(localStorage.getItem(cacheKey) || "null");
       const savedTtl = saved?.places?.length
         && (saved.places.length >= Math.min(12, limit) || saved.wikidataChecked === true)
