@@ -235,4 +235,6 @@
 - 新增 `scripts/sync-firestore-budget-rules.mjs` 與 npm sync/check 命令；部署 Firebase 規則前會先確認清單與城市目錄相符。
 - `node scripts/sync-firestore-budget-rules.mjs --check`、規則來源靜態檢查、`node --check`（firebase.js、規則同步腳本）、`node scripts/smoke-ai-planning.mjs`、AI 資料稽核及 `git diff --check` 通過。此環境未安裝 npm 或 Firebase CLI，因此未執行 Rules Emulator 編譯；`package.json` JSON 格式檢查通過。
 - 本輪僅更新專案規則來源；Firebase Console 的實際已部署規則需另行確認，不在本輪遠端部署。
-- 待提交、推送並確認 GitHub Pages 部署結果。
+- v129 程式變更以 `5acc58c` 推送至 `origin/main`；本次部署狀態記錄同步補入 QA 日誌。
+- GitHub Pages workflow #96（run `46035171464`）對應 `5acc58c` 並成功；正式頁重新載入成功，頁面標題、世界地圖與 200+ 城市探索介面正常顯示。
+- 此環境未安裝 Firebase CLI，也未部署 Firebase Rules；Firebase Console 的實際規則版本仍需確認。
