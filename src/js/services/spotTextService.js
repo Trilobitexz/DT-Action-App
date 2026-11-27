@@ -87,27 +87,37 @@ window.SpotTextService = (() => {
     const title = toTraditional(name);
     const category = toTraditional(spot.category || "");
     const summary = toTraditional(spot.description || spot.summary || spot.note || "");
-    const visitorSite = /(?:\b(?:museum|memorial|monument|heritage|historic|old town|arts district|cultural district|botanical|viewpoint|park|garden|temple|church|mosque|cathedral|castle|palace|shrine|market|square|bridge|tower|theatre|theater|zoo|aquarium|beach|waterfall|mountain|island|cave|stadium|opera|library|plaza|scenic area|protected area)\b|風景區|风景区|自然保護區|自然保护区|公園|公园|花園|花园|植物園|植物园|寺廟|寺庙|教堂|清真寺|修道院|神社|宗教建築|宗教建筑|聖殿|圣殿|大教堂|博物館|美術館|美术馆|紀念館|纪念馆|紀念堂|纪念堂|紀念碑|纪念碑|遺址|遗址|古蹟|古迹|歷史街區|历史街区|老城區|老城区|文化區|文化区|藝術區|艺术区|文化遺產|文化遗产|歷史與文化遺產|歷史与文化遗产|世界遺產|世界遗产|王城區|王城区|觀景台|观景台|觀景點|观景点|市集|市場|市场|廣場|广场|動物園|动物园|水族館|水族馆|海灘|海滩|瀑布|山岳|島嶼|岛屿|洞穴|體育場|体育场|歌劇院|歌剧院|圖書館|图书馆)/iu;
+    const summaryLead = summary.replace(/\b(vs|mr|mrs|dr|st|no)\./giu, "$1").split(/[.!?。！？]/u, 1)[0];
+    const visitorSite = /(?:\b(?:museum|memorial|monument|heritage|historic|old town|arts district|cultural district|botanical|viewpoint|park|garden|temple|church|mosque|cathedral|castle|palace|shrine|market|square|bridge|tower|theatre|theater|zoo|aquarium|beach|waterfall|mountain|island|cave|stadium|opera|library|plaza|scenic area|protected area|fortress)\b|風景區|风景区|自然保護區|自然保护区|公園|公园|花園|花园|植物園|植物园|寺廟|寺庙|教堂|聖堂|圣堂|主教座堂|清真寺|修道院|神社|宗教建築|宗教建筑|聖殿|圣殿|大教堂|博物館|美術館|美术馆|藝術宮|艺术宫|紀念館|纪念馆|紀念堂|纪念堂|紀念碑|纪念碑|遺址|遗址|古蹟|古迹|歷史街區|历史街区|老城區|老城区|文化區|文化区|藝術區|艺术区|文化遺產|文化遗产|歷史與文化遺產|歷史与文化遗产|世界遺產|世界遗产|王城區|王城区|觀景台|观景台|觀景點|观景点|市集|市場|市场|廣場|广场|動物園|动物园|水族館|水族馆|海灘|海滩|瀑布|山岳|島嶼|岛屿|洞穴|體育場|体育场|歌劇院|歌剧院|圖書館|图书馆|鐘樓|钟楼|要塞|城郭|城跡|城址|共和國宮|共和国宫)/iu;
     const administrativeTitle = /(?:\b(?:electoral|congressional|administrative)?\s*district(?:\s+of\s+[\p{L}\p{M} .'-]+)?|\bmunicipality|\bcounty|\bprovince|\bprefecture|\bgovernorate|\bsubdistrict|\btownship|\bward|\bborough)\s*$/iu.test(name)
       || /^(?:district|county|province|municipality)\s+of\b/iu.test(name)
       || /(?:行政區|行政区|市轄區|市辖区|區政府|区政府|(?:縣|县|省|州|郡|區|区))\s*$/u.test(title);
-    const administrativeSummary = /^(?:.{0,90}\b(?:is|was|are)\s+(?:(?:an?|the)\s+)?(?:administrative\s+)?(?:district|municipality|county|province|university|college|school|central bank|capital(?:\s+city)?|city|town|borough)\b|.{0,32}(?:是|為)(?:一個|一所|一座)?(?:城市|首都|城鎮|城镇|市轄區|市辖区|行政區|行政区|大學|大学|學院|学院|中央銀行|中央银行))/iu.test(summary);
-    const institutionalTitle = /^(?:the\s+)?(?:university|college|school|central bank|bank of|ministry of|department of)\b/iu.test(name)
-      || /^(?:中央銀行|中央银行|大學|大学|學院|学院|專科學校|专科学校)/u.test(title);
-    const eventTitle = /(?:air\s+crash|plane\s+crash|bombing|terrorist attack|massacre|shooting|earthquake|volcanic eruption|disaster|military operation|襲擊事件|袭击事件|墜機|坠机|空難|空难|恐攻|恐怖襲擊|恐怖袭击|爆炸事件|槍擊事件|枪击事件|屠殺|屠杀|地震|火山爆發|火山爆发|事故)/iu.test(`${name} ${category}`);
+    const administrativeSummary = /\b(?:is|was|are|were)\s+(?:(?:an?|the)\s+)?(?:(?:[\p{L}\p{M}-]+)\s+){0,3}(?:administrative\s+)?(?:district|municipality|commune|county|province|presidency|territory|region|suburb|neighborhood|village|university|college|school|central bank|capital(?:\s+city)?|city|town|borough|airline|air carrier|airport|business park|science park|research park|real[- ]estate project|development project)\b/iu.test(summaryLead)
+      || /^(?:.{0,32})(?:是|為)(?:一個|一所|一座)?(?:城市|首都|城鎮|城镇|郊區|郊区|市郊|市轄區|市辖区|行政區|行政区|大學|大学|學院|学院|學校|学校|中央銀行|中央银行|航空公司|研究機構|商業園區|科學園區|科技園區)/u.test(summaryLead);
+    const institutionalTitle = /\b(?:university|college|school|institute|think tank|central bank|bank of|ministry of|department of|airline|airlines|air carrier|airport|science park|technology park|business park|research park)\b/iu.test(name)
+      || /(?:中央銀行|中央银行|大學|大学|學院|学院|學校|学校|專科學校|专科学校)/u.test(title);
+    const institutionalSummary = /\b(?:is|was|are|were)\s+(?:(?:an?|the)\s+)?(?:(?:[\p{L}\p{M}-]+)\s+){0,3}(?:university|college|school|institute|think tank|central bank|airline|air carrier|airport|company|business park|science park|research park)\b|\b(?:parliament|legislative assembly|government headquarters|government office|parliament office)\b/iu.test(summaryLead);
+    const eventTitle = /(?:air\s+crash|plane\s+crash|boxing\s+match|championship\s+match|sporting\s+event|bombing|terrorist attack|massacre|shootings?|earthquake|volcanic eruption|disaster|military operation|襲擊事件|袭击事件|墜機|坠机|空難|空难|恐攻|恐怖襲擊|恐怖袭击|爆炸事件|槍擊(?:事件|案)|枪击(?:事件|案)|屠殺|屠杀|地震|火山爆發|火山爆发|事故)/iu.test(`${name} ${category}`);
+    const eventSummary = /\b(?:is|was|are|were)\s+(?:(?:an?|the)\s+)?(?:(?:[\p{L}\p{M}-]+)\s+){0,4}(?:boxing match|championship match|sporting event|shooting|air crash|plane crash|bombing|terrorist attack|massacre|military operation)\b/iu.test(summaryLead);
+    const inactiveProject = /^.{0,90}\b(?:is|was|are|were)\b.{0,60}\b(?:planned to be built|proposed but never built|never built|not constructed|put on hold|cancelled|canceled|under construction)\b/iu.test(summaryLead)
+      || /^.{0,60}(?:是|為)(?:一個|一座|一項)?(?:規劃興建中|計劃興建中|計畫興建中|未建成|已取消|停建|尚未建成)/u.test(summaryLead);
     // A location mentioned inside an administrative page's description must not
     // turn that district itself into an attraction (for example, Ermita mentions Intramuros).
-    const namedVisitorSite = visitorSite.test(`${title} ${category}`);
+    const namedVisitorSite = visitorSite.test(`${title} ${category}`)
+      && !/\b(?:science|technology|business|research) park\b/iu.test(name);
     const accommodationOnly = /(?:\b(?:hotel|resort|hostel|guesthouse|inn)\b|酒店|飯店|旅館|旅店|民宿)/iu.test(title)
       && /(?:\b(?:hotel|resort|hostel|guesthouse|inn|accommodation)\b|酒店|飯店|旅館|旅店|民宿|五星級)/iu.test(summary)
       && !/(?:\b(?:landmark|heritage|historic|monument|architectural)\b|地標|古蹟|歷史建築|文化遺產|文物保護)/iu.test(`${title} ${summary}`);
-    const cityOrInstitutionPage = ((administrativeTitle || administrativeSummary || institutionalTitle) && !namedVisitorSite)
+    const governmentOfficePage = /\b(?:parliament|legislative assembly|government headquarters|government office|parliament office|parliamentary office)\b/iu.test(summaryLead);
+    const cityOrInstitutionPage = ((administrativeTitle || administrativeSummary || institutionalTitle || institutionalSummary)
+      && (!namedVisitorSite || governmentOfficePage))
       || accommodationOnly;
+    const activityOrProjectPage = inactiveProject || (eventSummary && !namedVisitorSite);
     const transitFacility = /(?:\b(?:railway|train|metro|subway|bus|transit)\s+(?:station|terminal|stop)\b|\b(?:station|terminal|stop)\b|火車站|火车站|鐵路車站|铁路车站|地鐵站|地铁站|捷運站|捷运站|車站|车站|[駅站])$/iu.test(name);
     const notableFacility = namedVisitorSite
       || /\b(?:historic|heritage|museum|monument|memorial|landmark|old town|station building)\b|歷史建築|历史建筑|古蹟|古迹|博物館|博物馆|紀念館|纪念馆|遺址|遗址|地標|地标/iu.test(`${title} ${summary}`);
     const nonVisitorFacility = transitFacility && !notableFacility;
-    return !cityOrInstitutionPage && !nonVisitorFacility && !(eventTitle && !namedVisitorSite);
+    return !cityOrInstitutionPage && !nonVisitorFacility && !activityOrProjectPage && !(eventTitle && !namedVisitorSite);
   }
   return { toTraditional, normalizeSpot, isTravelAttraction };
 })();

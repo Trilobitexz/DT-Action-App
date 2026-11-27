@@ -62,6 +62,50 @@ const genericStation = {
 if (sandbox.window.SpotTextService.isTravelAttraction(genericStation)) {
   throw new Error("A generic station passed the visitor-site filter.");
 }
+const visitorSiteRegressions = [
+  {
+    name: "五稜郭",
+    category: "歷史與文化遺產",
+    summary: "這座星形要塞在規劃興建時便已使用五稜郭作為名稱；現存城跡是函館的重要歷史景點。"
+  },
+  {
+    name: "藝術宮 (墨西哥城)",
+    category: "地標與建築",
+    summary: "藝術宮是墨西哥城的文化中心，建築工程曾中止，後續復工並於 1934 年落成。"
+  },
+  {
+    name: "聖保羅主教座堂",
+    category: "地標與建築",
+    summary: "聖保羅主教座堂是巴西聖保羅市中心的重要宗教建築與觀光地標。"
+  },
+  {
+    name: "市政廳鐘樓 (克拉科夫)",
+    category: "地標與建築",
+    summary: "這座鐘樓是克拉科夫舊市政廳僅存的部分，位於中央集市廣場。"
+  }
+];
+for (const spot of visitorSiteRegressions) {
+  if (!sandbox.window.SpotTextService.isTravelAttraction(spot)) {
+    throw new Error(`A surviving historic visitor site was rejected: ${spot.name}`);
+  }
+}
+const nonVisitorRegressions = [
+  { name: "Tohoku University", summary: "Tohoku University is a national research university in Sendai." },
+  { name: "Blackwater Baghdad shooting", category: "shooting event", summary: "A shooting incident." },
+  { name: "Pa Ko Dam", summary: "Pa Ko Dam is a village and tambon (subdistrict) in Thailand." },
+  { name: "Chembur", summary: "Chembur is an upmarket large suburb in central Mumbai." },
+  { name: "Iceland Express", summary: "Iceland Express was a low-fare airline headquartered in Reykjavík." },
+  { name: "Dubailand", summary: "Dubailand was an entertainment complex planned to be built in Dubai." },
+  { name: "The Rumble in the Jungle", summary: "George Foreman vs. Muhammad Ali, billed as The Rumble in the Jungle, was a heavyweight championship boxing match on October 30, 1974." },
+  { name: "Dubai Science Park", summary: "Dubai Science Park is a science-focused business community." },
+  { name: "Barumbu", summary: "Barumbu is a commune in the Lukunga District of Kinshasa." },
+  { name: "People's Palace", summary: "People's Palace is a building and headquarters of the parliament of the Democratic Republic of the Congo." }
+];
+for (const spot of nonVisitorRegressions) {
+  if (sandbox.window.SpotTextService.isTravelAttraction(spot)) {
+    throw new Error(`A non-visitor page passed the visitor-site filter: ${spot.name}`);
+  }
+}
 
 const service = sandbox.window.CityCatalogService;
 const knownYangon = service.getKnownCityCoordinates("yangon");

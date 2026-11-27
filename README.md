@@ -8,7 +8,7 @@
 
 ### 發布版本命名規則
 
-- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v122`，下一次發布時統一遞增為 `v123`。
+- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v123`，下一次發布時統一遞增為 `v124`。
 - 所有本地 CSS、JavaScript、城市資料、景點 JSON、manifest 與圖示的快取查詢參數使用相同的 `?v=N`，並在 `index.html`、`sw.js` 與程式內的動態靜態資料 URL 保持一致。
 - Service Worker 快取名稱使用 `journey-atlas-shell-vN`，與資源參數和發布提交訊息中的版本一致。更新 HTML 資源參數時，必須同步更新 Service Worker 的預快取清單及快取名稱。
 - 外部 CDN／API 使用供應商版本或 API URL，不改成專案版號；`index.html` 與 `sw.js` 自身不加查詢參數，避免影響導覽快取與 Service Worker 更新檢查。
@@ -210,8 +210,15 @@ AI 候選還必須具備有效座標、名稱、分類、40 字以上介紹，�
 
 - 修正仰光城市中心至 GeoNames 座標，並同步校正預建城市資料，避免錯誤中心影響景點篩選與 AI 候選。
 - 移除一般車站與非觀光醫療機構條目，為喀土穆、阿格拉與仰光整理有來源、座標及完整介紹的景點資料；補入新景點圖片並補強短介紹。
-- `node scripts/audit-city-spots.mjs` 現以 AI 候選門檻計數。最新 874 筆資料、200 座城市均至少 3 筆可用候選；缺來源、缺介紹、少於 40 字介紹、座標錯誤、非景點及重複資料均為 0。
+- `node scripts/audit-city-spots.mjs` 現以 AI 候選門檻計數。v122 當時為 874 筆資料、200 座城市均至少 3 筆可用候選；缺來源、缺介紹、少於 40 字介紹、座標錯誤、非景點及重複資料均為 0。
 - 仍有 76 筆景點缺少可核實圖片，介面使用分類替代圖；不以未核實照片填補。可執行 `node scripts/smoke-ai-planning.mjs` 重現跨城市候選及雲端座標回歸檢查。
+
+### v123 AI 景點資料完整度與分類回歸
+
+- 依離線資料重建 200 座城市的景點 JSON；移除行政區、教育機構、非觀光設施、事件及未落成計畫等不適合作為行程候選的條目，並補齊東北亞、東南亞、南亞、中東及非洲等城市的可追溯景點資料。
+- `node scripts/audit-city-spots.mjs` 通過：839 筆合格 AI 景點，200 城每城至少 3 筆；缺來源、缺座標、缺介紹、少於 40 字介紹、超距、非景點與重複名稱均為 0。54 筆沒有可核實圖片，顯示分類替代圖。
+- `node scripts/smoke-ai-planning.mjs` 增加歷史景點名稱與機構、事件、行政區、規劃中設施的回歸案例，確保歷史敘述不會誤排除真景點，也不會把非景點頁面送入 AI。
+- 藍廟縮圖網址已修復 UTF-8 編碼；AI 候選仍須具備來源網址、座標、分類及至少 40 字介紹。
 
 首次使用前，請依照 [`Firebase 維運與發布流程`](./FIREBASE_OPERATIONS.md) 在 Firebase Console 註冊 App Check reCAPTCHA Enterprise Web App，並確認 GitHub Pages 網域列入允許清單。網站金鑰已放在 `src/js/firebase-ai-config.js`，屬公開識別碼；不要放入 reCAPTCHA secret key 或 App Check debug token。先確認有效 token，再於 Console 逐步啟用 Firebase AI Logic enforcement。
 
