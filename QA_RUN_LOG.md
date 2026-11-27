@@ -151,4 +151,5 @@
 - AI 快取指紋加入景點來源標籤與網址，來源資訊更新後不再沿用舊生成結果。`README.md`、`QA_CHECKLIST.md` 同步說明 AI 輸入隔離與待登入實測項目；所有本機資源與 Service Worker 快取版號升至 v117。
 - 本機 Chrome（headless，載入工作目錄靜態頁）在 320、375、430 CSS px 下文件／頁面寬度與視窗一致，無水平溢位；`PlannerView` 與城市資料物件已初始化，未出現未捕捉 JavaScript 錯誤。
 - `node --check`（`firebase.js`、`plannerView.js`、`sw.js`）、資源版號一致性與 `git diff --check` 通過。
+- 推送後 GitHub Pages workflow #78 成功（提交 `d13f28e`）；正式頁回應 HTTP 200，頁面標題正確且本機資源查詢版號為 v117。
 - 尚未以已登入帳戶呼叫 Firebase AI Logic，因此未驗證真實模型回應或偏好注入攻擊的行為；手機觸控、橫向旋轉與 PWA 離線仍需實機流程驗收。
