@@ -226,4 +226,4 @@
 - 缺少 `SpotKeys` 的舊手動行程現在不使用不確定的索引，顯示重新安排行程提示；已保存身份鍵但景點已移除時，提示重新載入或建立新行程。
 - `node scripts/smoke-ai-planning.mjs` 驗證舊手動行程在畫面狀態與複製／列印文字中都有安全提示，新行程索引仍只接受有效整數。
 - `node --check`（plannerView.js、smoke-ai-planning.mjs）、`node scripts/audit-city-spots.mjs`、資源版號一致性及 `git diff --check` 通過。
-- 待提交、推送並確認 GitHub Pages 部署結果。
+- GitHub Pages workflow #46032762396 對應提交 `13311dd` 並成功；正式頁回應 HTTP 200，HTML 載入 v128 資源。
