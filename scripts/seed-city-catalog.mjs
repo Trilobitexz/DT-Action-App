@@ -67,6 +67,7 @@ const mergeEnrichment = (spot, matches) => {
     note: description,
     imageUrl: firstUrl("imageUrl"),
     imageSourceUrl: firstUrl("imageSourceUrl") || firstUrl("sourceUrl"),
+    imageAttribution: firstString("imageAttribution"),
     website: firstUrl("website"),
     openingHours: firstString("openingHours"),
     address: firstString("address"),
@@ -211,7 +212,7 @@ try {
       featuredSpotCount: city.spots.length,
       catalogUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       publishedAt: admin.firestore.FieldValue.serverTimestamp(),
-      dataVersion: "2026.11.27-prebuilt-spots-v2"
+      dataVersion: "2026.11.27-prebuilt-spots-v3"
     }, { merge: true });
 
     for (const [index, planned] of plannedSpots.entries()) {
@@ -232,9 +233,10 @@ try {
         sourceLabel: spot.sourceLabel || "Wikipedia geosearch",
         imageUrl: spot.imageUrl || "",
         imageSourceUrl: spot.imageSourceUrl || spot.sourceUrl,
+        imageAttribution: spot.imageAttribution || "",
         hasCoordinates: true,
         hasDescription: Boolean(spot.summary || spot.description || spot.note),
-        dataVersion: "2026.11.27-prebuilt-spots-v2",
+        dataVersion: "2026.11.27-prebuilt-spots-v3",
         catalogUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         publishedAt: admin.firestore.FieldValue.serverTimestamp()
       };

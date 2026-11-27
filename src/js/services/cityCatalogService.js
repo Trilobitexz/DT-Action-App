@@ -190,6 +190,7 @@
             address: data.address || "",
             imageUrl: data.imageUrl || "",
             imageSourceUrl: data.imageSourceUrl || "",
+            imageAttribution: data.imageAttribution || "",
             closedDays: data.closedDays || "",
             visitHours: Number.isFinite(Number(data.visitHours)) && Number(data.visitHours) > 0 ? Number(data.visitHours) : null,
             hasCoordinates: data.lat !== null && data.lat !== undefined && data.lat !== ""
@@ -281,13 +282,22 @@
     },
     mergeSpots: function (...groups) {
       const merged = [];
-      const names = new Set();
+      const names = new Map();
       groups.flat().forEach(spot => {
         const item = this.normalizeSpot(typeof spot === "string" ? { name: spot } : spot || {});
         const name = String(item?.name || "").trim();
         const normalized = this.normalizeSpotName(name);
-        if (!normalized || names.has(normalized)) return;
-        names.add(normalized);
+        if (!normalized) return;
+        if (names.has(normalized)) {
+          const existing = merged[names.get(normalized)];
+          if (!existing.imageAttribution && item.imageAttribution) {
+            existing.imageAttribution = String(item.imageAttribution).trim();
+            existing.imageUrl = item.imageUrl || existing.imageUrl || "";
+            existing.imageSourceUrl = item.imageSourceUrl || existing.imageSourceUrl || "";
+          }
+          return;
+        }
+        names.set(normalized, merged.length);
         merged.push({ ...item, name });
       });
       return merged;

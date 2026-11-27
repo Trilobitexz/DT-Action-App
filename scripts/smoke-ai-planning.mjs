@@ -24,6 +24,7 @@ for (const relative of [
   "src/data/cityCoordinates.js",
   "src/js/services/spotTextService.js",
   "src/js/modules/plannerView.js",
+  "src/js/modules/countryView.js",
   "src/js/services/cityCatalogService.js"
 ]) {
   vm.runInNewContext(fs.readFileSync(path.join(root, relative), "utf8"), sandbox, { filename: relative });
@@ -31,6 +32,45 @@ for (const relative of [
 
 const prebuiltPath = path.join(root, "scripts", "data", "prebuilt-spots.json");
 const prebuilt = JSON.parse(fs.readFileSync(prebuiltPath, "utf8"));
+const imageAttributionExamples = [
+  ["manila", "聖地牙哥堡"],
+  ["manila", "黎剎公園"],
+  ["phuket", "普吉大佛"],
+  ["las-vegas", "拉斯維加斯大道"]
+];
+for (const [cityId, name] of imageAttributionExamples) {
+  const spot = prebuilt.cities.find(city => city.id === cityId)?.spots.find(item => item.name === name);
+  let imageUrl;
+  let imageSourceUrl;
+  try {
+    imageUrl = new URL(String(spot?.imageUrl || ""));
+    imageSourceUrl = new URL(String(spot?.imageSourceUrl || ""));
+  } catch (error) {
+    throw new Error(`A Wikimedia photo is missing a usable image or source URL: ${cityId}/${name}`);
+  }
+  if (imageUrl.protocol !== "https:" || !/^(?:thumb|upload)\.wikimedia\.org$/i.test(imageUrl.hostname)
+    || imageSourceUrl.protocol !== "https:" || imageSourceUrl.hostname !== "commons.wikimedia.org"
+    || !String(spot.imageAttribution || "").includes("CC BY")) {
+    throw new Error(`A Wikimedia photo is missing Commons attribution or licensing: ${cityId}/${name}`);
+  }
+}
+const attributionLabel = sandbox.getSpotImageAttributionText({ imageAttribution: "Photographer · CC BY 4.0" });
+if (attributionLabel !== "圖片來源：Photographer · CC BY 4.0") {
+  throw new Error("Spot image source labels did not show photographer and licence attribution.");
+}
+const attributedFort = prebuilt.cities.find(city => city.id === "manila")?.spots.find(spot => spot.name === "聖地牙哥堡");
+const cloudFort = {
+  name: "聖地牙哥堡",
+  imageUrl: "https://example.org/older-preview.jpg",
+  imageSourceUrl: "https://en.wikipedia.org/wiki/Fort_Santiago"
+};
+const mergedFort = sandbox.window.CityCatalogService.mergeSpots([cloudFort], [attributedFort])[0];
+if (mergedFort?.imageAttribution !== attributedFort?.imageAttribution
+  || mergedFort?.imageUrl !== attributedFort?.imageUrl
+  || mergedFort?.imageSourceUrl !== attributedFort?.imageSourceUrl) {
+  throw new Error("Cloud/local spot merging discarded Commons photo attribution or its linked image.");
+}
+
 const cityCandidates = [];
 for (const city of prebuilt.cities || []) {
   const candidates = sandbox.window.PlannerView.rankAIPlanningSpots(city, 3).map(item => item.spot);
@@ -224,6 +264,9 @@ const cloudSpotEntries = [
       description: "瑞光大金塔位於仰光辛古塔拉山，是緬甸重要的佛教聖塔與朝聖地。金塔所在的山丘長期作為宗教場所，現存建築群包含主塔、佛堂與供奉空間，延續當地佛教信仰。",
       lat: 16.798356,
       lng: 96.149705,
+      imageUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/test.jpg",
+      imageSourceUrl: "https://commons.wikimedia.org/wiki/File%3ATest.jpg",
+      imageAttribution: "Test photographer · CC BY 4.0",
       sourceUrl: "https://whc.unesco.org/en/tentativelists/6367/"
     })
   },
@@ -254,7 +297,8 @@ const cityDocument = {
 service.waitForFirestore = async () => ({ collection: () => ({ doc: () => cityDocument }) });
 const cloudResult = await service.fetchCity("yangon");
 if (cloudResult?.city?.lat !== 16.80528 || cloudResult?.city?.lng !== 96.15611
-  || cloudResult.spots.length !== 1 || cloudResult.spots[0].name !== "瑞光大金塔") {
+  || cloudResult.spots.length !== 1 || cloudResult.spots[0].name !== "瑞光大金塔"
+  || cloudResult.spots[0].imageAttribution !== "Test photographer · CC BY 4.0") {
   throw new Error("Firestore stale-center correction or invalid-coordinate filtering failed.");
 }
 
@@ -262,4 +306,5 @@ const minimumCandidates = Math.min(...cityCandidates.map(city => city.count));
 console.log(`AI candidate smoke check passed: ${cityCandidates.length} cities; minimum ${minimumCandidates} complete sourced candidates per city; generic station rejected.`);
 console.log("Long-itinerary smoke check passed: valid live candidates fill shortages; missing sources and short descriptions remain excluded.");
 console.log("Forced-refresh smoke check passed: live sources are retried even when 40 non-AI spots are cached.");
+console.log("Image attribution smoke check passed: Commons source, author and licence display and survive cloud/local merges.");
 console.log("Cloud catalog smoke check passed: stale Yangon center corrected; invalid-coordinate spot excluded.");

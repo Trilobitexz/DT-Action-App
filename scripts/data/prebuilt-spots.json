@@ -1153,9 +1153,10 @@
           "sourceLabel": "English Wikipedia article",
           "note": "建於1571年的堡壘與城堡，位於馬尼拉王城區內，是西班牙殖民時期留下的防禦建築。",
           "description": "建於1571年的堡壘與城堡，位於馬尼拉王城區內，是西班牙殖民時期留下的防禦建築。",
-          "imageUrl": "",
-          "imageSourceUrl": "https://en.wikipedia.org/wiki/Fort_Santiago",
-          "distanceKm": 1.71
+          "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7d/Fort_Santiago%2C_Intramuros.JPG/960px-Fort_Santiago%2C_Intramuros.JPG?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+          "imageSourceUrl": "https://commons.wikimedia.org/wiki/File%3AFort_Santiago%2C_Intramuros.JPG",
+          "distanceKm": 1.71,
+          "imageAttribution": "Fort Santiago, Intramuros.JPG · Elmer B. Domingo · CC BY-SA 3.0"
         },
         {
           "name": "黎剎公園",
@@ -1168,9 +1169,10 @@
           "sourceLabel": "English Wikipedia article",
           "note": "位於馬尼拉艾米塔區的歷史都市公園，又稱 Luneta，是當地重要的公共休憩空間。",
           "description": "位於馬尼拉艾米塔區的歷史都市公園，又稱 Luneta，是當地重要的公共休憩空間。",
-          "imageUrl": "",
-          "imageSourceUrl": "https://en.wikipedia.org/wiki/Rizal_Park",
-          "distanceKm": 2.45
+          "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6b/Rizal_Monument_%28Manila%2C_2024%29.jpg/960px-Rizal_Monument_%28Manila%2C_2024%29.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+          "imageSourceUrl": "https://commons.wikimedia.org/wiki/File%3ARizal_Monument_%28Manila%2C_2024%29.jpg",
+          "distanceKm": 2.45,
+          "imageAttribution": "Rizal Monument (Manila, 2024).jpg · Ernest Malsin · CC BY 4.0"
         }
       ]
     },
@@ -6349,9 +6351,10 @@
           "sourceLabel": "English Wikipedia",
           "note": "拉斯維加斯大道南段俗稱「The Strip」，位於內華達州克拉克郡、拉斯維加斯市界以南，長約6.8公里。沿線集中大型度假飯店、賭場與表演娛樂設施，形成這座城市最具代表性的觀光走廊。",
           "description": "拉斯維加斯大道南段俗稱「The Strip」，位於內華達州克拉克郡、拉斯維加斯市界以南，長約6.8公里。沿線集中大型度假飯店、賭場與表演娛樂設施，形成這座城市最具代表性的觀光走廊。",
-          "imageUrl": "",
-          "imageSourceUrl": "https://en.wikipedia.org/wiki/Las_Vegas_Strip",
-          "distanceKm": 6.88
+          "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/Las_Vegas_Strip_09_2017_4897.jpg/960px-Las_Vegas_Strip_09_2017_4897.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+          "imageSourceUrl": "https://commons.wikimedia.org/wiki/File%3ALas_Vegas_Strip_09_2017_4897.jpg",
+          "distanceKm": 6.88,
+          "imageAttribution": "Las Vegas Strip 09 2017 4897.jpg · Mario Roberto Durán Ortiz · CC BY-SA 4.0"
         },
         {
           "name": "SLS拉斯維加斯",
@@ -6850,7 +6853,7 @@
           "note": "the largest botanical garden in Indonesia",
           "description": "the largest botanical garden in Indonesia",
           "imageUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Bali%20Botanic%20Garden%20entrance%20gate%20Indonesia.jpg?width=600",
-          "imageSourceUrl": "http://commons.wikimedia.org/wiki/Special:FilePath/Bali%20Botanic%20Garden%20entrance%20gate%20Indonesia.jpg",
+          "imageSourceUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Bali%20Botanic%20Garden%20entrance%20gate%20Indonesia.jpg",
           "sourceUrl": "https://en.wikipedia.org/wiki/Bali_Botanic_Garden",
           "sourceLabel": "Wikidata geospatial query",
           "distanceKm": 18.08
@@ -6865,7 +6868,7 @@
           "note": "Taman Pujaan Bangsa Margarana 是印尼峇里島塔巴南縣的國家紀念園區，包含紀念碑、歷史博物館與英雄墓園。園區用以紀念 Margarana 戰役及 Puputan 戰事，透過文物與紀念設施呈現峇里島爭取獨立的歷史。",
           "description": "Taman Pujaan Bangsa Margarana 是印尼峇里島塔巴南縣的國家紀念園區，包含紀念碑、歷史博物館與英雄墓園。園區用以紀念 Margarana 戰役及 Puputan 戰事，透過文物與紀念設施呈現峇里島爭取獨立的歷史。",
           "imageUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Taman%20pujaan%20bangsa%20Margarana%2C%20Bali.jpg?width=600",
-          "imageSourceUrl": "http://commons.wikimedia.org/wiki/Special:FilePath/Taman%20pujaan%20bangsa%20Margarana%2C%20Bali.jpg",
+          "imageSourceUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Taman%20pujaan%20bangsa%20Margarana%2C%20Bali.jpg",
           "sourceUrl": "https://disparda.baliprov.go.id/margarana-heroes-cemetery/2021/01/",
           "sourceLabel": "Bali Government Tourism Office",
           "distanceKm": 23.24
@@ -6880,7 +6883,7 @@
           "note": "Gedong Kirtya 位於峇里島北部新加拉惹，是保存與研究峇里島傳統文獻的博物館及典藏中心。館藏包括以棕櫚葉書寫的 lontar 文稿，也保存來自峇里與鄰近地區的歷史、宗教、法律、醫療及文學資料。",
           "description": "Gedong Kirtya 位於峇里島北部新加拉惹，是保存與研究峇里島傳統文獻的博物館及典藏中心。館藏包括以棕櫚葉書寫的 lontar 文稿，也保存來自峇里與鄰近地區的歷史、宗教、法律、醫療及文學資料。",
           "imageUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Gedong%20Kirtya%20museum%20exhibition%2016.jpg?width=600",
-          "imageSourceUrl": "http://commons.wikimedia.org/wiki/Special:FilePath/Gedong%20Kirtya%20museum%20exhibition%2016.jpg",
+          "imageSourceUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Gedong%20Kirtya%20museum%20exhibition%2016.jpg",
           "sourceUrl": "https://disbudpar.bulelengkab.go.id/informasi/detail/artikel/gedong-kirtya-87",
           "sourceLabel": "Buleleng Regency Culture and Tourism Office",
           "distanceKm": 25.49
@@ -7010,9 +7013,10 @@
           "sourceLabel": "English Wikipedia",
           "note": "普吉大佛是位於泰國普吉島納克德山的坐佛像，正式名稱為 Phra Phutta Ming Mongkol Eknakakiri。雕像高約45公尺，以混凝土建造並覆以白色大理石，面向查龍灣，是普吉島具代表性的佛教地標。",
           "description": "普吉大佛是位於泰國普吉島納克德山的坐佛像，正式名稱為 Phra Phutta Ming Mongkol Eknakakiri。雕像高約45公尺，以混凝土建造並覆以白色大理石，面向查龍灣，是普吉島具代表性的佛教地標。",
-          "imageUrl": "",
-          "imageSourceUrl": "https://en.wikipedia.org/wiki/Phuket_Big_Buddha",
-          "distanceKm": 11.72
+          "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/56/The_Big_Buddha%2C_Phuket.jpg/960px-The_Big_Buddha%2C_Phuket.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+          "imageSourceUrl": "https://commons.wikimedia.org/wiki/File%3AThe_Big_Buddha%2C_Phuket.jpg",
+          "distanceKm": 11.72,
+          "imageAttribution": "The Big Buddha, Phuket.jpg · Subhrajyoti07 · CC BY-SA 4.0"
         },
         {
           "name": "普吉老城",
@@ -12288,7 +12292,7 @@
           "note": "摩訶班都拉公園位於仰光市中心，是市區重要的公共綠地。園內設有紀念緬甸獨立的白色方尖碑，周邊可見仰光市政廳、蘇雷佛塔與多處殖民時期建築，適合作為探索市中心歷史街區的步行停留點。",
           "description": "摩訶班都拉公園位於仰光市中心，是市區重要的公共綠地。園內設有紀念緬甸獨立的白色方尖碑，周邊可見仰光市政廳、蘇雷佛塔與多處殖民時期建築，適合作為探索市中心歷史街區的步行停留點。",
           "imageUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Myanmar-Yangon-Independence%20Monument%20in%20Mahabandoola%20park.jpg?width=600",
-          "imageSourceUrl": "http://commons.wikimedia.org/wiki/Special:FilePath/Myanmar-Yangon-Independence%20Monument%20in%20Mahabandoola%20park.jpg",
+          "imageSourceUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Myanmar-Yangon-Independence%20Monument%20in%20Mahabandoola%20park.jpg",
           "sourceUrl": "https://en.wikipedia.org/wiki/Maha_Bandula_Park",
           "sourceLabel": "Wikidata geospatial query",
           "distanceKm": 14.81
@@ -12303,7 +12307,7 @@
           "note": "聖三一大教堂是仰光主要的聖公會教堂，位於市中心波焦克昂桑路，鄰近仰光中央市場。現存紅磚新哥德式建築於1886年動工，約於1894至1895年間完工，反映仰光殖民時期的城市建築與宗教歷史。",
           "description": "聖三一大教堂是仰光主要的聖公會教堂，位於市中心波焦克昂桑路，鄰近仰光中央市場。現存紅磚新哥德式建築於1886年動工，約於1894至1895年間完工，反映仰光殖民時期的城市建築與宗教歷史。",
           "imageUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/2016%20Rangun%2C%20Katedra%20%C5%9Awi%C4%99tej%20Tr%C3%B3jcy%20%2801%29.jpg?width=600",
-          "imageSourceUrl": "http://commons.wikimedia.org/wiki/Special:FilePath/2016%20Rangun%2C%20Katedra%20%C5%9Awi%C4%99tej%20Tr%C3%B3jcy%20%2801%29.jpg",
+          "imageSourceUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/2016%20Rangun%2C%20Katedra%20%C5%9Awi%C4%99tej%20Tr%C3%B3jcy%20%2801%29.jpg",
           "sourceUrl": "https://en.wikipedia.org/wiki/Holy_Trinity_Cathedral,_Yangon",
           "sourceLabel": "Wikidata geospatial query",
           "distanceKm": 15.36

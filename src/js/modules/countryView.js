@@ -1,4 +1,9 @@
 // 畫面 3：國家與城市層級視圖模組 (第 1 部分：基本資料與即時匯率)
+function getSpotImageAttributionText(spot) {
+  const attribution = String(spot?.imageAttribution || "").trim();
+  return attribution ? `圖片來源：${attribution}` : "圖片來源";
+}
+
 window.CountryView = {
   getGlobalCityProfile: function(city) {
     return {
@@ -405,7 +410,7 @@ window.CountryView = {
     const renderSpotCard = (spot, idx, extra = false) => `
       <div class="spot-item" id="spot-item-${idx}" data-city-id="${currentCity.id}" data-spot-index="${idx}" ${extra ? "data-extra-spot hidden" : ""}>
         <div style="display:flex; gap:1rem; align-items:center; width:100%;">
-          <div class="spot-media"><div id="spot-thumb-${idx}" class="spot-thumbnail" data-image-category="${imageFallback(spot.category).tone}"><span class="spot-image-fallback" role="img" aria-label="${imageFallback(spot.category).label}"><span aria-hidden="true">${imageFallback(spot.category).icon}</span><small>${imageFallback(spot.category).label}</small></span></div><a id="spot-image-source-${idx}" class="spot-image-source" target="_blank" rel="noopener noreferrer" hidden>圖片來源</a></div>
+          <div class="spot-media"><div id="spot-thumb-${idx}" class="spot-thumbnail" data-image-category="${imageFallback(spot.category).tone}"><span class="spot-image-fallback" role="img" aria-label="${imageFallback(spot.category).label}"><span aria-hidden="true">${imageFallback(spot.category).icon}</span><small>${imageFallback(spot.category).label}</small></span></div><a id="spot-image-source-${idx}" class="spot-image-source" target="_blank" rel="noopener noreferrer" hidden>${escapeHtml(getSpotImageAttributionText(spot))}</a></div>
           <div class="spot-main" style="flex:1;">
             <h5>
               <span style="color:var(--primary); font-weight:800;">#${idx + 1}</span>
@@ -882,7 +887,7 @@ window.CountryView = {
           imageSource.target = "_blank";
           imageSource.rel = "noopener noreferrer";
           imageSource.hidden = true;
-          imageSource.textContent = "圖片來源";
+          imageSource.textContent = getSpotImageAttributionText(place);
           media.append(thumb, imageSource);
           card.append(media, copy, actions);
           spotsContainer.insertBefore(card, moreButton);

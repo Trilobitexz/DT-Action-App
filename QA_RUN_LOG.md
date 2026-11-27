@@ -192,3 +192,13 @@
 - `node scripts/smoke-ai-planning.mjs` 模擬只載入 3 筆、需 7 筆的流程，確認觸發強制更新；只納入 4 筆有來源完整資料，排除無效 scheme，最終得到 7 筆合格候選。另以 40 筆已快取一般景點確認強制刷新仍呼叫即時來源；即時資料為 mock，未登入 Firebase 或呼叫外部地圖服務。
 - `node --check`（plannerView.js、cityCatalogService.js、smoke-ai-planning.mjs）、AI 資料稽核（200 城、839 筆候選、來源／介紹／座標缺漏 0）、資源版號一致性及 `git diff --check` 通過。
 - GitHub Pages workflow #46015498910 對應提交 `77eaeb1` 並成功；正式頁回應 HTTP 200，HTML 載入 v124 資源。
+
+## v125 Wikimedia 圖片授權與歸屬
+
+- 批次查詢 35 篇繁中與 12 篇英文 Wikipedia 缺圖頁面，4 頁有可用的 Wikimedia Commons 主圖；其餘頁面未取得符合條件的 Commons 縮圖，未以搜尋建議或無關照片填補。
+- 補入聖地牙哥堡、黎剎公園、普吉大佛、拉斯維加斯大道的 Commons 圖片，並記錄檔案頁、作者與 CC BY／CC BY-SA 授權。4 個縮圖網址與 4 個檔案頁皆以 HTTP HEAD 驗證回應 200。
+- 景點卡圖片來源連結顯示作者及授權；雲端與離線同名資料合併時，保留帶歸屬資訊的離線圖片來源。
+- 將 5 個既有 Commons 圖片來源特殊檔案頁由 HTTP 升為 HTTPS；839 筆資料的景點來源、圖片及圖片來源 URL 全量檢查皆為 HTTPS，格式問題 0。五個舊檔案頁皆在限流冷卻後 HEAD 驗證回應 200。
+- `seed-city-catalog.mjs` 與 `cityCatalogService.js` 保留圖片歸屬欄位，以便未來受控匯入／雲端讀取。此輪沒有寫入 Firestore。
+- `node --check`（countryView.js、cityCatalogService.js、seed-city-catalog.mjs、smoke-ai-planning.mjs）、`node scripts/build-city-spot-data.mjs`、`node scripts/smoke-ai-planning.mjs`、`node scripts/audit-city-spots.mjs` 及 `git diff --check` 通過。稽核缺圖數 50；缺來源、座標及介紹仍為 0。
+- 待本輪提交、推送並確認 GitHub Pages 部署狀態。
