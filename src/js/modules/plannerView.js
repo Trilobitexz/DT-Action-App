@@ -132,6 +132,7 @@ window.PlannerView = {
     const input = JSON.stringify({ city: city.id, days, mode, preferences: String(preferences || "").trim(), spots: spots.map(spot => ({
       key: this.getPlanningSpotKey(spot), category: spot.category || "", summary: spot.description || spot.summary || spot.note || "",
       openingHours: spot.openingHours || "", imageUrl: spot.imageUrl || spot.image || "", featured: spot.isFeatured === true,
+      sourceLabel: spot.sourceLabel || "", sourceUrl: spot.sourceUrl || "",
       rating: spot.rating ?? null, ratingSource: spot.ratingSource || ""
     })) });
     let first = 2166136261;

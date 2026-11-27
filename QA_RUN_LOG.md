@@ -139,8 +139,16 @@
 ## v116 地圖署名連結安全與文件一致性
 
 - DOM 複核發現 MapLibre 動態建立的 3 個署名連結使用 `target="_blank"`，但沒有 `rel="noopener noreferrer"`。地圖容器上的 MutationObserver 現在會為新增及更新的署名連結補上安全屬性。
-- 修正文檔中過時的登入方式與 GitHub Pages 路徑：專案目前只提供 Google Popup；正式頁面路徑為 `/DT-Action-App/`。
+- 修正文檔中過時的登入方式與 GitHub Pages 路徑：專案目前只提供 Google Popup；正式頁面路徑為 `/Journey-Atlas/`。
 - 本機瀏覽器載入 v116 後，探索底圖 3 個外連均有安全 rel；切換到衛星底圖（顯示 Esri 歸屬）再切回探索底圖後仍正確。2D／3D、搜尋與抽屜流程正常，未見 JavaScript error。
 - DOM 結構掃描：重複 ID、失效 `aria-controls`、空名稱按鈕、缺少 alt 的圖片均為 0；世界之最詳情的動態標題關聯在打開後有效。掃描在 1280 CSS px 執行；手機寬度、Firebase 登入與跨帳戶驗收尚未完成。
 - `node --check`（`mapManager.js`、`sw.js`）、景點資料與匯入前驗證、HTML／Service Worker／快取名稱版號一致性與 `git diff --check` 通過。
 - GitHub Pages workflow #76 執行成功；正式頁 `https://trilobitexz.github.io/Journey-Atlas/` 載入 v116 資源、SVG 圖示及含安全 rel 的地圖署名連結，瀏覽器沒有 JavaScript error。
+
+## v117 AI 輸入隔離與手機寬度複核
+
+- AI 將旅客偏好及城市／景點文字包在 JSON 資料區，並明確指示模型不執行資料欄位中的命令；仍只接受候選索引，並保留既有結構化輸出驗證。非物件候選會略過，天數轉為 1–7 的整數，摘要可讀取 `description`、`summary` 或 `note`，座標只在值存在且有效時傳送。
+- AI 快取指紋加入景點來源標籤與網址，來源資訊更新後不再沿用舊生成結果。`README.md`、`QA_CHECKLIST.md` 同步說明 AI 輸入隔離與待登入實測項目；所有本機資源與 Service Worker 快取版號升至 v117。
+- 本機 Chrome（headless，載入工作目錄靜態頁）在 320、375、430 CSS px 下文件／頁面寬度與視窗一致，無水平溢位；`PlannerView` 與城市資料物件已初始化，未出現未捕捉 JavaScript 錯誤。
+- `node --check`（`firebase.js`、`plannerView.js`、`sw.js`）、資源版號一致性與 `git diff --check` 通過。
+- 尚未以已登入帳戶呼叫 Firebase AI Logic，因此未驗證真實模型回應或偏好注入攻擊的行為；手機觸控、橫向旋轉與 PWA 離線仍需實機流程驗收。
