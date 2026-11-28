@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let storedItineraryJson = null;
+const storedPlaceCaches = new Map();
 const sandbox = {
   window: {
     TRAVEL_DATA: { globalCities: [], countries: [], globalCityAliases: {} },
@@ -14,11 +15,17 @@ const sandbox = {
   document: { scripts: [], baseURI: "https://journey-atlas.invalid/" },
   location: { href: "https://journey-atlas.invalid/" },
   localStorage: {
-    getItem: key => key === "journey-atlas-itineraries" ? storedItineraryJson : null,
-    setItem: (key, value) => { if (key === "journey-atlas-itineraries") storedItineraryJson = value; }
+    getItem: key => key === "journey-atlas-itineraries" ? storedItineraryJson : storedPlaceCaches.get(key) || null,
+    setItem: (key, value) => {
+      if (key === "journey-atlas-itineraries") storedItineraryJson = value;
+      else storedPlaceCaches.set(key, String(value));
+    },
+    removeItem: key => storedPlaceCaches.delete(key)
   },
   URL,
   URLSearchParams,
+  AbortController,
+  fetch: async () => { throw new Error("Unexpected network request in AI planning smoke test."); },
   console,
   setTimeout,
   clearTimeout
@@ -355,14 +362,16 @@ const refreshCity = {
   ))
 };
 let liveRefreshCalled = false;
+let liveRefreshOptions = null;
 service.spotCache.delete(refreshCity.id);
 service.readSpotCache = async () => null;
 service.fetchPrebuiltSpots = async () => [];
 service.fetchCity = async () => ({ city: { lat: 35, lng: 139 }, spots: [] });
 service.writeSpotCache = async () => {};
 sandbox.window.SpotService = {
-  fetchNearbyPlaces: async () => {
+  fetchNearbyPlaces: async (_city, options) => {
     liveRefreshCalled = true;
+    liveRefreshOptions = options;
     return [];
   }
 };
@@ -374,8 +383,8 @@ service.writeSpotCache = serviceMethods.writeSpotCache;
 service.spotCache.delete(refreshCity.id);
 if (previousSpotService === undefined) delete sandbox.window.SpotService;
 else sandbox.window.SpotService = previousSpotService;
-if (!liveRefreshCalled) {
-  throw new Error("Forced candidate refresh skipped live sources when 40 already-loaded spots were still insufficient for AI.");
+if (!liveRefreshCalled || liveRefreshOptions?.forceRefresh !== true) {
+  throw new Error("Forced candidate refresh did not pass forceRefresh to the live place service when 40 loaded spots were insufficient for AI.");
 }
 
 const concurrentRefreshCity = {
@@ -424,6 +433,75 @@ sandbox.window.SpotService = previousSpotService;
 if (concurrentLiveCalls !== 2
   || !concurrentRefreshCity.spots.some(spot => spot.name === "Freshly refreshed museum")) {
   throw new Error("A forced refresh during an in-flight catalog load reused stale results instead of querying live sources.");
+}
+
+const getSpotCacheKey = city => `journey-atlas-verified-places-v6-${city.id}`;
+const cachedPlaceCity = { id: "spot-force-cache-test", name: "快取略過測試城市", lat: 35, lng: 139 };
+const cachedPlace = { name: "Cached museum", sourceUrl: "https://example.org/cached-museum" };
+storedPlaceCaches.set(getSpotCacheKey(cachedPlaceCity), JSON.stringify({
+  fetchedAt: Date.now(), places: [cachedPlace], wikidataChecked: true
+}));
+let placeSourceCalls = 0;
+const originalWikidataLookup = spotService.fetchWikidataNearbyPlaces;
+const originalWikipediaLookup = spotService.fetchWikipediaNearbyPlaces;
+spotService.fetchWikidataNearbyPlaces = async () => [];
+spotService.fetchWikipediaNearbyPlaces = async () => [];
+sandbox.fetch = async () => {
+  placeSourceCalls += 1;
+  return {
+    ok: true,
+    json: async () => ({ elements: [{
+      type: "node", id: 12345, lat: 35.01, lon: 139.01,
+      tags: { name: "Fresh museum", tourism: "museum" }
+    }] })
+  };
+};
+const ordinaryCachedPlaces = await spotService.fetchNearbyPlaces(cachedPlaceCity, { limit: 100 });
+if (ordinaryCachedPlaces[0]?.name !== "Cached museum" || placeSourceCalls !== 0) {
+  throw new Error("A normal nearby-place lookup did not use the valid local cache.");
+}
+const forciblyRefreshedPlaces = await spotService.fetchNearbyPlaces(cachedPlaceCity, { limit: 100, forceRefresh: true });
+if (placeSourceCalls !== 1 || forciblyRefreshedPlaces[0]?.name !== "Fresh museum") {
+  throw new Error("A forced nearby-place lookup returned a valid but stale local cache instead of querying OpenStreetMap.");
+}
+
+const pendingPlaceCity = { id: "spot-force-inflight-test", name: "並行快取刷新測試城市", lat: 35, lng: 139 };
+let pendingPlaceSourceCalls = 0;
+let releasePendingPlaceSource;
+let notifyPendingPlaceSourceStarted;
+const pendingPlaceSourceStarted = new Promise(resolve => { notifyPendingPlaceSourceStarted = resolve; });
+const pendingPlaceSourceGate = new Promise(resolve => { releasePendingPlaceSource = resolve; });
+sandbox.fetch = async () => {
+  pendingPlaceSourceCalls += 1;
+  const call = pendingPlaceSourceCalls;
+  if (call === 1) {
+    notifyPendingPlaceSourceStarted();
+    return pendingPlaceSourceGate;
+  }
+  return {
+    ok: true,
+    json: async () => ({ elements: [{
+      type: "node", id: 67890, lat: 35.02, lon: 139.02,
+      tags: { name: "Refreshed museum", tourism: "museum" }
+    }] })
+  };
+};
+const ordinaryPendingLookup = spotService.fetchNearbyPlaces(pendingPlaceCity, { limit: 100 });
+await pendingPlaceSourceStarted;
+const forcedPendingLookup = spotService.fetchNearbyPlaces(pendingPlaceCity, { limit: 100, forceRefresh: true });
+releasePendingPlaceSource({
+  ok: true,
+  json: async () => ({ elements: [{
+    type: "node", id: 67889, lat: 35.01, lon: 139.01,
+    tags: { name: "Initial museum", tourism: "museum" }
+  }] })
+});
+const [, refreshedAfterPendingLookup] = await Promise.all([ordinaryPendingLookup, forcedPendingLookup]);
+spotService.fetchWikidataNearbyPlaces = originalWikidataLookup;
+spotService.fetchWikipediaNearbyPlaces = originalWikipediaLookup;
+sandbox.fetch = async () => { throw new Error("Unexpected network request in AI planning smoke test."); };
+if (pendingPlaceSourceCalls !== 2 || refreshedAfterPendingLookup[0]?.name !== "Refreshed museum") {
+  throw new Error("A forced nearby-place lookup shared a pending ordinary request instead of retrying the public source.");
 }
 
 const knownYangon = service.getKnownCityCoordinates("yangon");

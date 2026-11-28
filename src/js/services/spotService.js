@@ -6,6 +6,7 @@ window.SpotService = {
   citySummaryTimeoutMs: 11000,
   requestQueue: [],
   nearbyPlaceRequests: {},
+  nearbyPlaceRequestForceRefresh: {},
   cityLocationRequests: {},
   spotDetailRequests: {},
   spotImageRequests: {},
@@ -469,7 +470,7 @@ window.SpotService = {
     return this.cityLocationRequests[cacheKey];
   },
 
-  fetchNearbyPlaces: async function (city, { radius = 20000, limit = 250 } = {}) {
+  fetchNearbyPlaces: async function (city, { radius = 20000, limit = 250, forceRefresh = false } = {}) {
     if (!Number.isFinite(city?.lat) || !Number.isFinite(city?.lng)) return [];
     const cacheKey = `journey-atlas-verified-places-v6-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`;
     const cacheTtl = 7 * 24 * 60 * 60 * 1000;
@@ -479,18 +480,24 @@ window.SpotService = {
       localStorage.removeItem(legacyCacheKey.replace("-v3-", "-v2-"));
       localStorage.removeItem(`journey-atlas-verified-places-v4-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`);
       localStorage.removeItem(`journey-atlas-verified-places-v5-${city.id || `${city.lat.toFixed(2)}-${city.lng.toFixed(2)}`}`);
-      const saved = JSON.parse(localStorage.getItem(cacheKey) || "null");
-      const savedTtl = saved?.places?.length
-        && (saved.places.length >= Math.min(12, limit) || saved.wikidataChecked === true)
-        ? cacheTtl : 60 * 60 * 1000;
-      if (saved?.fetchedAt && Date.now() - saved.fetchedAt < savedTtl && Array.isArray(saved.places)) return saved.places;
+      if (!forceRefresh) {
+        const saved = JSON.parse(localStorage.getItem(cacheKey) || "null");
+        const savedTtl = saved?.places?.length
+          && (saved.places.length >= Math.min(12, limit) || saved.wikidataChecked === true)
+          ? cacheTtl : 60 * 60 * 1000;
+        if (saved?.fetchedAt && Date.now() - saved.fetchedAt < savedTtl && Array.isArray(saved.places)) return saved.places;
+      }
     } catch (error) {
       console.warn("OpenStreetMap 快取無法讀取：", error);
     }
-    if (this.nearbyPlaceRequests[cacheKey]) return this.nearbyPlaceRequests[cacheKey];
+    const activeRequest = this.nearbyPlaceRequests[cacheKey];
+    if (activeRequest) {
+      if (!forceRefresh || this.nearbyPlaceRequestForceRefresh[cacheKey] === true) return activeRequest;
+      return activeRequest.catch(() => []).then(() => this.fetchNearbyPlaces(city, { radius, limit, forceRefresh: true }));
+    }
 
     const query = `[out:json][timeout:15];(node["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});way["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});relation["name"]["tourism"~"attraction|museum|gallery|viewpoint|zoo|theme_park|aquarium|artwork|water_park|camp_site|picnic_site"](around:${radius},${city.lat},${city.lng});node["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});way["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});relation["name"]["historic"~"monument|memorial|castle|archaeological_site|fort"](around:${radius},${city.lat},${city.lng});node["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});way["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});relation["name"]["amenity"~"museum|arts_centre|place_of_worship"](around:${radius},${city.lat},${city.lng});node["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});way["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});relation["name"]["leisure"~"park|garden|nature_reserve"](around:${radius},${city.lat},${city.lng});node["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng});way["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng});relation["name"]["natural"~"beach|waterfall|cave|spring|peak"](around:${radius},${city.lat},${city.lng}););out center tags;`;
-    this.nearbyPlaceRequests[cacheKey] = (async () => {
+    const request = (async () => {
       try {
         const queryDeadline = Date.now() + this.requestTimeoutMs;
         let data = null;
@@ -624,11 +631,18 @@ window.SpotService = {
       } catch (error) {
         console.warn(`無法載入 ${city.name || "此城市"} 的 OpenStreetMap 地點：`, error);
         return [];
-      } finally {
-        delete this.nearbyPlaceRequests[cacheKey];
       }
     })();
-    return this.nearbyPlaceRequests[cacheKey];
+    this.nearbyPlaceRequests[cacheKey] = request;
+    this.nearbyPlaceRequestForceRefresh[cacheKey] = forceRefresh;
+    const cleanup = () => {
+      if (this.nearbyPlaceRequests[cacheKey] === request) {
+        delete this.nearbyPlaceRequests[cacheKey];
+        delete this.nearbyPlaceRequestForceRefresh[cacheKey];
+      }
+    };
+    request.then(cleanup, cleanup);
+    return request;
   },
 
   fetchWikipediaNearbyPlaces: async function (city, { radius = 20000, limit = 250, timeoutMs = this.requestTimeoutMs } = {}) {

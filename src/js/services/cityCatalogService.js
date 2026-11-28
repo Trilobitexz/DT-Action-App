@@ -468,7 +468,7 @@
             }
           }
           liveSpots = coordinates
-            ? await window.SpotService.fetchNearbyPlaces({ ...city, ...coordinates }, { radius, limit }).catch(error => {
+            ? await window.SpotService.fetchNearbyPlaces({ ...city, ...coordinates }, { radius, limit, forceRefresh }).catch(error => {
               console.warn(`載入 ${city.name} 周邊景點失敗：`, error);
               return [];
             })

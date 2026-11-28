@@ -263,3 +263,11 @@
 - smoke 驗證缺 hostname、空 host query、帳密來源及一般錯誤 scheme 均遭拒絕。AI smoke、城市景點稽核（200 城、839 筆、來源缺漏 0）、匯入前驗證、建置腳本、8 個變更 JS／MJS 語法檢查及 `git diff --check` 通過；建置清理 0 筆資料，原有 839 筆未變。
 - 網站資源查詢及 Service Worker 快取名稱升至 v132。
 - GitHub Pages workflow #102（run `46124546216`）對應提交 `b87b312` 並成功；部署紀錄 SHA 與遠端 `main` 相同。首次回應仍快取 v131，清除代理快取後正式頁回應 HTTP 200、載入 v132，`Last-Modified` 為部署時間。
+
+## v133 AI 景點強制刷新快取穿透
+
+- 發現 AI 候選不足時 CityCatalog 雖傳入強制刷新意圖，但沒有將旗標傳給 SpotService；SpotService 也會直接回傳七天有效的景點快取，造成實際上沒有重新查詢公開來源。
+- CityCatalog 現在把 `forceRefresh` 傳給 SpotService。SpotService 的強制刷新略過本機結果快取；遇到一般來源查詢時先等待它完成，再發起新查詢；併發強制刷新仍共用同一個進行中請求。
+- AI smoke 新增真實 SpotService 的模擬公開來源案例，驗證一般讀取使用快取、強制讀取略過快取、一般請求進行中時強制讀取會查第二次；亦確認 CityCatalog 傳下強制旗標。
+- `node scripts/smoke-ai-planning.mjs`、`node scripts/build-city-spot-data.mjs`、`node scripts/audit-city-spots.mjs`、`node scripts/seed-city-catalog.mjs --validate-only`、`node scripts/enrich-image-attributions.mjs --check`、4 個 JavaScript／MJS 語法檢查、v133 資源版號核對與 `git diff --check` 通過。
+- 資料建置清理 0 筆；稽核 200 城、839 筆合格 AI 景點，來源、座標、分類、介紹及圖片署名欄位缺漏均為 0。缺可核實圖片 65 筆，使用分類替代圖。匯入前驗證只讀本機資料，未連線或寫入 Firestore。
