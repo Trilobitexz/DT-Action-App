@@ -1,6 +1,10 @@
 // Open-Meteo ERA5 historical archive; calculates a ten-year monthly climate baseline.
 window.ClimateService = {
   cache: new Map(),
+  source: {
+    sourceLabel: "Open-Meteo Historical Weather API",
+    sourceUrl: "https://open-meteo.com/en/docs/historical-weather-api"
+  },
   storageKey: "journey-atlas-climate-monthly-v1",
   timeoutMs: 12000,
   retentionMs: 60 * 24 * 60 * 60 * 1000,

@@ -8,7 +8,7 @@
 
 ### 發布版本命名規則
 
-- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v133`，下一次發布時統一遞增為 `v134`。
+- 每次 GitHub Pages 發布使用一個全站版本號 `vN`；本次為 `v134`，下一次發布時統一遞增為 `v135`。
 - 所有本地 CSS、JavaScript、城市資料、景點 JSON、manifest 與圖示的快取查詢參數使用相同的 `?v=N`，並在 `index.html`、`sw.js` 與程式內的動態靜態資料 URL 保持一致。
 - Service Worker 快取名稱使用 `journey-atlas-shell-vN`，與資源參數和發布提交訊息中的版本一致。更新 HTML 資源參數時，必須同步更新 Service Worker 的預快取清單及快取名稱。
 - 外部 CDN／API 使用供應商版本或 API URL，不改成專案版號；`index.html` 與 `sw.js` 自身不加查詢參數，避免影響導覽快取與 Service Worker 更新檢查。

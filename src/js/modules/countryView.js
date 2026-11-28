@@ -15,6 +15,29 @@ window.CountryView = {
     };
   },
 
+  getCityDepthDataStatus: function(city, climateStatus = "unknown") {
+    const hasSourcedDescription = Boolean(city?.descriptionSource?.text
+      && window.SpotTextService?.isValidHttpUrl(city.descriptionSource.pageUrl));
+    if (climateStatus === "available") {
+      return hasSourcedDescription
+        ? "附來源城市介紹與歷史氣候參考均已載入；可查看上方介紹與下方氣候資料卡。"
+        : "歷史氣候參考已載入；附來源城市介紹尚未取得。";
+    }
+    if (climateStatus === "loading") {
+      return hasSourcedDescription
+        ? "附來源城市介紹已載入；歷史氣候資料正在載入。"
+        : "尚未取得附來源城市介紹；歷史氣候資料正在載入。";
+    }
+    if (climateStatus === "unavailable") {
+      return hasSourcedDescription
+        ? "附來源城市介紹已載入；歷史氣候資料目前無法取得。"
+        : "附來源城市介紹與歷史氣候資料目前無法取得；景點與地圖仍可使用。";
+    }
+    return hasSourcedDescription
+      ? "附來源城市介紹已載入；歷史氣候資料尚未確認。"
+      : "尚無附來源城市介紹或歷史氣候資料；景點與地圖仍可使用。";
+  },
+
   render: function(state) {
     const aliases = window.TRAVEL_DATA.globalCityAliases || {};
     if (state.globalCityId && aliases[state.globalCityId]) state.globalCityId = aliases[state.globalCityId];
@@ -296,13 +319,32 @@ window.CountryView = {
     const cityHeading = document.querySelector("#view-country .city-tabs-card h3");
     if (cityHeading) cityHeading.textContent = `🏙️ ${currentCity.name}：${currentCity.destinationType === "island" ? "目的地資訊" : "城市資訊"}與景點資料`;
     const detail = document.getElementById("city-detail-facts");
+    let depthStatus = null;
     if (detail) {
-      detail.innerHTML = `
-        <div><strong>📍 位置</strong><p>${currentCity.countryName || country.name} · ${Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? `${currentCity.lat.toFixed(4)}, ${currentCity.lng.toFixed(4)}` : "尚無已確認的座標"}</p></div>
-        <div><strong>🧭 目的地類型</strong><p>${currentCity.destinationType === "island" ? "島嶼目的地" : "城市目的地"} · 可從地圖查看周邊公開地點</p></div>
-        <div><strong>📚 深度資料</strong><p>${currentCity.climateSource ? currentCity.climate : "城市介紹與氣候資料會在取得後顯示；目前景點與地圖仍可使用。"}</p></div>
-      `;
+      const appendFact = (label, value) => {
+        const card = document.createElement("div");
+        const heading = document.createElement("strong");
+        const text = document.createElement("p");
+        heading.textContent = label;
+        text.textContent = value;
+        card.append(heading, text);
+        detail.appendChild(card);
+        return text;
+      };
+      detail.replaceChildren();
+      appendFact("📍 位置", `${currentCity.countryName || country.name} · ${Number.isFinite(currentCity.lat) && Number.isFinite(currentCity.lng) ? `${currentCity.lat.toFixed(4)}, ${currentCity.lng.toFixed(4)}` : "尚無已確認的座標"}`);
+      appendFact("🧭 目的地類型", `${currentCity.destinationType === "island" ? "島嶼目的地" : "城市目的地"} · 可從地圖查看周邊公開地點`);
+      const climateSourceIsValid = window.SpotTextService?.isValidHttpUrl(currentCity.climateSource?.sourceUrl) === true;
+      const climateStatus = currentCity._climateDataStatus
+        || (climateSourceIsValid ? "available" : window.ClimateService ? "loading" : "unavailable");
+      currentCity._climateDataStatus = climateStatus;
+      depthStatus = appendFact("📚 深度資料", window.CountryView.getCityDepthDataStatus(currentCity, climateStatus));
     }
+    const updateCityDepthStatus = () => {
+      if (depthStatus?.isConnected) {
+        depthStatus.textContent = window.CountryView.getCityDepthDataStatus(currentCity, currentCity._climateDataStatus);
+      }
+    };
     if (detail && window.NationalInfoService && country.englishName) {
       const facts = document.createElement("div");
       facts.className = "country-live-facts";
@@ -356,15 +398,35 @@ window.CountryView = {
       const cityId = currentCity.id;
       window.ClimateService?.getMonthlyNormals(currentCity.lat, currentCity.lng).then(months => {
         if (state.selectedCityId !== cityId || !months) {
-          if (state.selectedCityId === cityId && !months) climatePanel.hidden = true;
+          if (state.selectedCityId === cityId && !months) {
+            climatePanel.hidden = true;
+            currentCity._climateDataStatus = "unavailable";
+            updateCityDepthStatus();
+          }
           return;
         }
+        currentCity._climateDataStatus = "available";
+        currentCity.climateSource = { ...window.ClimateService.source };
+        currentCity.climate = months.map(item => `${item.month}月 ${item.temperatureC === null ? "—" : `${item.temperatureC}°C`}, 雨量 ${item.precipitationMm === null ? "—" : `${item.precipitationMm} mm/月`}`).join(" · ");
+        updateCityDepthStatus();
         const heading = document.createElement("strong"); heading.textContent = "🌦️ 每月氣候參考（近十年歷史平均）";
         const summary = document.createElement("p");
         summary.textContent = months.map(item => `${item.month}月 ${item.temperatureC === null ? "—" : `${item.temperatureC}°C`}, 雨量 ${item.precipitationMm === null ? "—" : `${item.precipitationMm} mm/月`}`).join("　·　");
-        const note = document.createElement("small"); note.textContent = "歷史氣候平均僅供季節規劃參考，不是出發日天氣預報。資料來源：Open-Meteo Historical Weather API。";
+        const note = document.createElement("small");
+        note.append("歷史氣候平均僅供季節規劃參考，不是出發日天氣預報。資料來源：");
+        const sourceLink = document.createElement("a");
+        sourceLink.href = currentCity.climateSource.sourceUrl;
+        sourceLink.target = "_blank";
+        sourceLink.rel = "noopener noreferrer";
+        sourceLink.textContent = currentCity.climateSource.sourceLabel;
+        note.appendChild(sourceLink);
         climatePanel.replaceChildren(heading, summary, note);
-      }).catch(() => { climatePanel.hidden = true; });
+      }).catch(() => {
+        if (state.selectedCityId !== cityId) return;
+        climatePanel.hidden = true;
+        currentCity._climateDataStatus = "unavailable";
+        updateCityDepthStatus();
+      });
     }
     const chart = document.getElementById("city-insight-chart");
     if (chart) {
@@ -636,6 +698,7 @@ window.CountryView = {
             window.CountryView.render(state);
           });
           description.append(document.createElement("br"), retry);
+          updateCityDepthStatus();
           return;
         }
         currentCity.descriptionSource = { text: summary.extract, pageUrl: summary.pageUrl || null, sourceLabel: summary.sourceLabel || "百科資料" };
@@ -649,6 +712,7 @@ window.CountryView = {
           source.style.cssText = "display:inline-block; margin-top:0.35rem; font-size:0.78rem;";
           description.append(document.createElement("br"), source);
         }
+        updateCityDepthStatus();
       }).catch(error => {
         console.warn("城市介紹查詢失敗：", error);
         if (isCurrentCity()) {
@@ -658,6 +722,7 @@ window.CountryView = {
             description.setAttribute("aria-busy", "false");
             const savedDescription = currentCity.descriptionSource?.text || currentCity.description || "";
             description.textContent = savedDescription || "城市百科介紹暫時無法取得；景點清單與地圖資料仍可使用。";
+            updateCityDepthStatus();
           }
         }
       });

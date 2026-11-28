@@ -272,3 +272,11 @@
 - `node scripts/smoke-ai-planning.mjs`、`node scripts/build-city-spot-data.mjs`、`node scripts/audit-city-spots.mjs`、`node scripts/seed-city-catalog.mjs --validate-only`、`node scripts/enrich-image-attributions.mjs --check`、4 個 JavaScript／MJS 語法檢查、v133 資源版號核對與 `git diff --check` 通過。
 - 資料建置清理 0 筆；稽核 200 城、839 筆合格 AI 景點，來源、座標、分類、介紹及圖片署名欄位缺漏均為 0。缺可核實圖片 65 筆，使用分類替代圖。匯入前驗證只讀本機資料，未連線或寫入 Firestore。
 - GitHub Pages workflow #104（run `46125738643`）對應程式提交 `9de9683` 並成功；遠端 `main` 已核對包含該提交。正式頁回應 HTTP 200，載入 v133 資源。
+
+## v134 城市深度資料狀態與氣候來源
+
+- 正式頁檢視加德滿都時，已顯示有來源的城市介紹與 Open-Meteo 歷史氣候資料，但「深度資料」摘要仍使用「資料會在取得後顯示」。摘要只檢查 `climateSource`，氣候服務成功時卻沒有寫入該欄位，造成畫面與實際資料矛盾。
+- 城市摘要現在明確回報來源介紹及氣候的載入中、已載入或無法取得狀態；來源介紹的成功／失敗及氣候查詢的成功／失敗都會更新摘要。成功的氣候資料記錄來源標籤與文件網址，氣候卡提供可開啟的來源連結。
+- 城市深度資料卡改用 DOM `textContent` 呈現文字，避免資料字串直接拼入 HTML。
+- AI smoke 新增來源連結有效／缺失及氣候狀態的摘要判定案例；`node --check`（countryView.js、climateService.js、smoke-ai-planning.mjs、sw.js）與 AI smoke 通過。v134 的 `index.html`、`sw.js` 資源查詢及 Service Worker 快取名稱一致。
+- `node scripts/build-city-spot-data.mjs` 清理 0 筆；`node scripts/audit-city-spots.mjs` 通過，200 城有 839 筆完整 AI 景點，來源、介紹、座標、範圍及類型問題均為 0；`node scripts/seed-city-catalog.mjs --validate-only` 與 `node scripts/enrich-image-attributions.mjs --check` 通過。匯入驗證未連線或寫入 Firestore。正式頁部署與介面複驗待後續確認。

@@ -35,6 +35,7 @@ for (const relative of [
   "src/data/cityGeonames.js",
   "src/data/cityCoordinates.js",
   "src/js/services/spotTextService.js",
+  "src/js/services/climateService.js",
   "src/js/modules/plannerView.js",
   "src/js/modules/countryView.js",
   "src/js/services/spotService.js",
@@ -42,6 +43,27 @@ for (const relative of [
 ]) {
   vm.runInNewContext(fs.readFileSync(path.join(root, relative), "utf8"), sandbox, { filename: relative });
 }
+
+const getCityDepthDataStatus = sandbox.window.CountryView.getCityDepthDataStatus;
+const climateSource = sandbox.window.ClimateService.source;
+const sourcedDescriptionCity = {
+  descriptionSource: { text: "A sourced city description.", pageUrl: "https://example.org/city" }
+};
+const loadedDepthStatus = getCityDepthDataStatus(sourcedDescriptionCity, "available");
+const loadingDepthStatus = getCityDepthDataStatus({}, "loading");
+const unavailableDepthStatus = getCityDepthDataStatus({}, "unavailable");
+const unlinkedDescriptionStatus = getCityDepthDataStatus({
+  descriptionSource: { text: "A description without a traceable link." }
+}, "available");
+if (!loadedDepthStatus.includes("均已載入")
+  || !loadingDepthStatus.includes("尚未取得附來源城市介紹")
+  || !unavailableDepthStatus.includes("景點與地圖仍可使用")
+  || !unlinkedDescriptionStatus.includes("附來源城市介紹尚未取得")
+  || !sandbox.window.SpotTextService.isValidHttpUrl(climateSource.sourceUrl)
+  || climateSource.sourceLabel !== "Open-Meteo Historical Weather API") {
+  throw new Error("City depth-data status does not accurately reflect source availability and climate loading state.");
+}
+console.log("City depth-data status smoke check passed: source links and climate availability are reported accurately.");
 
 const itinerarySpots = [
   { name: "Riverside Garden", category: "自然與景觀", description: "A botanical garden preserves rare plants and offers shaded walking paths for visitors.", sourceUrl: "https://example.org/riverside-garden" },
