@@ -50,6 +50,16 @@ const sourcedDescriptionCity = {
   descriptionSource: { text: "A sourced city description.", pageUrl: "https://example.org/city" }
 };
 const loadedDepthStatus = getCityDepthDataStatus(sourcedDescriptionCity, "available");
+const replacementDepthStatus = { textContent: "舊的載入狀態" };
+const detachedDepthStatus = { isConnected: false, textContent: "尚未取得附來源城市介紹" };
+const replacementDepthDetail = {
+  querySelector: selector => selector === "[data-city-depth-status]" ? replacementDepthStatus : null
+};
+if (!sandbox.window.CountryView.updateCityDepthDataStatus(replacementDepthDetail, sourcedDescriptionCity, "available")
+  || detachedDepthStatus.textContent !== "尚未取得附來源城市介紹"
+  || !replacementDepthStatus.textContent.includes("均已載入")) {
+  throw new Error("A city depth status update did not reach the replacement card after an asynchronous rerender.");
+}
 const loadingDepthStatus = getCityDepthDataStatus({}, "loading");
 const unavailableDepthStatus = getCityDepthDataStatus({}, "unavailable");
 const unlinkedDescriptionStatus = getCityDepthDataStatus({

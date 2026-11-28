@@ -38,6 +38,13 @@ window.CountryView = {
       : "尚無附來源城市介紹或歷史氣候資料；景點與地圖仍可使用。";
   },
 
+  updateCityDepthDataStatus: function(detail, city, climateStatus) {
+    const status = detail?.querySelector("[data-city-depth-status]");
+    if (!status) return false;
+    status.textContent = this.getCityDepthDataStatus(city, climateStatus);
+    return true;
+  },
+
   render: function(state) {
     const aliases = window.TRAVEL_DATA.globalCityAliases || {};
     if (state.globalCityId && aliases[state.globalCityId]) state.globalCityId = aliases[state.globalCityId];
@@ -339,11 +346,10 @@ window.CountryView = {
         || (climateSourceIsValid ? "available" : window.ClimateService ? "loading" : "unavailable");
       currentCity._climateDataStatus = climateStatus;
       depthStatus = appendFact("📚 深度資料", window.CountryView.getCityDepthDataStatus(currentCity, climateStatus));
+      depthStatus.dataset.cityDepthStatus = "true";
     }
     const updateCityDepthStatus = () => {
-      if (depthStatus?.isConnected) {
-        depthStatus.textContent = window.CountryView.getCityDepthDataStatus(currentCity, currentCity._climateDataStatus);
-      }
+      window.CountryView.updateCityDepthDataStatus(detail, currentCity, currentCity._climateDataStatus);
     };
     if (detail && window.NationalInfoService && country.englishName) {
       const facts = document.createElement("div");
