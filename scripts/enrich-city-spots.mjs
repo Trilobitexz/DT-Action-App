@@ -7,8 +7,9 @@ import { resolveWikimediaImageMetadata } from "./wikimedia-image-metadata.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = relative => fs.readFile(path.join(root, relative), "utf8");
 const window = {};
-vm.runInNewContext(await read("src/js/services/spotTextService.js"), { window }, { filename: "src/js/services/spotTextService.js" });
+vm.runInNewContext(await read("src/js/services/spotTextService.js"), { window, URL }, { filename: "src/js/services/spotTextService.js" });
 const isTravelAttraction = spot => window.SpotTextService?.isTravelAttraction(spot) ?? true;
+const isValidHttpUrl = value => window.SpotTextService?.isValidHttpUrl(value) ?? false;
 // Evaluate the browser data files in their dependency order inside a sandbox.
 const loadTravelData = async () => {
   for (const relative of [
@@ -16,7 +17,7 @@ const loadTravelData = async () => {
     "src/data/countries/others.js", "src/data/globalCities.js", "src/data/cityCatalogExpansion.js",
     "src/data/cityGeonames.js", "src/data/cityEnrichment.js"
   ]) {
-    vm.runInNewContext(await read(relative), { window }, { filename: relative });
+    vm.runInNewContext(await read(relative), { window, URL }, { filename: relative });
   }
 };
 
@@ -224,7 +225,7 @@ async function enrichCity(city, previous = null) {
     const key = normalize(spot.name);
     if (!key || seen.has(key) || isCityItself(city, spot) || !validCoordinate(spot.lat, spot.lng)
       || !isTravelAttraction(spot) || distanceKm(normalizedCity, spot) > 50
-      || !/^https?:\/\//i.test(spot.sourceUrl || "")) return;
+      || !isValidHttpUrl(spot.sourceUrl)) return;
     seen.add(key);
     collected.push(spot);
   });

@@ -5,9 +5,10 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const inputPath = path.join(root, "scripts", "data", "prebuilt-spots.json");
-const qualitySandbox = { window: {} };
+const qualitySandbox = { window: {}, URL };
 vm.runInNewContext(await fs.readFile(path.join(root, "src", "js", "services", "spotTextService.js"), "utf8"), qualitySandbox);
 const isTravelAttraction = spot => qualitySandbox.window.SpotTextService?.isTravelAttraction(spot) ?? true;
+const isValidHttpUrl = value => qualitySandbox.window.SpotTextService?.isValidHttpUrl(value) ?? false;
 const normalizeSpot = spot => qualitySandbox.window.SpotTextService?.normalizeSpot(spot) || spot;
 const normalizeName = value => String(qualitySandbox.window.SpotTextService?.toTraditional(value) || value || "")
   .normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
@@ -46,7 +47,7 @@ const isValidStoredSpot = (city, rawSpot) => {
     && isTravelAttraction(spot)
     && !isCityItself(city, spot)
     && validSpotCoordinate(spot.lat, spot.lng)
-    && /^https?:\/\//i.test(String(spot.sourceUrl || ""))
+    && isValidHttpUrl(spot.sourceUrl)
     && validCityCoordinate(city.lat, city.lng)
     && distanceKm(city, spot) <= 50;
 };
@@ -58,7 +59,7 @@ const mergeEnrichment = (spot, matches) => {
   const existing = [...matches].sort((a, b) => enrichmentScore(b.data) - enrichmentScore(a.data)).map(item => item.data);
   const candidates = [spot, ...existing];
   const firstString = key => candidates.map(item => item?.[key]).find(value => typeof value === "string" && value.trim()) || "";
-  const firstUrl = key => candidates.map(item => item?.[key]).find(value => typeof value === "string" && /^https?:\/\//i.test(value.trim())) || "";
+  const firstUrl = key => candidates.map(item => item?.[key]).find(isValidHttpUrl) || "";
   const descriptions = candidates.flatMap(item => [item?.summary, item?.description, item?.note])
     .filter(value => typeof value === "string" && value.trim()).sort((a, b) => b.trim().length - a.trim().length);
   const ratingItem = candidates.find(item => item?.rating !== null && item?.rating !== undefined && item?.rating !== ""
@@ -109,7 +110,7 @@ for (const city of cities) {
   const spots = Array.isArray(city.spots) ? city.spots.map(normalizeSpot) : [];
   const qualitySpots = spots.filter(spot => validSpotCoordinate(spot?.lat, spot?.lng)
     && distanceKm(city, spot) <= 50 && !isCityItself(city, spot) && isTravelAttraction(spot)
-    && /^https?:\/\//i.test(String(spot?.sourceUrl || "")));
+    && isValidHttpUrl(spot?.sourceUrl));
   if (qualitySpots.length < minimumSpotsPerCity) validationErrors.push(`${city.name || city.id}：只有 ${qualitySpots.length} 筆符合品質與座標門檻的景點`);
   const seenNames = new Set();
   spots.forEach((spot, index) => {
@@ -125,7 +126,7 @@ for (const city of cities) {
     if (!isTravelAttraction(spot)) validationErrors.push(`${label}：條目不是適合旅客造訪的景點`);
     if (!validSpotCoordinate(spot?.lat, spot?.lng)) validationErrors.push(`${label}：座標格式錯誤或缺漏（赤道／本初子午線座標可用，僅排除 [0, 0]）`);
     else if (distanceKm(city, spot) > 50) validationErrors.push(`${label}：距城市中心超過 50 公里`);
-    if (!/^https?:\/\//i.test(String(spot?.sourceUrl || ""))) validationErrors.push(`${label}：缺少有效來源網址`);
+    if (!isValidHttpUrl(spot?.sourceUrl)) validationErrors.push(`${label}：缺少有效來源網址`);
   });
 }
 if (cities.length < minimumCityCount) validationErrors.push(`城市清單只有 ${cities.length} 座，至少需要 ${minimumCityCount} 座`);

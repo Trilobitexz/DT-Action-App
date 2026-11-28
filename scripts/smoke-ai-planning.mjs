@@ -213,6 +213,8 @@ if (!sandbox.window.SpotTextService.validateAIPlanningSpots([completeAIExample],
 }
 const incompleteAIExamples = [
   { ...completeAIExample, sourceUrl: "javascript:alert(1)" },
+  { ...completeAIExample, sourceUrl: "https://" },
+  { ...completeAIExample, sourceUrl: "https://user:password@example.org/central-museum" },
   { ...completeAIExample, lat: 0, lng: 0 },
   { ...completeAIExample, description: "A short museum summary." },
   { ...completeAIExample, isSearchSuggestion: true },
@@ -220,6 +222,10 @@ const incompleteAIExamples = [
 ];
 if (incompleteAIExamples.some(spot => sandbox.window.SpotTextService.isCompleteAIPlanningSpot(spot))) {
   throw new Error("The shared AI validator accepted an incomplete, unsafe, suggested or non-attraction candidate.");
+}
+if (["https://", "https://?q=missing-host", "https://user:password@example.org/source"].some(url =>
+  sandbox.window.SpotTextService.isValidHttpUrl(url))) {
+  throw new Error("A malformed or credential-bearing HTTP URL passed source validation.");
 }
 if (incompleteAIExamples.some(spot => sandbox.window.SpotTextService.validateAIPlanningSpots([spot], 1).code !== "ai/incomplete-spots")) {
   throw new Error("AI request validation allowed an incomplete candidate to reach the model boundary.");

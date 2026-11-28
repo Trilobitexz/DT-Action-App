@@ -11,7 +11,7 @@ for (const relative of [
   "src/data/countries/others.js", "src/data/globalCities.js", "src/data/cityCatalogExpansion.js",
   "src/data/cityGeonames.js", "src/data/cityEnrichment.js", "src/js/services/spotTextService.js"
 ]) {
-  vm.runInNewContext(await read(relative), { window }, { filename: relative });
+  vm.runInNewContext(await read(relative), { window, URL }, { filename: relative });
 }
 
 const inputPath = path.join(root, "scripts", "data", "prebuilt-spots.json");
@@ -35,6 +35,7 @@ const isCityItself = (city, spot) => {
   const name = normalizeName(displayName(spot.name));
   return Boolean(name && [city.id, city.name, city.englishName].some(alias => normalizeName(displayName(alias)) === name));
 };
+const isValidHttpUrl = value => window.SpotTextService?.isValidHttpUrl(value) ?? false;
 const coordinate = value => value === null || value === undefined || value === "" ? NaN : Number(value);
 const grouped = new Map();
 const cleanedCatalogCities = [];
@@ -61,7 +62,7 @@ for (const city of catalog.cities || []) {
       || isCityItself(city, spot)
       || !validCoordinate(spot.lat, spot.lng)
       || distanceKm(center, spot) > 50
-      || !/^https?:\/\//i.test(String(spot.sourceUrl || ""))
+      || !isValidHttpUrl(spot.sourceUrl)
       || !(window.SpotTextService?.isTravelAttraction(spot) ?? true)) return false;
     if (spot.imageUrl && (!String(spot.imageAttribution || "").trim()
       || !String(spot.imageLicense || "").trim()

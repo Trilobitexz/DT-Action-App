@@ -316,7 +316,7 @@
       return (Array.isArray(spots) ? spots : []).filter(spot => {
         const item = this.normalizeSpot(spot);
         const hasDescription = String(item.description || item.summary || item.note || "").trim().length > 0;
-        const hasSource = /^https?:\/\//i.test(String(item.sourceUrl || ""));
+        const hasSource = window.SpotTextService?.isValidHttpUrl(item.sourceUrl) ?? false;
         if (!item.name || !String(item.category || "").trim() || !hasDescription || !hasSource
           || item.isSearchSuggestion || !this.hasValidSpotCoordinates(item, city)) return false;
         if (cityNames.has(normalizeName(item.name))) return false;

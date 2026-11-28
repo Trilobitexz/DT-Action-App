@@ -6,7 +6,7 @@ import admin from "firebase-admin";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const inputPath = path.join(root, "scripts", "data", "prebuilt-spots.json");
-const qualitySandbox = { window: {} };
+const qualitySandbox = { window: {}, URL };
 vm.runInNewContext(await fs.readFile(path.join(root, "src", "js", "services", "spotTextService.js"), "utf8"), qualitySandbox);
 const isTravelAttraction = spot => qualitySandbox.window.SpotTextService?.isTravelAttraction(spot) ?? true;
 const normalizeSpot = spot => qualitySandbox.window.SpotTextService?.normalizeSpot(spot) || spot;
@@ -16,6 +16,7 @@ const isCityItself = (city, spot) => {
   const name = normalizeName(spot?.name);
   return Boolean(name && [city?.id, city?.name, city?.englishName].some(alias => normalizeName(alias) === name));
 };
+const isValidHttpUrl = value => qualitySandbox.window.SpotTextService?.isValidHttpUrl(value) ?? false;
 const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "dt-action-app";
 const minimumCityCount = 200;
 const minimumSpotsPerCity = 3;
@@ -70,7 +71,7 @@ for (let offset = 0; offset < cities.length; offset += concurrency) {
         && isTravelAttraction(spot)
         && !isCityItself(city, spot)
         && validCoordinate(spot.lat, spot.lng)
-        && /^https?:\/\//i.test(String(spot.sourceUrl || ""))
+        && isValidHttpUrl(spot.sourceUrl)
         && validCoordinate(center.lat, center.lng)
         && !hasUncreditedImage
         && distanceKm(center, spot) <= 50;
@@ -84,7 +85,7 @@ for (let offset = 0; offset < cities.length; offset += concurrency) {
           reason: isCityItself(city, spot) ? "城市本身條目，不是景點"
             : !isTravelAttraction(spot) ? "非適合旅客造訪的景點條目"
             : !validCoordinate(spot.lat, spot.lng) ? "座標格式錯誤或缺漏（僅排除 [0, 0]）"
-            : !/^https?:\/\//i.test(String(spot.sourceUrl || "")) ? "來源網址缺漏"
+            : !isValidHttpUrl(spot.sourceUrl) ? "來源網址缺漏"
               : distanceKm(center, spot) > 50 ? "超過 50 公里"
                 : hasUncreditedImage ? "圖片缺少作者署名、授權或檔案來源頁"
                   : "category、description 或 imageUrl 欄位缺漏"

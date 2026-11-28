@@ -78,6 +78,12 @@ window.SpotTextService = (() => {
     });
     return normalized;
   }
+  function isValidHttpUrl(value) {
+    try {
+      const url = new URL(String(value ?? "").trim());
+      return /^(?:https?:)$/.test(url.protocol) && Boolean(url.hostname) && !url.username && !url.password;
+    } catch (error) { return false; }
+  }
   // Filter encyclopedia pages that describe administrative units, institutions,
   // or events rather than places a traveller can visit. Named museums,
   // memorials, heritage areas, and other explicit visitor sites remain eligible.
@@ -128,10 +134,7 @@ window.SpotTextService = (() => {
     const lng = spot.lng === null || spot.lng === undefined || spot.lng === "" ? NaN : Number(spot.lng);
     if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180
       || (lat === 0 && lng === 0)) return false;
-    try {
-      const source = new URL(String(spot.sourceUrl || ""));
-      return /^https?:$/.test(source.protocol) && Boolean(source.hostname);
-    } catch (error) { return false; }
+    return isValidHttpUrl(spot.sourceUrl);
   }
   function validateAIPlanningSpots(spots, days) {
     if (!Array.isArray(spots) || !spots.length) return { valid: false, code: "ai/no-spots" };
@@ -141,5 +144,5 @@ window.SpotTextService = (() => {
     if (spots.length < requiredDays) return { valid: false, code: "ai/insufficient-sourced-spots" };
     return { valid: true, code: "" };
   }
-  return { toTraditional, normalizeSpot, isTravelAttraction, isCompleteAIPlanningSpot, validateAIPlanningSpots };
+  return { toTraditional, normalizeSpot, isValidHttpUrl, isTravelAttraction, isCompleteAIPlanningSpot, validateAIPlanningSpots };
 })();

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = path.join(root, "src", "data", "city-spots");
 const files = fs.readdirSync(dataDir).filter(file => file.endsWith(".json")).sort();
-const sandbox = { window: {} };
+const sandbox = { window: {}, URL };
 const dataFiles = [
   "src/data/travelData.js", "src/data/countries/asia.js", "src/data/countries/europe.js",
   "src/data/countries/others.js", "src/data/globalCities.js", "src/data/cityCatalogExpansion.js",
@@ -18,6 +18,7 @@ for (const relative of dataFiles) {
 }
 
 const travelData = sandbox.window.TRAVEL_DATA || {};
+const isValidHttpUrl = value => sandbox.window.SpotTextService?.isValidHttpUrl(value) ?? false;
 const toCoordinate = value => value === null || value === undefined || value === "" ? NaN : Number(value);
 const cityCoordinates = new Map();
 const cityRecords = new Map();
@@ -123,7 +124,7 @@ for (const file of files) {
       const lat = coordinate(spot.lat);
       const lng = coordinate(spot.lng);
       const hasCoords = validCoordinate(lat, lng);
-      const hasSource = /^https?:\/\//i.test(String(spot.sourceUrl || ""));
+      const hasSource = isValidHttpUrl(spot.sourceUrl);
       const hasImage = Boolean(String(spot.imageUrl || spot.image || spot.thumbnail || "").trim());
       const hasImageAttribution = Boolean(String(spot.imageAttribution || "").trim());
       const hasImageSource = /^https:\/\//i.test(String(spot.imageSourceUrl || ""));

@@ -255,3 +255,10 @@
 - AI smoke 新增受控的並行情境：一般請求停在即時來源時觸發強制刷新，確認完成後第二次查詢確實發出，並把新增的有效景點納入候選。原有 40 筆快取資料仍會觸發即時來源檢查。
 - `node scripts/smoke-ai-planning.mjs`、`node --check src/js/services/cityCatalogService.js`、`node --check scripts/smoke-ai-planning.mjs` 及 `git diff --check` 通過。資源與 Service Worker 快取版號升至 v131。
 - GitHub Pages workflow #100（run `46039764190`）對應提交 `60c747e` 並成功；正式頁回應 HTTP 200，HTML 載入 v131 資源。遠端 `main` 已核對為 `60c747e`。
+
+## v132 來源網址驗證一致化
+
+- 發現多個資料驗證器只用 `http://`／`https://` 字串前綴判斷來源，會把 `https://` 這類沒有主機名稱的值當成有效來源。AI 呼叫門檻原本另用 URL parser，因此 AI、資料稽核、離線建置與匯入前驗證可能對同一筆來源得出不同結果。
+- `SpotTextService.isValidHttpUrl` 現在是共同判定：只接受有 hostname 的 HTTP(S) URL，並拒絕嵌入帳號或密碼的網址。AI 候選、城市目錄過濾、資料補齊／建置／稽核／匯入驗證與雲端目錄檢查皆使用該方法；Node VM 驗證環境明確注入 `URL`。
+- smoke 驗證缺 hostname、空 host query、帳密來源及一般錯誤 scheme 均遭拒絕。AI smoke、城市景點稽核（200 城、839 筆、來源缺漏 0）、匯入前驗證、建置腳本、8 個變更 JS／MJS 語法檢查及 `git diff --check` 通過；建置清理 0 筆資料，原有 839 筆未變。
+- 網站資源查詢及 Service Worker 快取名稱升至 v132。
