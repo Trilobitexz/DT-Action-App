@@ -271,3 +271,4 @@
 - AI smoke 新增真實 SpotService 的模擬公開來源案例，驗證一般讀取使用快取、強制讀取略過快取、一般請求進行中時強制讀取會查第二次；亦確認 CityCatalog 傳下強制旗標。
 - `node scripts/smoke-ai-planning.mjs`、`node scripts/build-city-spot-data.mjs`、`node scripts/audit-city-spots.mjs`、`node scripts/seed-city-catalog.mjs --validate-only`、`node scripts/enrich-image-attributions.mjs --check`、4 個 JavaScript／MJS 語法檢查、v133 資源版號核對與 `git diff --check` 通過。
 - 資料建置清理 0 筆；稽核 200 城、839 筆合格 AI 景點，來源、座標、分類、介紹及圖片署名欄位缺漏均為 0。缺可核實圖片 65 筆，使用分類替代圖。匯入前驗證只讀本機資料，未連線或寫入 Firestore。
+- GitHub Pages workflow #104（run `46125738643`）對應程式提交 `9de9683` 並成功；遠端 `main` 已核對包含該提交。正式頁回應 HTTP 200，載入 v133 資源。
