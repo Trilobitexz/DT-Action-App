@@ -262,3 +262,4 @@
 - `SpotTextService.isValidHttpUrl` 現在是共同判定：只接受有 hostname 的 HTTP(S) URL，並拒絕嵌入帳號或密碼的網址。AI 候選、城市目錄過濾、資料補齊／建置／稽核／匯入驗證與雲端目錄檢查皆使用該方法；Node VM 驗證環境明確注入 `URL`。
 - smoke 驗證缺 hostname、空 host query、帳密來源及一般錯誤 scheme 均遭拒絕。AI smoke、城市景點稽核（200 城、839 筆、來源缺漏 0）、匯入前驗證、建置腳本、8 個變更 JS／MJS 語法檢查及 `git diff --check` 通過；建置清理 0 筆資料，原有 839 筆未變。
 - 網站資源查詢及 Service Worker 快取名稱升至 v132。
+- GitHub Pages workflow #102（run `46124546216`）對應提交 `b87b312` 並成功；部署紀錄 SHA 與遠端 `main` 相同。首次回應仍快取 v131，清除代理快取後正式頁回應 HTTP 200、載入 v132，`Last-Modified` 為部署時間。
